@@ -5,7 +5,7 @@ import { hashPassword, requireAdult, requireUser } from '../lib/auth.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { getFamily } from '../lib/family.js';
-import { adultPassword, childSecret, publicUser, usernameSchema } from './auth.js';
+import { adultPassword, childSecret, publicUser, resetLoginFailures, usernameSchema } from './auth.js';
 import { invalidateThrottle } from '../lib/instances.js';
 
 const memberFields = {
@@ -111,6 +111,7 @@ export default async function familyRoutes(app: FastifyInstance) {
       [id, b.displayName ?? null, b.avatar ?? null, b.color ?? null, b.birthYear !== undefined, b.birthYear ?? null, b.weeklyGoalPoints ?? null, b.active ?? null, hash],
     );
     if (hash || b.active === false) await getPool().query('DELETE FROM sessions WHERE user_id = $1', [id]);
+    if (hash) resetLoginFailures();
     invalidateThrottle(u.familyId);
     await audit(getPool(), u.familyId, u.id, 'member.update', 'user', id, { ...b, password: b.password ? '***' : undefined });
     return { member: await publicUser(id) };

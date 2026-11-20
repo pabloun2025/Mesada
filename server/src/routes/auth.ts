@@ -5,13 +5,36 @@ import { config } from '../lib/config.js';
 import {
   createSession, destroySession, dummyVerify, hashPassword, requireUser, SESSION_COOKIE, setSessionCookie, verifyPassword,
 } from '../lib/auth.js';
-import { badRequest, forbidden, unauthorized } from '../lib/errors.js';
+import { badRequest, forbidden, HttpError, unauthorized } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { getFamily } from '../lib/family.js';
 
 export const usernameSchema = z.string().trim().min(3).max(32).regex(/^[a-zA-Z0-9._-]+$/, 'solo letras, números, punto, guion y guion bajo');
 export const adultPassword = z.string().min(8, 'mínimo 8 caracteres').max(200);
 export const childSecret = z.string().min(4, 'mínimo 4 caracteres').max(200);
+
+// Bloqueo por cuenta: protege los PIN cortos frente a intentos desde muchas IP.
+const MAX_FAILS = 5;
+const WINDOW_MS = 15 * 60 * 1000;
+const failures = new Map<string, { count: number; first: number; lockedUntil: number }>();
+function isLocked(username: string) {
+  const f = failures.get(username.toLowerCase());
+  return !!f && f.lockedUntil > Date.now();
+}
+function registerFailure(username: string) {
+  const key = username.toLowerCase();
+  const now = Date.now();
+  const f = failures.get(key);
+  if (!f || now - f.first > WINDOW_MS) {
+    failures.set(key, { count: 1, first: now, lockedUntil: 0 });
+    return;
+  }
+  f.count++;
+  if (f.count >= MAX_FAILS) f.lockedUntil = now + WINDOW_MS;
+}
+export function resetLoginFailures() {
+  failures.clear();
+}
 
 export async function publicUser(userId: string) {
   return one(
@@ -60,12 +83,20 @@ export default async function authRoutes(app: FastifyInstance) {
 
   app.post('/api/auth/login', { config: { rateLimit: { max: config.authRateLimit, timeWindow: '1 minute' } } }, async (req, reply) => {
     const body = z.object({ username: z.string().trim().min(1).max(64), password: z.string().min(1).max(200) }).parse(req.body);
+    if (isLocked(body.username)) {
+      throw new HttpError(429, 'Demasiados intentos fallidos. Espera 15 minutos o pide a un adulto que cambie el PIN.', 'locked');
+    }
     const u = await one(getPool(), 'SELECT id, password_hash, active FROM users WHERE lower(username) = lower($1)', [body.username]);
     if (!u) {
       await dummyVerify(body.password);
+      registerFailure(body.username);
       throw unauthorized('Usuario o contraseña incorrectos');
     }
-    if (!(await verifyPassword(body.password, u.password_hash)) || !u.active) throw unauthorized('Usuario o contraseña incorrectos');
+    if (!(await verifyPassword(body.password, u.password_hash)) || !u.active) {
+      registerFailure(body.username);
+      throw unauthorized('Usuario o contraseña incorrectos');
+    }
+    failures.delete(body.username.toLowerCase());
     const s = await createSession(getPool(), u.id, req.headers['user-agent']);
     setSessionCookie(reply, s.token, s.expires);
     return { user: await publicUser(u.id) };

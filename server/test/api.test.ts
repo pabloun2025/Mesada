@@ -4,6 +4,7 @@ import { buildApp } from '../src/app.js';
 import { closePool, getPool } from '../src/lib/db.js';
 import { todayIn } from '../src/lib/dates.js';
 import { Client, createFamily, resetDb } from './helpers.js';
+import { resetLoginFailures } from '../src/routes/auth.js';
 
 let app: FastifyInstance;
 let F: Awaited<ReturnType<typeof createFamily>>;
@@ -17,6 +18,7 @@ afterAll(async () => {
   await closePool();
 });
 beforeEach(async () => {
+  resetLoginFailures();
   await resetDb();
   F = await createFamily(app);
 });
@@ -43,6 +45,17 @@ describe('autenticación y roles', () => {
     expect((await c.post('/api/auth/login', { username: 'flucia', password: 'mal' })).status).toBe(401);
     const r = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'flucia', password: '1234' } });
     expect(r.statusCode).toBe(403);
+  });
+  it('bloquea la cuenta tras 5 PIN fallidos aunque cambie la IP, y un adulto lo desbloquea', async () => {
+    for (let i = 0; i < 5; i++) {
+      const r = await app.inject({ method: 'POST', url: '/api/auth/login', remoteAddress: `10.0.0.${i}`, headers: { 'x-mesada': '1' }, payload: { username: 'flucia', password: `000${i}` } });
+      expect(r.statusCode).toBe(401);
+    }
+    const locked = await new Client(app).post('/api/auth/login', { username: 'flucia', password: '1234' });
+    expect(locked.status).toBe(429);
+    expect(locked.body.error).toBe('locked');
+    await F.mama.patch(`/api/members/${F.ids.lucia}`, { password: '4321' });
+    expect((await new Client(app).post('/api/auth/login', { username: 'flucia', password: '4321' })).status).toBe(200);
   });
   it('sin sesión no hay acceso', async () => {
     expect((await new Client(app).get('/api/me')).status).toBe(401);
@@ -287,6 +300,16 @@ describe('puntos, mesada, recompensas y pagos', () => {
     const act = (await F.mama.get('/api/activity')).body.entries;
     expect(act.filter((a: any) => a.action === 'points.adjust')).toHaveLength(1);
     expect((await F.luciaC.get('/api/activity')).status).toBe(403);
+  });
+
+  it('los libros de puntos y dinero son inmutables en la base de datos', async () => {
+    await givePoints(F.ids.lucia, 50);
+    await expect(getPool().query('UPDATE points_ledger SET delta = 5000')).rejects.toThrow(/no se pueden modificar/);
+    await expect(getPool().query('DELETE FROM points_ledger')).rejects.toThrow(/no se pueden borrar/);
+    await expect(getPool().query('DELETE FROM audit_log')).rejects.toThrow(/no se pueden borrar/);
+    await expect(getPool().query("UPDATE audit_log SET action = 'x'")).rejects.toThrow(/no se puede modificar/);
+    await getPool().query(`UPDATE points_ledger SET note = 'nota corregida'`); // metadatos sí
+    expect((await F.mama.get(`/api/wallet/${F.ids.lucia}`)).body.wallet.points_available).toBe(50);
   });
 
   it('el panel parental resume a cada hijo', async () => {
