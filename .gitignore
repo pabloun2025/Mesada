@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.log
+data/
+backups/
+.replica/
+test-results/
+playwright-report/
+.playwright-cli/
+web/dev-dist/
