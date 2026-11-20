@@ -77,7 +77,7 @@ function AdjustSheet({ child, onClose }: { child: User; onClose: () => void }) {
           <Segmented label="Sentido" value={sign} onChange={setSign} options={[{ value: 'plus', label: 'Sumar' }, { value: 'minus', label: 'Restar' }]} />
         </div>
         <Field label={type === 'points' ? 'Puntos' : 'Importe (€)'}>{(id) => <input id={id} className="field num text-xl font-bold" inputMode={type === 'points' ? 'numeric' : 'decimal'} value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
-        <Field label="Motivo" hint="Queda en el historial y lo verá tu hijo/a.">{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Gracias por ayudar con la mudanza" maxLength={300} />}</Field>
+        <Field label="Motivo" hint="Queda en el historial y lo verá tu hijo/a.">{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Gracias por ayudar con la mudanza…" maxLength={300} />}</Field>
         {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
       </div>
     </Sheet>

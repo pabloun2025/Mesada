@@ -7,7 +7,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
     <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
       <section className="relative flex flex-col justify-between overflow-hidden bg-ink px-6 pt-8 pb-10 text-white lg:px-14 lg:py-14">
         <div className="flex items-center gap-2.5">
-          <img src="/favicon.svg" alt="" className="size-10 rounded-xl ring-1 ring-white/15" />
+          <img src="/favicon.svg" alt="" width={40} height={40} className="size-10 rounded-xl ring-1 ring-white/15" />
           <span className="font-display text-2xl font-extrabold">Mesada</span>
         </div>
         <div className="mt-8 hidden lg:block">

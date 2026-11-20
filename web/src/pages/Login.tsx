@@ -32,7 +32,7 @@ export function Login({ canRegister }: { canRegister: boolean }) {
       <form onSubmit={submit} className="space-y-4" noValidate>
         <Segmented label="Tipo de cuenta" value={who} onChange={setWho} options={[{ value: 'adult', label: 'Soy adulto' }, { value: 'child', label: 'Soy hijo/a' }]} />
         <Field label="Usuario">
-          {(id) => <input id={id} className="field" autoComplete="username" autoCapitalize="none" value={username} onChange={(e) => setUsername(e.target.value)} required />}
+          {(id) => <input id={id} className="field" autoComplete="username" spellCheck={false} name="username" autoCapitalize="none" value={username} onChange={(e) => setUsername(e.target.value)} required />}
         </Field>
         <Field label={who === 'child' ? 'PIN' : 'Contraseña'}>
           {(id) => (

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Camera, CalendarCheck, Flame, PartyPopper } from 'lucide-react';
 import { api } from '../lib/api';
@@ -25,6 +25,13 @@ export default function ChildToday() {
   const [photoFor, setPhotoFor] = useState<Instance | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file) return setPreview(null);
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const complete = useMutation({
     mutationFn: async ({ inst, photo }: { inst: Instance; photo?: File | null }) => {
@@ -62,7 +69,7 @@ export default function ChildToday() {
         <div className="text-center sm:text-left">
           <p className="text-sm font-bold muted first-letter:uppercase">{today ? weekdayLong(today) : ''}</p>
           <h1 className="mt-1 text-3xl font-extrabold">
-            {items.length === 0 ? 'Hoy tienes el día libre' : open.length === 0 ? 'Todo hecho por hoy' : `Te quedan ${open.length} ${open.length === 1 ? 'tarea' : 'tareas'}`}
+            {items.length === 0 ? 'Hoy tienes el día libre' : open.length === 0 ? 'Todo hecho por hoy' : open.length === 1 ? 'Te queda 1 tarea' : `Te quedan ${open.length} tareas`}
           </h1>
           <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
@@ -119,8 +126,8 @@ export default function ChildToday() {
       >
         <p className="mb-4 muted">«{photoFor?.title}» necesita una foto. Solo la verán los adultos de tu familia.</p>
         <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} aria-label="Foto" />
-        {file ? (
-          <img src={URL.createObjectURL(file)} alt="Vista previa" className="mb-3 max-h-72 w-full rounded-2xl object-cover" />
+        {preview ? (
+          <img src={preview} alt="Vista previa" className="mb-3 max-h-72 w-full rounded-2xl object-cover" />
         ) : null}
         <Button variant="secondary" className="w-full" onClick={() => fileRef.current?.click()}><Camera size={18} /> {file ? 'Hacer otra' : 'Hacer foto'}</Button>
       </Sheet>

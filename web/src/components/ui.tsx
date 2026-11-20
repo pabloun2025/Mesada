@@ -187,7 +187,7 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
             <h2 className="text-xl font-bold">{title}</h2>
             <IconButton label="Cerrar" onClick={onClose}><X size={20} /></IconButton>
           </div>
-          <div className="overflow-y-auto px-5 pb-5">{children}</div>
+          <div className="overflow-y-auto overscroll-contain px-5 pb-5">{children}</div>
           {footer ? <div className="safe-bottom border-t border-[var(--line)] px-5 py-4">{footer}</div> : null}
         </div>
       ) : null}

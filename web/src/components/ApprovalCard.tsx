@@ -70,10 +70,10 @@ export function ApprovalCard({ p, compact = false }: { p: Pending; compact?: boo
         }
       >
         <p className="mb-3 muted">{p.display_name} verá este mensaje y podrá volver a marcarla.</p>
-        <textarea className="field min-h-24" placeholder="Por ejemplo: faltan los vasos del salón" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} aria-label="Motivo" />
+        <textarea className="field min-h-24" placeholder="Por ejemplo: faltan los vasos del salón…" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} aria-label="Motivo" />
       </Sheet>
       <Sheet open={photo} onClose={() => setPhoto(false)} title={p.title}>
-        <img src={`/api/instances/${p.id}/photo`} alt={`Foto de ${p.display_name} para «${p.title}»`} className="w-full rounded-2xl" />
+        <img src={`/api/instances/${p.id}/photo`} alt={`Foto de ${p.display_name} para «${p.title}»`} loading="lazy" className="w-full rounded-2xl" />
       </Sheet>
     </li>
   );

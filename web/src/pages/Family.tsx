@@ -64,7 +64,7 @@ function MemberEditor({ member, onClose }: { member: User | null; onClose: () =>
         <Field label="Nombre">{(id) => <input id={id} className="field" value={m.displayName} onChange={(e) => setM({ ...m, displayName: e.target.value })} maxLength={60} />}</Field>
         <AvatarPicker name={m.displayName} avatar={m.avatar} colorKey={m.color} onChange={(a, c) => setM({ ...m, avatar: a, color: c })} />
         {isNew ? (
-          <Field label="Usuario para entrar" hint="Sin espacios. Debe ser único.">{(id) => <input id={id} className="field" autoCapitalize="none" value={m.username} onChange={(e) => setM({ ...m, username: e.target.value })} />}</Field>
+          <Field label="Usuario para entrar" hint="Sin espacios. Debe ser único.">{(id) => <input id={id} className="field" spellCheck={false} name="username" autoCapitalize="none" value={m.username} onChange={(e) => setM({ ...m, username: e.target.value })} />}</Field>
         ) : <p className="text-sm muted">Usuario: <strong>{member.username}</strong></p>}
         <Field label={isNew ? (child ? 'PIN' : 'Contraseña') : child ? 'Nuevo PIN (opcional)' : 'Nueva contraseña (opcional)'} hint={child ? 'Mínimo 4 caracteres. Cambiarlo cierra sus sesiones abiertas.' : 'Mínimo 8 caracteres.'}>
           {(id) => <input id={id} className="field" type="password" autoComplete="new-password" inputMode={child ? 'numeric' : undefined} value={m.password} onChange={(e) => setM({ ...m, password: e.target.value })} />}

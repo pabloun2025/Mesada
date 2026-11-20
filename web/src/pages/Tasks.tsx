@@ -104,7 +104,7 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
             ))}
           </div>
         </div>
-        <Field label="Nombre de la tarea">{(id) => <input id={id} className="field" value={d.title} onChange={(e) => set('title', e.target.value)} placeholder="Poner el lavavajillas" maxLength={100} />}</Field>
+        <Field label="Nombre de la tarea">{(id) => <input id={id} className="field" value={d.title} onChange={(e) => set('title', e.target.value)} placeholder="Poner el lavavajillas…" maxLength={100} />}</Field>
         <Field label="Detalles (opcional)">{(id) => <textarea id={id} className="field min-h-18" value={d.description} onChange={(e) => set('description', e.target.value)} maxLength={1000} />}</Field>
 
         <div className="grid grid-cols-[1fr_auto] items-end gap-3">

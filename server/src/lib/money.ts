@@ -7,6 +7,11 @@ import { audit, notify, notifyAdults } from './audit.js';
 import { isValidDate, periodBounds } from './dates.js';
 import { evaluateBadges } from './gamification.js';
 
+function periodLabel(start: string, end: string) {
+  const f = (d: string, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('es-ES', { ...o, timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
+  return `${f(start, { day: 'numeric', month: 'short' })} – ${f(end, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
+
 async function assertChild(db: any, familyId: string, userId: string) {
   const u = await one(db, `SELECT id, display_name, role FROM users WHERE id = $1 AND family_id = $2 AND active`, [userId, familyId]);
   if (!u) throw notFound('Miembro no encontrado');
@@ -45,10 +50,10 @@ export async function settlePeriod(adult: AuthUser, userId: string, anyDateInPer
       [adult.familyId, userId, start, end, converted, cents, capped, adult.id],
     );
     if (converted > 0) {
-      await addPoints(db, { familyId: adult.familyId, userId, delta: -converted, kind: 'conversion', refId: s.id, note: `Cierre ${start} – ${end}`, createdBy: adult.id, idempotencyKey: `settle-pts:${s.id}` });
+      await addPoints(db, { familyId: adult.familyId, userId, delta: -converted, kind: 'conversion', refId: s.id, note: `Cierre ${periodLabel(start, end)}`, createdBy: adult.id, idempotencyKey: `settle-pts:${s.id}` });
     }
     if (cents > 0) {
-      await addMoney(db, { familyId: adult.familyId, userId, deltaCents: cents, kind: 'conversion', refId: s.id, note: `Cierre ${start} – ${end}`, createdBy: adult.id, idempotencyKey: `settle-eur:${s.id}` });
+      await addMoney(db, { familyId: adult.familyId, userId, deltaCents: cents, kind: 'conversion', refId: s.id, note: `Cierre ${periodLabel(start, end)}`, createdBy: adult.id, idempotencyKey: `settle-eur:${s.id}` });
     }
     await audit(db, adult.familyId, adult.id, 'allowance.settle', 'settlement', s.id, { userId, start, end, points: converted, cents, capped });
     await notify(db, userId, 'settlement', 'Cierre de periodo', `${converted} puntos convertidos en ${(cents / 100).toFixed(2).replace('.', ',')} €`, '/mesada');

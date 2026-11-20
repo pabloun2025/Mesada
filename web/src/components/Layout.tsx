@@ -18,6 +18,7 @@ function useTheme() {
     setDark(next);
     document.documentElement.classList.toggle('dark', next);
     localStorage.setItem('mesada:theme', next ? 'dark' : 'light');
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', next ? '#0C1428' : '#172A54');
   };
   return { dark, toggle };
 }
@@ -130,10 +131,11 @@ export function Layout() {
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[17rem_1fr]">
+      <a href="#contenido" className="sr-only z-50 rounded-full bg-ink px-4 py-2 font-bold text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3">Saltar al contenido</a>
       {/* Raíl lateral (escritorio) */}
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-[var(--line)] bg-[var(--card)] px-4 py-6 lg:flex">
         <div className="mb-8 flex items-center gap-2.5 px-2">
-          <img src="/favicon.svg" alt="" className="size-9" />
+          <img src="/favicon.svg" alt="" width={36} height={36} className="size-9" />
           <div>
             <p className="font-display text-xl leading-none font-extrabold">Mesada</p>
             <p className="text-sm muted">{family.name}</p>
@@ -180,7 +182,7 @@ export function Layout() {
           <IconButton label="Cerrar sesión" onClick={doLogout} className="lg:hidden"><LogOut size={19} /></IconButton>
         </header>
 
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-5 pb-28 lg:px-8 lg:pb-12">
+        <main id="contenido" tabIndex={-1} className="mx-auto w-full max-w-5xl flex-1 px-4 pt-5 pb-28 lg:px-8 lg:pb-12">
           <Outlet />
         </main>
 
