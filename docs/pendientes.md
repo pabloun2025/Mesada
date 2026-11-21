@@ -19,6 +19,7 @@ Estado: ✅ hecho y probado · 🟡 parcial · ⬜ pendiente
 - ✅ Docker Compose con copias diarias y restauración verificada
 - ✅ Notificaciones multicanal (aplicación, correo y WhatsApp) con preferencias, horario de silencio, recordatorios, topes, reintentos y deduplicación; recuperación de contraseña e invitaciones por correo (en simulado)
 - ✅ Análisis de reutilización de la infraestructura de TEINVITO y artefactos de despliegue en la VM compartida
+- ✅ Administración de la instalación con verificación en dos pasos (D23) y WhatsApp en los perfiles (D24)
 - ✅ Pruebas: 61 unitarias y de integración (API + PostgreSQL) y 15 E2E (Playwright)
 
 ## Pendiente (por prioridad)

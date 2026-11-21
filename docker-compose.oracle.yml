@@ -38,7 +38,9 @@ services:
       DATABASE_URL: postgres://mesada:${POSTGRES_PASSWORD}@db:5432/mesada
       # Evolution API de consulares, por la red compartida.
       EVOLUTION_API_URL: http://evolution-api:8080
-    volumes: [mesada_uploads:/data/uploads]
+      # Solo para que la administración vea cuándo fue la última copia (lectura).
+      BACKUP_DIR: /backups
+    volumes: [mesada_uploads:/data/uploads, ./backups:/backups:ro]
     depends_on:
       db: {condition: service_healthy}
     mem_limit: 512m

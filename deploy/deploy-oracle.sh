@@ -35,6 +35,8 @@ old = dotenv(out_path)
 pick = lambda k, d='': boot.get(k) or old.get(k) or d
 values = {
     'POSTGRES_PASSWORD': old.get('POSTGRES_PASSWORD') or secrets.token_hex(32),
+    # Cifra los secretos de la verificación en dos pasos. Si cambia, hay que volver a activarla.
+    'SECRET_KEY': old.get('SECRET_KEY') or secrets.token_hex(32),
     'APP_BASE_URL': pick('APP_BASE_URL', 'https://mesada.veryfacil.org'),
     'COOKIE_SECURE': 'true',
     'ALLOW_REGISTRATION': pick('ALLOW_REGISTRATION', 'false'),

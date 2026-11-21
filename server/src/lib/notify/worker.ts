@@ -1,6 +1,7 @@
 import { getPool, one, tx, type Db } from '../db.js';
 import { getProviders } from './providers.js';
 import type { Channel } from './events.js';
+import { getSetting } from '../settings.js';
 
 const MAX_ATTEMPTS = 5;
 
@@ -55,6 +56,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export async function processOutbox(opts: { limit?: number; db?: Db } = {}) {
   const db = opts.db ?? getPool();
+  // Pausa desde Administración: los mensajes esperan en la cola, no se pierden.
+  if (await getSetting('notify_paused', db)) return 0;
   const providers = getProviders();
   let processed = 0;
   // Mensajes que se quedaron «enviando» por una caída: no se sabe si salieron → inciertos, sin reintento.

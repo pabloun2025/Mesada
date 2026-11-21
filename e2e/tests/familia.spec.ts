@@ -1,4 +1,22 @@
+import crypto from 'node:crypto';
 import { test, expect, devices, type Browser, type Page } from '@playwright/test';
+
+/** Código TOTP (RFC 6238) a partir de la clave que muestra la pantalla, como haría la app de autenticación. */
+function totp(secret: string, ms = Date.now()) {
+  const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0, value = 0;
+  const bytes: number[] = [];
+  for (const ch of secret.replace(/\s/g, '')) {
+    value = (value << 5) | B32.indexOf(ch);
+    bits += 5;
+    if (bits >= 8) { bytes.push((value >>> (bits - 8)) & 255); bits -= 8; }
+  }
+  const msg = Buffer.alloc(8);
+  msg.writeBigUInt64BE(BigInt(Math.floor(ms / 30000)));
+  const h = crypto.createHmac('sha1', Buffer.from(bytes)).update(msg).digest();
+  const off = h[h.length - 1] & 15;
+  return ((h.readUInt32BE(off) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0');
+}
 
 /**
  * Recorrido completo de una familia real: dos adultos y dos hijos.
@@ -271,6 +289,47 @@ test.describe.serial('Familia completa', () => {
     await p.getByRole('button', { name: 'Enviar enlace' }).click();
     await expect(p.getByRole('status')).toHaveText('Si la cuenta existe y tiene correo, te hemos enviado un enlace.');
     await p.context().close();
+  });
+
+  test('el adulto pone su WhatsApp en el perfil para recibir lo que hay que validar', async () => {
+    await adult.goto('/');
+    await adult.getByRole('link', { name: /Recibe por WhatsApp/ }).click();
+    await adult.getByLabel('Teléfono móvil').fill('600 11 22 33');
+    await adult.getByText('Recibir avisos por WhatsApp').click();
+    await expect(adult.getByRole('checkbox', { name: /Recibir avisos por WhatsApp/ })).toBeChecked();
+    await adult.getByRole('button', { name: 'Guardar WhatsApp' }).click();
+    await expect(adult.getByText('WhatsApp guardado')).toBeVisible();
+    const me = await api(adult, 'get', '/me');
+    expect(me.body.user.phone).toBe('+34600112233');
+    await adult.goto('/');
+    await expect(adult.getByRole('link', { name: /Recibe por WhatsApp/ })).toHaveCount(0);
+  });
+
+  test('administración con verificación en dos pasos', async () => {
+    await adult.goto('/');
+    await adult.getByRole('link', { name: 'Administración' }).first().click();
+    await adult.getByLabel('Tu contraseña').fill(ADULT.pass);
+    await adult.getByRole('button', { name: 'Continuar' }).click();
+    await expect(adult.getByAltText('Código QR para la aplicación de autenticación')).toBeVisible();
+    const secret = (await adult.getByTestId('totp-secret').textContent())!;
+    await adult.getByLabel('Código de 6 cifras').fill(totp(secret));
+    await adult.getByRole('button', { name: 'Activar' }).click();
+    await expect(adult.getByText('Códigos de recuperación', { exact: true })).toBeVisible();
+    await adult.getByRole('button', { name: 'Ya los he guardado' }).click();
+    await expect(adult.getByText('Activas en 7 días')).toBeVisible();
+    await adult.screenshot({ path: `${SHOTS}/11-administracion.png`, fullPage: true });
+    // Sin datos económicos de las familias
+    await adult.getByRole('radio', { name: 'Familias' }).click();
+    await adult.getByRole('button', { name: /La tuya/ }).click();
+    await expect(adult.getByText('@lucia')).toBeVisible();
+    await expect(adult.getByText(/€|pts/)).toHaveCount(0);
+    await adult.keyboard.press('Escape');
+    // Salir obliga a pedir el código otra vez
+    await adult.getByRole('radio', { name: 'Ajustes' }).click();
+    await adult.getByRole('button', { name: 'Salir de la administración' }).click();
+    await expect(adult.getByText('Confirma que eres tú')).toBeVisible();
+    // Un hijo no tiene acceso
+    expect((await api(kid, 'get', '/admin/status')).status).toBe(403);
   });
 
   test('la app es instalable (manifest y service worker)', async () => {
