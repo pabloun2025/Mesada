@@ -80,7 +80,7 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
     - el padre recibe un aviso.
 
 ## I6. Sistema de dinero: canje, retiros, adelantos y préstamos (21/11)
-**Estado: en recogida.** Hay que repensar la mesada entera.
+**Estado: construida (21/11), ver D30 y D31.**
 - El hijo tiene dos saldos: puntos y dinero.
 - **Canje:** el hijo cambia puntos por dinero cuando quiere, él solo.
   - Cuenta para el tope de euros del periodo de la familia.
@@ -101,7 +101,7 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Se relaciona con I4 («Pedir mi dinero» pasaría a ser el retiro).
 
 ## I7. Ahorro programado con interés (21/11)
-**Estado: en recogida.**
+**Estado: construida (21/11), ver D32.**
 - La hucha pasa a dar interés: cada meta (algo concreto con un valor) es un ahorro programado.
 - El hijo va metiendo dinero de su saldo en la meta.
 - Interés semanal: 1 % de lo ahorrado, redondeado al euro de arriba, como mínimo 1 €.

@@ -21,6 +21,7 @@ import screenRoutes from './routes/screen.js';
 import payoutRoutes from './routes/payouts.js';
 import holidayRoutes from './routes/holidays.js';
 import bonusRoutes from './routes/bonus.js';
+import bankRoutes from './routes/bank.js';
 
 export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({
@@ -78,6 +79,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(payoutRoutes);
   await app.register(holidayRoutes);
   await app.register(bonusRoutes);
+  await app.register(bankRoutes);
 
   // En producción el servidor puede servir también la PWA compilada.
   if (config.staticDir && fs.existsSync(config.staticDir)) {

@@ -1,8 +1,10 @@
 import { one, type Db } from './db.js';
 import { badRequest, conflict } from './errors.js';
 
-export type PointsKind = 'task' | 'adjustment' | 'bonus' | 'redemption' | 'refund' | 'conversion';
-export type MoneyKind = 'conversion' | 'payment' | 'adjustment' | 'transfer';
+export type PointsKind = 'task' | 'adjustment' | 'bonus' | 'redemption' | 'refund' | 'conversion' | 'exchange' | 'advance' | 'loan_interest';
+export type MoneyKind =
+  | 'conversion' | 'payment' | 'adjustment' | 'transfer' | 'exchange' | 'advance' | 'loan' | 'loan_repayment'
+  | 'interest' | 'interest_forfeit' | 'goal_redeem';
 
 /** Bloquea la fila del usuario para serializar operaciones de saldo concurrentes (dentro de una transacción). */
 export async function lockUser(db: Db, userId: string) {
@@ -41,13 +43,13 @@ export async function addPoints(
 
 export async function addMoney(
   db: Db,
-  e: { familyId: string; userId: string; deltaCents: number; kind: MoneyKind; account?: 'available' | 'savings'; refId?: string | null; note?: string; createdBy?: string | null; idempotencyKey?: string | null },
+  e: { familyId: string; userId: string; deltaCents: number; kind: MoneyKind; account?: 'available' | 'savings'; goalId?: string | null; refId?: string | null; note?: string; createdBy?: string | null; idempotencyKey?: string | null },
 ) {
   if (!Number.isInteger(e.deltaCents)) throw badRequest('Importe no válido');
   const r = await db.query(
-    `INSERT INTO money_ledger(family_id, user_id, account, delta_cents, kind, ref_id, note, created_by, idempotency_key)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (idempotency_key) DO NOTHING RETURNING id`,
-    [e.familyId, e.userId, e.account ?? 'available', e.deltaCents, e.kind, e.refId ?? null, e.note ?? '', e.createdBy ?? null, e.idempotencyKey ?? null],
+    `INSERT INTO money_ledger(family_id, user_id, account, delta_cents, kind, ref_id, note, created_by, idempotency_key, goal_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (idempotency_key) DO NOTHING RETURNING id`,
+    [e.familyId, e.userId, e.account ?? 'available', e.deltaCents, e.kind, e.refId ?? null, e.note ?? '', e.createdBy ?? null, e.idempotencyKey ?? null, e.goalId ?? null],
   );
   return { id: r.rows[0]?.id as string | undefined, duplicate: r.rowCount === 0 };
 }

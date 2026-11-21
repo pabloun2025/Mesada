@@ -93,7 +93,7 @@ export default function ParentDashboard() {
                       <dd className="num text-lg font-extrabold">{euros(k.wallet.cents_pending)}</dd>
                     </div>
                     <div className="p-3">
-                      <dt className="text-xs muted">Hucha</dt>
+                      <dt className="text-xs muted">Ahorros</dt>
                       <dd className="num text-lg font-extrabold">{euros(k.wallet.cents_savings)}</dd>
                     </div>
                     <div className="p-3">

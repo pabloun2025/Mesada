@@ -1,106 +1,77 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Banknote, MonitorPlay, NotebookPen, PiggyBank, Plus, Target, Trash2 } from 'lucide-react';
-import { api, del, newKey, post } from '../lib/api';
-import { euros, parseEuros, relative } from '../lib/format';
+import { MonitorPlay, NotebookPen, Plus } from 'lucide-react';
+import { api, del, post } from '../lib/api';
+import { euros, relative } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
-import type { PayoutRequest, Wallet } from '../lib/types';
+import type { Bank, Goal, PayoutRequest, Wallet } from '../lib/types';
 import { screenPhrase } from '../lib/screen';
 import { LogScreenSheet, RequestMoneySheet, RequestScreenSheet } from '../components/MoneySheets';
-import { Badge, Button, Field, IconButton, Loading, PageHeader, SectionTitle, Sheet, useToast } from '../components/ui';
-import { Bar } from '../components/Ring';
-import { LedgerList, ScreenList } from '../components/Ledger';
+import { AccountCard, AdvanceSheet, AtmButtons, ExchangeSheet, GoalProduct, LoanProduct, LoanSheet, NewGoalSheet, SaveSheet, Statement, type AtmKey } from '../components/Bank';
+import { Badge, Button, Loading, PageHeader, SectionTitle, useToast } from '../components/ui';
+import { ScreenList } from '../components/Ledger';
 import { minutesLabel } from '../lib/deadline';
 
+/** «Mi banco»: dos cuentas, botones de cajero, extracto y productos (préstamo y ahorros). */
 export default function ChildMoney() {
   const { user, family } = useSession();
-  const { data, isLoading } = useQuery({ queryKey: ['wallet', user.id], queryFn: () => api<{ wallet: Wallet }>(`/wallet/${user.id}`) });
-  const goals = useQuery({ queryKey: ['goals', user.id], queryFn: () => api(`/goals/${user.id}`) });
+  const bankQ = useQuery({ queryKey: ['bank', user.id], queryFn: () => api<{ bank: Bank }>(`/bank/${user.id}`) });
+  const walletQ = useQuery({ queryKey: ['wallet', user.id], queryFn: () => api<{ wallet: Wallet }>(`/wallet/${user.id}`) });
+  const goalsQ = useQuery({ queryKey: ['goals', user.id], queryFn: () => api<{ goals: Goal[] }>(`/goals/${user.id}`) });
   const requests = useQuery({ queryKey: ['payout-requests', 'mine'], queryFn: () => api<{ requests: PayoutRequest[] }>('/payout-requests') });
-  const [sheet, setSheet] = useState<'money' | 'screen' | 'log' | null>(null);
-  const [saveOpen, setSaveOpen] = useState(false);
-  const [goalOpen, setGoalOpen] = useState(false);
-  const [amount, setAmount] = useState('');
-  const [goal, setGoal] = useState({ title: '', target: '' });
-  const [key, setKey] = useState(newKey);
+  const [sheet, setSheet] = useState<AtmKey | 'screen' | 'log' | 'goal' | null>(null);
+  const [depositGoal, setDepositGoal] = useState<string | undefined>();
   const toast = useToast();
   const invalidate = useInvalidateAll();
-
-  const save = useMutation({
-    mutationFn: () => {
-      const cents = parseEuros(amount);
-      if (!cents) throw new Error('Escribe un importe, por ejemplo 2,50');
-      return post('/savings/transfer', { userId: user.id, cents, direction: 'to_savings' }, key);
-    },
-    onSuccess: () => { toast('Guardado en la hucha'); setSaveOpen(false); setAmount(''); setKey(newKey()); invalidate(); },
-    onError: (e: Error) => toast(e.message, 'error'),
-  });
-  const addGoal = useMutation({
-    mutationFn: () => {
-      const cents = parseEuros(goal.target);
-      if (!cents || !goal.title.trim()) throw new Error('Pon un nombre y un importe');
-      return post('/goals', { userId: user.id, title: goal.title, targetCents: cents });
-    },
-    onSuccess: () => { setGoalOpen(false); setGoal({ title: '', target: '' }); invalidate(); },
-    onError: (e: Error) => toast(e.message, 'error'),
-  });
   const cancel = useMutation({
     mutationFn: (id: string) => post(`/payout-requests/${id}/cancel`),
     onSuccess: () => { toast('Petición cancelada'); invalidate(); },
     onError: (e: Error) => toast(e.message, 'error'),
   });
-  const removeGoal = useMutation({ mutationFn: (id: string) => del(`/goals/${id}`), onSuccess: invalidate });
+  const removeGoal = useMutation({ mutationFn: (id: string) => del(`/goals/${id}`), onSuccess: invalidate, onError: (e: Error) => toast(e.message, 'error') });
 
-  if (isLoading || !data) return <Loading />;
-  const w = data.wallet;
+  if (bankQ.isLoading || walletQ.isLoading || !bankQ.data || !walletQ.data) return <Loading />;
+  const bank = bankQ.data.bank;
+  const w = walletQ.data.wallet;
+  const goals = goalsQ.data?.goals ?? [];
+  const activeGoals = goals.filter((g) => g.status === 'active');
+  const doneGoals = goals.filter((g) => g.status !== 'active');
   const reqs = (requests.data?.requests ?? []).slice(0, 6);
   const hasPending = (kind: string) => reqs.some((r) => r.kind === kind && r.status === 'pending');
+  const negative = bank.money_cents < 0;
+
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title="Mi dinero" subtitle={`${family.rate_points} puntos = ${euros(family.rate_cents)}`} />
-      <section className="panel overflow-hidden">
-        <div className="bg-ink p-6 text-white">
-          <p className="text-sm font-bold text-white/70">Te deben</p>
-          <p className="num mt-1 text-5xl font-extrabold">{euros(w.cents_pending)}</p>
-          <p className="mt-2 text-sm text-white/70">Ya cobrado en total: {euros(w.cents_paid_total)}</p>
-        </div>
-        <dl className="grid grid-cols-2 divide-x divide-[var(--line)]">
-          <div className="p-4">
-            <dt className="text-sm font-bold muted">Puntos por convertir</dt>
-            <dd className="num text-2xl font-extrabold">{w.points_available}</dd>
-            <dd className="text-sm muted">≈ {euros(w.points_value_cents)} en el próximo cierre</dd>
-          </div>
-          <div className="p-4">
-            <dt className="text-sm font-bold muted">En la hucha</dt>
-            <dd className="num text-2xl font-extrabold text-leaf">{euros(w.cents_savings)}</dd>
-            <dd className="text-sm muted">Para tus metas</dd>
-          </div>
-        </dl>
-      </section>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button variant="success" disabled={w.cents_pending <= 0} onClick={() => setSaveOpen(true)}><PiggyBank size={18} /> Guardar en la hucha</Button>
-        <Button variant="secondary" disabled={w.cents_pending <= 0 || hasPending('money')} onClick={() => setSheet('money')}><Banknote size={18} /> Pedir mi dinero</Button>
-      </div>
+      <PageHeader title="Mi banco" subtitle={`${family.rate_points} puntos = ${euros(family.rate_cents)}`} />
 
-      <section className="mt-8">
-        <SectionTitle action={<Button size="sm" variant="secondary" onClick={() => setGoalOpen(true)}><Plus size={16} /> Meta</Button>}>Mis metas de ahorro</SectionTitle>
-        {goals.data?.goals?.length ? (
-          <ul className="space-y-2.5">
-            {goals.data.goals.map((g: any) => (
-              <li key={g.id} className="card p-4">
-                <div className="mb-2 flex items-center gap-2">
-                  <Target size={18} className="text-leaf" aria-hidden />
-                  <span className="flex-1 font-bold">{g.title}</span>
-                  <span className="num text-sm font-bold">{euros(Math.min(w.cents_savings, g.target_cents))} / {euros(g.target_cents)}</span>
-                  <IconButton label={`Quitar meta «${g.title}»`} onClick={() => removeGoal.mutate(g.id)}><Trash2 size={16} /></IconButton>
-                </div>
-                <Bar value={w.cents_savings} max={g.target_cents} tone="leaf" />
-              </li>
-            ))}
-          </ul>
-        ) : <p className="muted">Ponte una meta (unos auriculares, un juego…) y ve llenando la hucha.</p>}
-      </section>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <AccountCard tone="money" title="Cuenta de dinero" number={bank.accounts.money} value={bank.money_cents} unit="eur">
+          <p>Ya cobrado en total: {euros(w.cents_paid_total)}</p>
+          {bank.savings_cents > 0 ? <p>Ahorrado en tus metas: {euros(bank.savings_cents)}</p> : null}
+        </AccountCard>
+        <AccountCard tone="points" title="Cuenta de puntos" number={bank.accounts.points} value={bank.points} unit="pts">
+          <div>
+            <p>Puntos por convertir</p>
+            <p>≈ {euros(w.points_value_cents)}{bank.week.cap_cents != null ? ` · esta semana te caben ${euros(bank.week.remaining_cents ?? 0)}` : ''}</p>
+          </div>
+        </AccountCard>
+      </div>
+      {negative ? (
+        <p role="status" className="mt-3 rounded-2xl bg-berry-soft p-3 text-sm font-bold text-berry dark:bg-berry/20">
+          Tu cuenta de dinero está en negativo. Lo próximo que ganes la irá devolviendo; mientras tanto no puedes retirar ni pedir otro préstamo.
+        </p>
+      ) : null}
+      {bank.points < 0 ? (
+        <p role="status" className="mt-3 rounded-2xl bg-sun-soft p-3 text-sm font-bold dark:bg-sun/15">Tienes {bank.points} puntos: los próximos que ganes pagarán primero esa deuda.</p>
+      ) : null}
+
+      <div className="mt-4">
+        <AtmButtons bank={bank} onPick={(k) => setSheet(k)} />
+        {bank.actions.withdraw.ok || bank.week.withdrawals_used > 0 ? (
+          <p className="mt-2 text-sm muted">Retiros esta semana: {bank.week.withdrawals_used} de {bank.week.withdrawals_max} (se reinician el lunes).</p>
+        ) : null}
+      </div>
 
       {reqs.length ? (
         <section className="mt-8">
@@ -109,7 +80,7 @@ export default function ChildMoney() {
             {reqs.map((r) => (
               <li key={r.id} className="card flex flex-wrap items-center gap-3 p-3.5">
                 <div className="min-w-0 flex-1">
-                  <p className="font-bold">{r.kind === 'money' ? euros(r.amount_cents!) : screenPhrase(r.minutes!, r.category)}</p>
+                  <p className="font-bold">{r.kind === 'money' ? `Retiro de ${euros(r.amount_cents!)}` : screenPhrase(r.minutes!, r.category)}</p>
                   <p className="text-sm muted">{relative(r.created_at)}{r.decision_note ? ` · «${r.decision_note}»` : ''}</p>
                 </div>
                 {r.status === 'pending' ? (
@@ -126,6 +97,32 @@ export default function ChildMoney() {
         </section>
       ) : null}
 
+      {bank.loan ? (
+        <section className="mt-8">
+          <SectionTitle>Mi préstamo</SectionTitle>
+          <LoanProduct loan={bank.loan} mine />
+        </section>
+      ) : null}
+
+      <section className="mt-8">
+        <SectionTitle action={<Button size="sm" variant="secondary" onClick={() => setSheet('goal')}><Plus size={16} /> Meta</Button>}>Mis ahorros</SectionTitle>
+        {activeGoals.length ? (
+          <ul className="space-y-2.5">
+            {activeGoals.map((g) => (
+              <GoalProduct key={g.id} goal={g} mine onDeposit={(x) => { setDepositGoal(x.id); setSheet('save'); }} onRemove={(x) => removeGoal.mutate(x.id)} />
+            ))}
+          </ul>
+        ) : <p className="muted">Ponte una meta (unos auriculares, un vinilo…) y mete dinero cada semana: gana interés.</p>}
+        {doneGoals.length ? (
+          <ul className="mt-3 space-y-2.5">{doneGoals.map((g) => <GoalProduct key={g.id} goal={g} mine={false} />)}</ul>
+        ) : null}
+      </section>
+
+      <section className="mt-8">
+        <SectionTitle>Extracto</SectionTitle>
+        <div className="card p-4"><Statement userId={user.id} /></div>
+      </section>
+
       <section className="mt-8">
         <SectionTitle>Mi tiempo de pantalla</SectionTitle>
         <div className="card p-4">
@@ -139,24 +136,14 @@ export default function ChildMoney() {
         </div>
       </section>
 
-      <section className="mt-8">
-        <SectionTitle>Movimientos</SectionTitle>
-        <div className="card p-4"><LedgerList userId={user.id} /></div>
-      </section>
-
-      {sheet === 'money' ? <RequestMoneySheet balanceCents={w.cents_pending} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'withdraw' ? <RequestMoneySheet balanceCents={bank.money_cents} left={Math.max(0, bank.week.withdrawals_max - bank.week.withdrawals_used)} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'exchange' ? <ExchangeSheet bank={bank} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'advance' ? <AdvanceSheet bank={bank} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'loan' ? <LoanSheet bank={bank} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'save' ? <SaveSheet bank={bank} goals={goals} initialGoal={depositGoal} onClose={() => { setSheet(null); setDepositGoal(undefined); }} /> : null}
+      {sheet === 'goal' ? <NewGoalSheet userId={user.id} onClose={() => setSheet(null)} /> : null}
       {sheet === 'screen' ? <RequestScreenSheet balance={w.screen_minutes} onClose={() => setSheet(null)} /> : null}
       {sheet === 'log' ? <LogScreenSheet balance={w.screen_minutes} onClose={() => setSheet(null)} /> : null}
-      <Sheet open={saveOpen} onClose={() => setSaveOpen(false)} title="Guardar en la hucha" footer={<Button className="w-full" variant="success" loading={save.isPending} onClick={() => save.mutate()}>Guardar</Button>}>
-        <p className="mb-4 muted">Para sacar dinero de la hucha tendrás que pedírselo a un adulto.</p>
-        <Field label="Importe (€)">{(id) => <input id={id} className="field num text-2xl font-extrabold" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
-      </Sheet>
-      <Sheet open={goalOpen} onClose={() => setGoalOpen(false)} title="Nueva meta" footer={<Button className="w-full" loading={addGoal.isPending} onClick={() => addGoal.mutate()}>Crear meta</Button>}>
-        <div className="space-y-4">
-          <Field label="¿Para qué ahorras?">{(id) => <input id={id} className="field" value={goal.title} onChange={(e) => setGoal({ ...goal, title: e.target.value })} maxLength={80} />}</Field>
-          <Field label="¿Cuánto cuesta? (€)">{(id) => <input id={id} className="field num" inputMode="decimal" value={goal.target} onChange={(e) => setGoal({ ...goal, target: e.target.value })} />}</Field>
-        </div>
-      </Sheet>
     </div>
   );
 }

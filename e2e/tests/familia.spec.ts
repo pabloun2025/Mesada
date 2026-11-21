@@ -153,7 +153,7 @@ test.describe.serial('Familia completa', () => {
     const inst = (await api(kid, 'get', '/instances')).body.instances[0];
     expect((await api(adult, 'post', `/instances/${inst.id}/review`, { approve: true })).status).toBe(409);
     await kid.goto('/mesada');
-    await expect(kid.getByText('Puntos por convertir').locator('..')).toContainText('20');
+    await expect(kid.getByRole('region', { name: 'Cuenta de puntos' })).toContainText('20');
     await kid.goto('/');
     await expect(kid.getByText('Todo hecho por hoy')).toBeVisible();
   });
@@ -530,6 +530,125 @@ test.describe.serial('Familia completa', () => {
     await expect(kid.getByText('Confirmado')).toBeVisible();
     const notes = (await api(kid, 'get', '/notifications')).body.notifications;
     expect(notes.some((x: any) => x.title === '+5 puntos por ser honesto')).toBe(true);
+  });
+
+  test('banco: el hijo canjea puntos por dinero al momento y los adultos lo ven', async () => {
+    const me = (await api(kid, 'get', '/me')).body.user;
+    await api(adult, 'post', '/adjustments/points', { userId: me.id, delta: 100, note: 'Para el banco' });
+    const before = (await api(kid, 'get', `/wallet/${me.id}`)).body.wallet;
+
+    await kid.setViewportSize({ width: 375, height: 812 });
+    await kid.goto('/mesada');
+    // Dos cuentas con número de cuenta de juguete
+    await expect(kid.getByRole('region', { name: 'Cuenta de dinero' })).toContainText(/ES00 DIPL \d{4} \d{4}/);
+    await expect(kid.getByRole('region', { name: 'Cuenta de puntos' })).toContainText(String(before.points_available));
+    await kid.getByRole('button', { name: 'Canjear puntos' }).click();
+    const d = kid.getByRole('dialog');
+    await d.getByLabel('¿Cuántos puntos?').fill('50');
+    await expect(d.getByText('Recibes 2,50 €')).toBeVisible();
+    await d.getByRole('button', { name: 'Cambiar por dinero' }).click();
+    await expect(kid.getByText('Hecho: 50 puntos por 2,50 €')).toBeVisible();
+    const after = (await api(kid, 'get', `/wallet/${me.id}`)).body.wallet;
+    expect(after.points_available).toBe(before.points_available - 50);
+    expect(after.cents_pending).toBe(before.cents_pending + 250);
+    // El extracto lo muestra con el saldo tras el movimiento
+    await expect(kid.getByText('Canje de 50 puntos')).toBeVisible();
+    expect(await kid.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await kid.screenshot({ path: `${SHOTS}/20-hijo-banco-375.png`, fullPage: true });
+
+    const n = (await api(adult, 'get', '/notifications')).body.notifications.find((x: any) => x.kind === 'points_exchanged');
+    expect(n.title).toBe(`${KID.name} ha cambiado 50 puntos por 2,50 €`);
+  });
+
+  test('banco: el hijo retira dinero y el adulto lo paga', async () => {
+    const me = (await api(kid, 'get', '/me')).body.user;
+    await api(adult, 'post', '/adjustments/money', { userId: me.id, deltaCents: 1000, note: 'Para el banco' });
+    const before = (await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.cents_pending;
+
+    await kid.goto('/mesada');
+    await kid.getByRole('button', { name: 'Retirar' }).click();
+    const kd = kid.getByRole('dialog');
+    await kd.getByLabel('¿Cuánto quieres retirar? (€)').fill('4,00');
+    await kd.getByRole('button', { name: 'Retirar', exact: true }).click();
+    await expect(kid.getByText('Retiro pedido. Un adulto te lo pagará')).toBeVisible();
+    await expect(kid.getByText('Retiro de 4,00 €')).toBeVisible();
+
+    await adult.goto('/validar');
+    await expect(adult.getByText('Retira 4,00 €')).toBeVisible();
+    await adult.getByRole('button', { name: `Aprobar la petición de ${KID.name}` }).click();
+    await adult.getByRole('dialog').getByRole('button', { name: 'Pagar y aprobar' }).click();
+    await expect(adult.getByText('Petición aprobada')).toBeVisible();
+    expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.cents_pending).toBe(before - 400);
+    const n = (await api(kid, 'get', '/notifications')).body.notifications.find((x: any) => x.kind === 'payout_decided' && x.title.includes('4,00'));
+    expect(n.title).toBe(`${ADULT.name} te ha pagado 4,00 € en efectivo.`);
+  });
+
+  test('banco: el hijo pide un préstamo y el adulto lo aprueba', async () => {
+    const me = (await api(kid, 'get', '/me')).body.user;
+    // Sin tope semanal no hay préstamo y la pantalla lo explica
+    await kid.goto('/mesada');
+    await expect(kid.getByText('Pon un tope semanal en Ajustes').first()).toBeVisible();
+    const patch = await adult.request.patch('/api/family', { data: { capCents: 1000 }, headers: { 'X-Mesada': '1' } });
+    expect(patch.ok()).toBe(true);
+    const before = (await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.cents_pending;
+
+    await kid.goto('/mesada');
+    await kid.getByRole('button', { name: 'Préstamo' }).click();
+    const kd = kid.getByRole('dialog');
+    await kd.getByLabel('¿Cuánto necesitas? (€)').fill('6,00');
+    await kd.getByLabel(/¿En cuántas semanas/).fill('3');
+    await expect(kd.getByText(/Cada lunes pagarás unos 2,00\s€/)).toBeVisible();
+    await kd.getByRole('button', { name: 'Pedir préstamo' }).click();
+    await expect(kid.getByText('Petición enviada. Un adulto la verá').first()).toBeVisible();
+    await expect(kid.getByText('Esperando respuesta')).toBeVisible();
+
+    await adult.goto('/validar');
+    await expect(adult.getByText('Pide un préstamo de 6,00 €')).toBeVisible();
+    await adult.screenshot({ path: `${SHOTS}/21-validar-prestamo.png`, fullPage: true });
+    await adult.getByRole('button', { name: `Aprobar el préstamo de ${KID.name}` }).click();
+    await expect(adult.getByText('Préstamo aprobado: el dinero ya está en su cuenta')).toBeVisible();
+    expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.cents_pending).toBe(before + 600);
+
+    await kid.goto('/mesada');
+    const prod = kid.getByText('Mi préstamo').locator('xpath=ancestor::section');
+    await expect(prod).toContainText('Quedan 3 cuotas');
+    await expect(prod).toContainText('Próximo cobro: lunes');
+    // Un solo préstamo a la vez
+    expect((await api(kid, 'post', '/loans', { amountCents: 100, weeks: 1 })).status).toBe(409);
+  });
+
+  test('banco: el hijo ahorra en una meta con interés y los padres ven el banco', async () => {
+    const me = (await api(kid, 'get', '/me')).body.user;
+    await kid.goto('/mesada');
+    await kid.getByRole('button', { name: 'Meta', exact: true }).click();
+    const gd = kid.getByRole('dialog');
+    await gd.getByLabel('¿Para qué ahorras?').fill('Vinilo');
+    await gd.getByLabel('¿Cuánto cuesta? (€)').fill('20');
+    await gd.getByRole('button', { name: 'Crear meta' }).click();
+    await expect(kid.getByText('Vinilo')).toBeVisible();
+
+    await kid.getByRole('button', { name: 'Ahorrar' }).first().click();
+    const sd = kid.getByRole('dialog');
+    await sd.getByLabel('Importe (€)').fill('2,50');
+    await sd.getByRole('button', { name: 'Guardar en la meta' }).click();
+    await expect(kid.getByText('Guardado en tu meta')).toBeVisible();
+    await expect(kid.getByText('2,50 € / 20,00 €')).toBeVisible();
+    await expect(kid.getByText(/interés ganado/)).toBeVisible();
+    expect((await api(kid, 'get', `/bank/${me.id}`)).body.bank.savings_cents).toBe(250);
+    expect(await kid.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await kid.screenshot({ path: `${SHOTS}/22-hijo-ahorros-prestamo-375.png`, fullPage: true });
+
+    // Vista de banco de los padres
+    await adult.goto('/mesada');
+    const card = adult.getByRole('article').filter({ hasText: KID.name });
+    await expect(card).toContainText('Los padres deben en total');
+    await expect(card).toContainText('Vinilo');
+    await expect(card).toContainText('Préstamo de 6,00 €');
+    await adult.screenshot({ path: `${SHOTS}/23-mesada-banco-padres.png`, fullPage: true });
+    // Ajustes del banco
+    await adult.goto('/ajustes');
+    await expect(adult.getByRole('heading', { name: 'Banco de los hijos' })).toBeVisible();
+    await adult.screenshot({ path: `${SHOTS}/24-ajustes-banco.png`, fullPage: true });
   });
 
   test('la app es instalable (manifest y service worker)', async () => {

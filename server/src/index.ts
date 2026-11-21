@@ -3,6 +3,7 @@ import { config } from './lib/config.js';
 import { getPool, many, migrate } from './lib/db.js';
 import { ensureInstances } from './lib/instances.js';
 import { processOutbox } from './lib/notify/worker.js';
+import { runWeeklyBank } from './lib/savings.js';
 
 const app = await buildApp();
 const applied = await migrate();
@@ -12,7 +13,11 @@ if (applied.length) app.log.info({ applied }, 'Migraciones aplicadas');
 async function tick() {
   try {
     const fams = await many(getPool(), 'SELECT id FROM families');
-    for (const f of fams) await ensureInstances(getPool(), f.id);
+    for (const f of fams) {
+      await ensureInstances(getPool(), f.id);
+      // Trabajo del lunes: interés del ahorro y cuotas de préstamos (idempotente, se repite sin riesgo).
+      await runWeeklyBank(getPool(), f.id);
+    }
   } catch (e) {
     app.log.error(e, 'Fallo en la tarea periódica');
   }

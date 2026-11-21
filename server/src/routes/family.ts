@@ -45,6 +45,18 @@ export default async function familyRoutes(app: FastifyInstance) {
         leaderboardEnabled: z.boolean().optional(),
         celebrationsEnabled: z.boolean().optional(),
         timezone: z.string().max(64).optional(),
+        bankExchangeEnabled: z.boolean().optional(),
+        bankExchangeMinPoints: z.number().int().min(1).max(100000).optional(),
+        bankWithdrawEnabled: z.boolean().optional(),
+        bankWithdrawPerWeek: z.number().int().min(1).max(14).optional(),
+        bankAdvanceEnabled: z.boolean().optional(),
+        bankAdvancePercent: z.number().int().min(1).max(100).optional(),
+        bankLoanEnabled: z.boolean().optional(),
+        bankLoanMaxPercent: z.number().int().min(1).max(1000).optional(),
+        bankLoanMaxWeeks: z.number().int().min(1).max(52).optional(),
+        bankLoanInterestPoints: z.number().int().min(0).max(1000).optional(),
+        bankSavingsEnabled: z.boolean().optional(),
+        bankSavingsRatePercent: z.number().min(0.01).max(100).optional(),
       })
       .parse(req.body);
     if (b.timezone) {
@@ -65,6 +77,17 @@ export default async function familyRoutes(app: FastifyInstance) {
        WHERE id = $1`,
       [u.familyId, b.name ?? null, b.ratePoints ?? null, b.rateCents ?? null, b.settlementPeriod ?? null, b.capCents !== undefined, b.capCents ?? null, b.leaderboardEnabled ?? null, b.celebrationsEnabled ?? null, b.timezone ?? null],
     );
+    // Ajustes del banco: columna por campo, solo los que llegan.
+    const bankCols: Record<string, string> = {
+      bankExchangeEnabled: 'bank_exchange_enabled', bankExchangeMinPoints: 'bank_exchange_min_points', bankWithdrawEnabled: 'bank_withdraw_enabled',
+      bankWithdrawPerWeek: 'bank_withdraw_per_week', bankAdvanceEnabled: 'bank_advance_enabled', bankAdvancePercent: 'bank_advance_percent',
+      bankLoanEnabled: 'bank_loan_enabled', bankLoanMaxPercent: 'bank_loan_max_percent', bankLoanMaxWeeks: 'bank_loan_max_weeks',
+      bankLoanInterestPoints: 'bank_loan_interest_points', bankSavingsEnabled: 'bank_savings_enabled', bankSavingsRatePercent: 'bank_savings_rate_percent',
+    };
+    for (const [key, col] of Object.entries(bankCols)) {
+      const v = (b as Record<string, unknown>)[key];
+      if (v !== undefined) await getPool().query(`UPDATE families SET ${col} = $2 WHERE id = $1`, [u.familyId, v]);
+    }
     const after = await getFamily(getPool(), u.familyId);
     await audit(getPool(), u.familyId, u.id, 'family.update', 'family', u.familyId, { before, after });
     return { family: after };
