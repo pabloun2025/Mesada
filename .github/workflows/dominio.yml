@@ -1,0 +1,27 @@
+name: Dominio
+
+# Añade mesada.veryfacil.org al túnel de Cloudflare compartido. «comprobar» no cambia nada.
+# Secreto: CLOUDFLARE_API_TOKEN con permiso de DNS sobre veryfacil.org y de túneles en esa cuenta.
+on:
+  workflow_dispatch:
+    inputs:
+      accion:
+        required: true
+        type: choice
+        options: [comprobar, crear]
+      host:
+        required: true
+        default: mesada.veryfacil.org
+
+permissions:
+  contents: read
+
+jobs:
+  dominio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: python3 deploy/cloudflare-hostname.py "${{ inputs.accion }}" "${{ inputs.host }}" veryfacil.org recordatorio.consulado.app http://mesada-app:3000

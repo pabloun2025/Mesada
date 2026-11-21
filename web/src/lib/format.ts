@@ -1,0 +1,43 @@
+const eur = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
+const int = new Intl.NumberFormat('es-ES');
+
+export const euros = (cents: number) => eur.format(cents / 100);
+export const pts = (n: number) => `${int.format(n)} pts`;
+export const num = (n: number) => int.format(n);
+
+function parseDate(d: string) {
+  return d.length === 10 ? new Date(`${d}T12:00:00`) : new Date(d);
+}
+
+export const fmtDate = (d: string, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' }) =>
+  new Intl.DateTimeFormat('es-ES', opts).format(parseDate(d));
+
+export const fmtDateTime = (d: string) =>
+  new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(d));
+
+export const weekdayLong = (d: string) => new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).format(parseDate(d));
+
+export function relative(d: string) {
+  const diff = (Date.now() - new Date(d).getTime()) / 1000;
+  const rtf = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
+  if (diff < 60) return 'ahora';
+  if (diff < 3600) return rtf.format(-Math.round(diff / 60), 'minute');
+  if (diff < 86400) return rtf.format(-Math.round(diff / 3600), 'hour');
+  return rtf.format(-Math.round(diff / 86400), 'day');
+}
+
+export function addDays(d: string, n: number) {
+  const x = new Date(`${d}T12:00:00Z`);
+  x.setUTCDate(x.getUTCDate() + n);
+  return x.toISOString().slice(0, 10);
+}
+
+/** Convierte "5,50" o "5.5" a céntimos. Devuelve null si no es válido. */
+export function parseEuros(s: string): number | null {
+  const clean = s.trim().replace(/\s|€/g, '').replace(',', '.');
+  if (!/^\d+(\.\d{1,2})?$/.test(clean)) return null;
+  return Math.round(parseFloat(clean) * 100);
+}
+
+export const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+export const WEEKDAYS_LONG = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];

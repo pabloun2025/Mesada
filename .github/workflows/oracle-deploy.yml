@@ -1,0 +1,45 @@
+name: Desplegar en Oracle
+
+# Manual. Pasa CI, copia el código a /home/ubuntu/mesada y ejecuta deploy/deploy-oracle.sh.
+# Secretos del repositorio Mesada: ORACLE_SSH_KEY (obligatorio) y RESEND_API_KEY (clave propia de Mesada en Resend).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency: oracle-mesada
+    env:
+      HOST: ubuntu@51.170.51.109
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar claves
+        env:
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          set +x
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$ORACLE_SSH_KEY" > ~/.ssh/oracle && chmod 600 ~/.ssh/oracle
+          jq -n '{RESEND_API_KEY: env.RESEND_API_KEY} | with_entries(select(.value != ""))' > /tmp/mesada-bootstrap.json
+          chmod 600 /tmp/mesada-bootstrap.json
+      - name: Copiar y desplegar
+        run: |
+          set +x
+          SSH=(ssh -i ~/.ssh/oracle -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new "$HOST")
+          SCP=(scp -i ~/.ssh/oracle -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new)
+          tar --exclude=.git --exclude=node_modules --exclude=docs --exclude=e2e --exclude=.claude -czf /tmp/mesada.tar.gz .
+          "${SSH[@]}" 'set -e; install -d -m 700 /home/ubuntu/mesada; cd /home/ubuntu/mesada; find . -mindepth 1 -maxdepth 1 ! -name .env.production ! -name backups -exec rm -rf {} +'
+          "${SCP[@]}" /tmp/mesada.tar.gz /tmp/mesada-bootstrap.json "$HOST":/tmp/
+          "${SSH[@]}" 'set -e; chmod 600 /tmp/mesada-bootstrap.json; tar -xzf /tmp/mesada.tar.gz -C /home/ubuntu/mesada; rm -f /tmp/mesada.tar.gz; cd /home/ubuntu/mesada; ./deploy/deploy-oracle.sh'
+      - name: Limpiar
+        if: always()
+        run: rm -f ~/.ssh/oracle /tmp/mesada-bootstrap.json /tmp/mesada.tar.gz
