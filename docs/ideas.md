@@ -51,3 +51,17 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - La cantidad es fija y la pone el padre en cada tarea (p. ej., −15 min).
   - El saldo no baja de 0: si no quedan minutos, la penalización se pierde.
   - Si el padre marca «Cumplida», en cada tarea elige si gana puntos, minutos o nada. La penalización va aparte.
+
+## I4. Anotar pagos de dinero y de pantalla desde el Panel (21/11)
+- Hoy ya existen:
+  - «Registrar pago» en Mesada, que descuenta el saldo, guarda la forma de pago y avisa con «Has recibido tu paga»;
+  - «Gastar minutos» en Mesada.
+- **Decidido:**
+  - En el Panel, la tarjeta de cada hijo tiene los botones «Pagar» y «Dar pantalla». Mesada sigue igual.
+  - Aviso al hijo con el importe, la forma de pago y el saldo restante, p. ej.: «Mamá te ha pagado 20,00 € en efectivo. Te quedan 0,00 €». También para transferencia y Bizum.
+  - Videojuegos y otras pantallas comparten el mismo saldo de minutos. Al gastar se elige en qué (tele, tablet, videojuegos…) y queda en el historial.
+  - El hijo puede pedir que le paguen («Pedir mi dinero», «Pedir 30 min de videojuegos»):
+    - al adulto le llega para aprobar;
+    - al aprobar, se descuenta.
+  - El hijo pide el importe que quiera, hasta su saldo.
+  - Los minutos de pantalla se descuentan al aprobar (sin temporizador).
