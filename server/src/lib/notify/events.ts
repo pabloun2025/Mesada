@@ -28,6 +28,14 @@ export const EVENTS = {
   payout_requested: { label: 'Petición de dinero o pantalla', audience: 'adult', defaults: ['whatsapp'] },
   payout_decided: { label: 'Petición de dinero o pantalla resuelta', audience: 'child', defaults: ['whatsapp'] },
   screen_overuse: { label: 'Pantalla anotada por encima del saldo', audience: 'adult', defaults: ['whatsapp'] },
+  points_exchanged: { label: 'Puntos cambiados por dinero', audience: 'adult', defaults: [] },
+  advance_taken: { label: 'Adelanto de la semana siguiente', audience: 'adult', defaults: [] },
+  loan_requested: { label: 'Préstamo pedido', audience: 'adult', defaults: ['whatsapp'] },
+  loan_decided: { label: 'Préstamo aprobado o rechazado', audience: 'child', defaults: ['whatsapp'] },
+  loan_charged: { label: 'Cuota del préstamo', audience: 'child', defaults: [] },
+  goal_requested: { label: 'Meta de ahorro por canjear o pasar a efectivo', audience: 'adult', defaults: ['whatsapp'] },
+  goal_decided: { label: 'Meta de ahorro resuelta', audience: 'child', defaults: ['whatsapp'] },
+  savings_interest: { label: 'Interés del ahorro', audience: 'child', defaults: [] },
   badge: { label: 'Insignia u objetivo conseguido', audience: 'child', defaults: [] },
 } satisfies Record<string, EventDef>;
 

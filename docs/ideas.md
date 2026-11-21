@@ -80,7 +80,7 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
     - el padre recibe un aviso.
 
 ## I6. Sistema de dinero: canje, retiros, adelantos y préstamos (21/11)
-**Estado: en recogida.** Hay que repensar la mesada entera.
+**Estado: construida (21/11), ver D30 y D31.**
 - El hijo tiene dos saldos: puntos y dinero.
 - **Canje:** el hijo cambia puntos por dinero cuando quiere, él solo.
   - Cuenta para el tope de euros del periodo de la familia.
@@ -99,3 +99,25 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - Si no tiene saldo, el saldo queda en negativo: no puede retirar ni pedir otro préstamo hasta volver a positivo.
   - Solo un préstamo a la vez.
 - Se relaciona con I4 («Pedir mi dinero» pasaría a ser el retiro).
+
+## I7. Ahorro programado con interés (21/11)
+**Estado: construida (21/11), ver D32.**
+- La hucha pasa a dar interés: cada meta (algo concreto con un valor) es un ahorro programado.
+- El hijo va metiendo dinero de su saldo en la meta.
+- Interés semanal: 1 % de lo ahorrado, redondeado al euro de arriba, como mínimo 1 €.
+- Puede sacar el dinero antes de la meta: recupera lo que puso, pero pierde el interés ganado.
+- Al llegar a la meta, el dinero no pasa a efectivo: se usa para lo de la meta (p. ej., un vinilo).
+  - El hijo pulsa «Canjear meta»; el padre paga en la tienda, con el hijo, con ese dinero, y marca «Comprado».
+  - Si sobra, vuelve a su cuenta de dinero. Si falta, el padre lo anota y se descuenta del saldo.
+  - Sigue ganando interés hasta que se canjea.
+  - Pasarlo a su saldo en efectivo solo con permiso de un adulto, y pierde el interés.
+
+### Respuestas extra I6–I7 (21/11)
+- Interés del préstamo sin puntos: los puntos quedan en negativo y lo próximo que gane paga primero esa deuda.
+- Interés del ahorro: lo pagan los padres, automático cada semana (se suma a la meta y cuenta como dinero que deben).
+- Los 2 retiros cuentan de lunes a domingo (el contador vuelve a 0 cada lunes).
+- En Ajustes el padre cambia todos los números (2 retiros, 50 %, 300 %, 10 puntos, 1 %) o apaga cada opción.
+- **Aspecto:** la pantalla de dinero del hijo tiene que parecer una cuenta de banco.
+  - Hijo: tarjeta de cuenta (nombre, número de cuenta de juguete, saldo grande); botones de cajero (Retirar, Canjear puntos, Adelanto, Préstamo, Ahorrar); extracto (fecha, concepto, importe en verde/rojo, saldo tras cada movimiento); productos aparte («Mi préstamo» con cuotas que quedan, «Mis ahorros» con barra hacia la meta e interés ganado).
+  - Dos cuentas del mismo banco: «Cuenta de puntos» y «Cuenta de dinero».
+  - Los padres también lo ven como un banco: cuentas de cada hijo, retiros, préstamos y lo que deben pagar.

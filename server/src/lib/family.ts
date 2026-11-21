@@ -13,6 +13,18 @@ export interface Family {
   cap_cents: number | null;
   leaderboard_enabled: boolean;
   celebrations_enabled: boolean;
+  bank_exchange_enabled: boolean;
+  bank_exchange_min_points: number;
+  bank_withdraw_enabled: boolean;
+  bank_withdraw_per_week: number;
+  bank_advance_enabled: boolean;
+  bank_advance_percent: number;
+  bank_loan_enabled: boolean;
+  bank_loan_max_percent: number;
+  bank_loan_max_weeks: number;
+  bank_loan_interest_points: number;
+  bank_savings_enabled: boolean;
+  bank_savings_rate_percent: number;
 }
 
 export async function getFamily(db: Db, id: string): Promise<Family> {

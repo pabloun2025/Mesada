@@ -22,6 +22,18 @@ export function describeAction(a: { action: string; data: any }): string {
     case 'points.adjust': return `ajustó ${d.delta > 0 ? '+' : ''}${d.delta} pts: ${d.note}`;
     case 'money.adjust': return `ajustó ${eur(d.cents)}: ${d.note}`;
     case 'savings.transfer': return d.direction === 'to_savings' ? `guardó ${eur(d.cents)} en la hucha` : `sacó ${eur(d.cents)} de la hucha`;
+    case 'savings.deposit': return `metió ${eur(d.cents)} en «${d.title}»`;
+    case 'savings.withdraw': return `sacó el ahorro de «${d.title}» (${eur(d.principal)}; perdió ${eur(d.forfeited)} de interés)`;
+    case 'bank.exchange': return `cambió ${d.points} puntos por ${eur(d.cents)}`;
+    case 'bank.advance': return `adelantó ${eur(d.cents)} de la semana que viene`;
+    case 'loan.request': return `pidió un préstamo de ${eur(d.cents)} en ${d.weeks} semanas`;
+    case 'loan.approve': return `aprobó un préstamo de ${eur(d.cents)}`;
+    case 'loan.reject': return 'rechazó un préstamo';
+    case 'loan.cancel': return 'canceló su petición de préstamo';
+    case 'goal.request': return d.kind === 'redeem' ? `pidió canjear la meta «${d.title}»` : `pidió pasar a efectivo la meta «${d.title}»`;
+    case 'goal.redeem': return `compró «${d.title}» por ${eur(d.price)} (${d.settle >= 0 ? 'sobran' : 'faltan'} ${eur(Math.abs(d.settle))})`;
+    case 'goal.cashout': return `pasó a efectivo «${d.title}» (${eur(d.principal)}; interés perdido ${eur(d.forfeited)})`;
+    case 'goal.reject': return 'rechazó la petición de una meta';
     case 'member.create': return `añadió a ${d.displayName}`;
     case 'member.update': return 'actualizó un perfil';
     case 'family.update': return 'cambió los ajustes de la familia';
@@ -35,7 +47,7 @@ export function describeAction(a: { action: string; data: any }): string {
     case 'screen.usage': return `anotó ${d.applied} min de pantalla${d.overflow ? ` (se pasó ${d.overflow} min)` : ''}`;
     case 'screen.usage_confirm': return 'confirmó una anotación de pantalla';
     case 'screen.usage_void': return `anuló una anotación de pantalla${d.refunded ? ` (devuelve ${d.refunded} min)` : ''}`;
-    case 'payout.request': return d.kind === 'money' ? `pidió ${eur(d.cents)}` : `pidió ${d.minutes} min de pantalla`;
+    case 'payout.request': return d.kind === 'money' ? `quiere retirar ${eur(d.cents)}` : `pidió ${d.minutes} min de pantalla`;
     case 'payout.approve': return d.kind === 'money' ? `aprobó una petición de ${eur(d.cents)}` : `aprobó una petición de ${d.minutes} min de pantalla`;
     case 'payout.reject': return 'rechazó una petición';
     case 'payout.cancel': return 'canceló su petición';

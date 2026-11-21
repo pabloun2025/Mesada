@@ -6,13 +6,15 @@ import { addScreen, CATEGORY_PHRASE, screenBalance, type ScreenCategory } from '
 import { recordPaymentTx } from './money.js';
 import { audit } from './audit.js';
 import { notify, notifyAdults } from './notify/dispatch.js';
+import { getFamily } from './family.js';
+import { assertCanWithdraw } from './bank.js';
 
 const fmtEur = (c: number) => `${(c / 100).toFixed(2).replace('.', ',')} €`;
 const METHOD_PHRASE: Record<string, string> = { cash: ' en efectivo', transfer: ' por transferencia', bizum: ' por Bizum', other: '' };
 
 type NewRequest = { kind: 'money' | 'screen'; amountCents?: number; minutes?: number; category?: ScreenCategory; note?: string; idempotencyKey?: string };
 
-/** El hijo pide su dinero o minutos de pantalla, hasta su saldo. Una sola petición abierta por tipo. */
+/** El hijo retira su dinero (como en un cajero) o pide minutos de pantalla, hasta su saldo. Una sola petición abierta por tipo. */
 export async function createPayoutRequest(child: AuthUser, p: NewRequest) {
   if (child.role !== 'child') throw forbidden('Solo los hijos hacen peticiones');
   const isMoney = p.kind === 'money';
@@ -30,6 +32,8 @@ export async function createPayoutRequest(child: AuthUser, p: NewRequest) {
       throw conflict('Ya tienes una petición abierta. Espera a que la resuelvan o cancélala.', 'already_pending');
     }
     if (isMoney) {
+      // Retiro: límite por semana (lunes a domingo) y no se puede con la cuenta en negativo.
+      await assertCanWithdraw(db, await getFamily(db, child.familyId), child.id);
       const bal = await moneyBalance(db, child.id);
       if (p.amountCents! > bal) throw conflict(`Solo tienes ${fmtEur(bal)} por cobrar`, 'insufficient_balance');
     } else {
@@ -45,8 +49,8 @@ export async function createPayoutRequest(child: AuthUser, p: NewRequest) {
     await audit(db, child.familyId, child.id, 'payout.request', 'payout_request', req.id, { kind: p.kind, cents: p.amountCents, minutes: p.minutes, category: p.category });
     await notifyAdults(db, child.familyId, {
       event: 'payout_requested',
-      title: isMoney ? `${child.displayName} pide ${fmtEur(p.amountCents!)}` : `${child.displayName} pide ${p.minutes} min ${CATEGORY_PHRASE[p.category!]}`,
-      body: p.note?.trim() ?? '', link: '/validar', dedupeKey: `payout-req:${req.id}`,
+      title: isMoney ? `${child.displayName} quiere retirar ${fmtEur(p.amountCents!)}` : `${child.displayName} pide ${p.minutes} min ${CATEGORY_PHRASE[p.category!]}`,
+      body: isMoney ? `Tienes que pagárselo (en efectivo o en su cuenta).${p.note?.trim() ? ` ${p.note.trim()}` : ''}` : p.note?.trim() ?? '', link: '/validar', dedupeKey: `payout-req:${req.id}`,
     });
     return { request: req, duplicate: false };
   });

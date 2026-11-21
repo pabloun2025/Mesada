@@ -28,6 +28,18 @@ export interface Family {
   cap_cents: number | null;
   leaderboard_enabled: boolean;
   celebrations_enabled: boolean;
+  bank_exchange_enabled: boolean;
+  bank_exchange_min_points: number;
+  bank_withdraw_enabled: boolean;
+  bank_withdraw_per_week: number;
+  bank_advance_enabled: boolean;
+  bank_advance_percent: number;
+  bank_loan_enabled: boolean;
+  bank_loan_max_percent: number;
+  bank_loan_max_weeks: number;
+  bank_loan_interest_points: number;
+  bank_savings_enabled: boolean;
+  bank_savings_rate_percent: number;
 }
 
 export type InstanceStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'expired';
@@ -209,4 +221,85 @@ export interface ScreenLog {
   display_name: string;
   avatar: string;
   color: string;
+}
+
+/* ---------- Banco ---------- */
+
+export interface BankAction { ok: boolean; reason: string | null }
+
+export interface Loan {
+  id: string;
+  user_id: string;
+  amount_cents: number;
+  weeks: number;
+  interest_points: number;
+  status: 'pending' | 'active' | 'paid' | 'rejected' | 'cancelled';
+  note: string;
+  installments_paid: number;
+  remaining_installments: number;
+  remaining_cents: number;
+  installment_cents: number;
+  next_charge_week: string | null;
+  created_at: string;
+  display_name: string;
+  avatar: string;
+  color: string;
+}
+
+export interface Bank {
+  accounts: { money: string; points: string };
+  money_cents: number;
+  points: number;
+  savings_cents: number;
+  rate: { points: number; cents: number };
+  week: { start: string; end: string; cap_cents: number | null; used_cents: number; remaining_cents: number | null; withdrawals_used: number; withdrawals_max: number };
+  actions: {
+    withdraw: BankAction & { max_cents: number };
+    exchange: BankAction & { min_points: number; max_points: number };
+    advance: BankAction & { max_cents: number };
+    loan: BankAction & { max_cents: number; max_weeks: number; interest_points: number };
+    save: BankAction;
+  };
+  loan: Loan | null;
+  owed_cents: number;
+}
+
+export interface Goal {
+  id: string;
+  user_id: string;
+  title: string;
+  target_cents: number;
+  status: 'active' | 'bought' | 'cashed_out';
+  price_cents: number | null;
+  principal_cents: number;
+  interest_cents: number;
+  interest_earned_cents: number;
+  balance_cents: number;
+  reached: boolean;
+  pending_request: { id: string; kind: 'redeem' | 'cashout'; status: string } | null;
+}
+
+export interface GoalRequest {
+  id: string;
+  user_id: string;
+  goal_id: string;
+  goal_title: string;
+  kind: 'redeem' | 'cashout';
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  balance_cents: number;
+  target_cents: number;
+  created_at: string;
+  display_name: string;
+  avatar: string;
+  color: string;
+}
+
+export interface StatementEntry {
+  id: string;
+  amount: number;
+  kind: string;
+  note: string;
+  created_at: string;
+  created_by_name: string | null;
+  balance_after: number;
 }

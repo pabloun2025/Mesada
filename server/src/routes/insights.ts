@@ -114,7 +114,7 @@ export default async function insightRoutes(app: FastifyInstance) {
         return { ...c, today: todayStats, weekPoints, weekCents: pointsToCents(fam, Math.max(0, weekPoints)), wallet, streak };
       }),
     );
-    const [pendingApprovals, pendingRedemptions, overdue, pendingChecks, pendingGrants, pendingRequests, pendingUsage, activity] = await Promise.all([
+    const [pendingApprovals, pendingRedemptions, overdue, pendingChecks, pendingGrants, pendingRequests, pendingUsage, pendingBank, activity] = await Promise.all([
       many(
         db,
         `SELECT i.id, i.due_date, i.points, i.completed_at, i.child_note, (i.photo_path IS NOT NULL) AS has_photo, t.title, t.icon,
@@ -130,6 +130,7 @@ export default async function insightRoutes(app: FastifyInstance) {
       one(db, `SELECT count(*)::int AS n FROM bonus_grants WHERE family_id = $1 AND kind IN ('text','reward') AND fulfilled_at IS NULL AND voided_at IS NULL`, [u.familyId]),
       one(db, `SELECT count(*)::int AS n FROM payout_requests WHERE family_id = $1 AND status = 'pending'`, [u.familyId]),
       one(db, `SELECT count(*)::int AS n FROM screen_usage_logs WHERE family_id = $1 AND status = 'pending'`, [u.familyId]),
+      one(db, `SELECT ((SELECT count(*) FROM loans WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM goal_requests WHERE family_id = $1 AND status = 'pending'))::int AS n`, [u.familyId]),
       many(
         db,
         `SELECT a.id, a.action, a.entity, a.data, a.created_at, u.display_name AS actor_name, u.avatar AS actor_avatar, u.color AS actor_color
@@ -148,10 +149,12 @@ export default async function insightRoutes(app: FastifyInstance) {
       pendingGrants: pendingGrants.n,
       pendingRequests: pendingRequests.n,
       pendingUsage: pendingUsage.n,
+      pendingBank: pendingBank.n,
       activity,
       totals: {
         weekCents: kids.reduce((s, k) => s + k.weekCents, 0),
         pendingCents: kids.reduce((s, k) => s + k.wallet.cents_pending, 0),
+        owedCents: kids.reduce((s, k) => s + k.wallet.cents_pending + k.wallet.cents_savings, 0),
       },
     };
   });

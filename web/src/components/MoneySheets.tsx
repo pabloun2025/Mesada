@@ -129,8 +129,8 @@ export function GiveScreenSheet({ child, minutes, onClose }: { child: User; minu
   );
 }
 
-/** El hijo pide su dinero (hasta lo que tiene por cobrar). */
-export function RequestMoneySheet({ balanceCents, onClose }: { balanceCents: number; onClose: () => void }) {
+/** Retiro (como en un cajero): el hijo saca hasta todo su saldo y un adulto se lo paga. */
+export function RequestMoneySheet({ balanceCents, left, onClose }: { balanceCents: number; left?: number; onClose: () => void }) {
   const [amount, setAmount] = useState(eurInput(balanceCents));
   const [note, setNote] = useState('');
   const [key] = useState(newKey);
@@ -140,17 +140,17 @@ export function RequestMoneySheet({ balanceCents, onClose }: { balanceCents: num
     mutationFn: () => {
       const cents = parseEuros(amount);
       if (!cents) throw new Error('Escribe un importe, por ejemplo 5,50');
-      if (cents > balanceCents) throw new Error(`Solo tienes ${euros(balanceCents)} por cobrar`);
+      if (cents > balanceCents) throw new Error(`Solo tienes ${euros(balanceCents)} en tu cuenta`);
       return post('/payout-requests', { kind: 'money', amountCents: cents, note: note || undefined }, key);
     },
-    onSuccess: () => { toast('Petición enviada. Un adulto la verá'); invalidate(); onClose(); },
+    onSuccess: () => { toast('Retiro pedido. Un adulto te lo pagará'); invalidate(); onClose(); },
     onError: (e: Error) => toast(e.message, 'error'),
   });
   return (
-    <Sheet open onClose={onClose} title="Pedir mi dinero" footer={<Button className="w-full" variant="success" loading={send.isPending} onClick={() => send.mutate()}>Enviar petición</Button>}>
+    <Sheet open onClose={onClose} title="Retirar dinero" footer={<Button className="w-full" variant="success" loading={send.isPending} onClick={() => send.mutate()}>Retirar</Button>}>
       <div className="space-y-4">
-        <p className="muted">Tienes <strong className="num text-[var(--fg)]">{euros(balanceCents)}</strong> por cobrar. Pide lo que quieras, hasta esa cantidad.</p>
-        <Field label="¿Cuánto quieres? (€)">{(id) => <input id={id} className="field num text-2xl font-extrabold" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
+        <p className="muted">Tienes <strong className="num text-[var(--fg)]">{euros(balanceCents)}</strong> en tu cuenta. Puedes retirar hasta todo ese dinero.{left != null ? ` Te quedan ${left} ${left === 1 ? 'retiro' : 'retiros'} esta semana.` : ''}</p>
+        <Field label="¿Cuánto quieres retirar? (€)">{(id) => <input id={id} className="field num text-2xl font-extrabold" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
         <NoteField value={note} onChange={setNote} />
       </div>
     </Sheet>

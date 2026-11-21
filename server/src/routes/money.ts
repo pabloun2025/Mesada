@@ -2,7 +2,8 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { getPool, many, one } from '../lib/db.js';
 import { requireAdult, requireUser, type AuthUser } from '../lib/auth.js';
-import { forbidden, notFound } from '../lib/errors.js';
+import { conflict, forbidden, notFound } from '../lib/errors.js';
+import { goalAmounts, listGoals } from '../lib/savings.js';
 import { familyToday, getFamily } from '../lib/family.js';
 import { previousPeriod, isValidDate } from '../lib/dates.js';
 import {
@@ -110,7 +111,7 @@ export default async function moneyRoutes(app: FastifyInstance) {
     const u = requireUser(req);
     const { userId } = z.object({ userId: uuid }).parse(req.params);
     await assertCanView(u, userId);
-    return { goals: await many(getPool(), 'SELECT * FROM savings_goals WHERE user_id = $1 AND NOT archived ORDER BY created_at', [userId]) };
+    return { goals: await listGoals(getPool(), userId) };
   });
 
   app.post('/api/goals', async (req) => {
@@ -128,6 +129,8 @@ export default async function moneyRoutes(app: FastifyInstance) {
     const g = await one(getPool(), 'SELECT user_id FROM savings_goals WHERE id = $1 AND family_id = $2', [id, u.familyId]);
     if (!g) throw notFound();
     await assertCanView(u, g.user_id);
+    // Con dinero dentro no se quita: antes hay que sacarlo o canjearlo.
+    if ((await goalAmounts(getPool(), id)).balance !== 0) throw conflict('Esta meta tiene dinero ahorrado. Sácalo o canjéala antes de quitarla', 'goal_not_empty');
     await getPool().query('UPDATE savings_goals SET archived = true WHERE id = $1', [id]);
     return { ok: true };
   });
