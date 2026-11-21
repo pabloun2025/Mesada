@@ -177,3 +177,10 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Cada vez da los puntos completos (dos paseos del perro de 10 = 20 puntos).
 - Vale para todos los tipos: diarias, de días fijos y «Cuando haga falta».
 - Si la tarea es compartida, cualquier hijo puede hacerla hasta llegar al máximo entre todos (máximo 3: Ana 2 veces y Leo 1).
+
+## I14. Días de espera tras hacer una tarea (21/11)
+**Estado: decidida, sin programar.**
+- Para tareas como sacar la basura: sin fecha fija, pero no se repiten al día siguiente.
+- Solo en tareas «Cuando haga falta». El padre pone en cada tarea «Después de hacerla, vuelve en N días» (1, 2, 3, 7…). Sin espera, sigue como hasta ahora.
+- Mientras espera, el hijo la ve en gris con «Vuelve el jueves» y no la puede marcar.
+- Cuando vuelve y nadie la hace, no pasa nada: no cuenta como fallo.
