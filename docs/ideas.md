@@ -53,6 +53,7 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - Si el padre marca «Cumplida», en cada tarea elige si gana puntos, minutos o nada. La penalización va aparte.
 
 ## I4. Anotar pagos de dinero y de pantalla desde el Panel (21/11)
+**Estado: construida (ver D28).**
 - Hoy ya existen:
   - «Registrar pago» en Mesada, que descuenta el saldo, guarda la forma de pago y avisa con «Has recibido tu paga»;
   - «Gastar minutos» en Mesada.
@@ -67,6 +68,7 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - Los minutos de pantalla se descuentan al aprobar (sin temporizador).
 
 ## I5. El hijo anota su propio uso de pantalla y gana puntos por ser honesto (21/11)
+**Estado: construida (ver D29).**
 - **Decidido:**
   - El hijo anota los minutos que usó y en qué: videojuegos, tele, tablet…
   - Gana 5 puntos por registrar honestamente lo jugado ese día: una vez al día, aunque anote varias veces.
@@ -76,3 +78,24 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
     - el exceso queda registrado y el saldo se queda en 0;
     - ese día no gana puntos;
     - el padre recibe un aviso.
+
+## I6. Sistema de dinero: canje, retiros, adelantos y préstamos (21/11)
+**Estado: en recogida.** Hay que repensar la mesada entera.
+- El hijo tiene dos saldos: puntos y dinero.
+- **Canje:** el hijo cambia puntos por dinero cuando quiere, él solo.
+  - Cuenta para el tope de euros del periodo de la familia.
+  - Hay un mínimo de puntos por canje, que pone el padre.
+  - El cierre de periodo sigue igual: convierte los puntos que queden.
+- **Retiro** (como un cajero): el hijo saca dinero de su saldo.
+  - Se avisa al padre, que tiene que pagarlo (efectivo o en su cuenta).
+  - Hasta 2 retiros por semana; cada uno puede ser de todo su saldo.
+- «Importe semanal» = el tope semanal de euros de la familia.
+- **Adelanto:** cambia puntos ya ganados por encima del tope de esta semana, hasta el 50 % del tope de la siguiente.
+  - Ejemplo con tope de 10 €: ya cambió 10 €; adelanta 5 € más y la semana siguiente su tope es de 5 €.
+  - Es automático, sin aprobación (se avisa al padre).
+- **Préstamo:** hasta el 300 % del tope semanal. Lo aprueba el padre.
+  - El hijo elige en cuántas semanas lo devuelve.
+  - Cada semana se descuenta de su saldo de dinero la cuota (importe ÷ semanas) y 10 puntos de interés.
+  - Si no tiene saldo, el saldo queda en negativo: no puede retirar ni pedir otro préstamo hasta volver a positivo.
+  - Solo un préstamo a la vez.
+- Se relaciona con I4 («Pedir mi dinero» pasaría a ser el retiro).

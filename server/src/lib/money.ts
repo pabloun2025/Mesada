@@ -62,31 +62,44 @@ export async function settlePeriod(adult: AuthUser, userId: string, anyDateInPer
   });
 }
 
-export async function recordPayment(
-  adult: AuthUser,
-  p: { userId: string; amountCents: number; method: string; note?: string; idempotencyKey?: string },
-) {
+const METHOD_PHRASE: Record<string, string> = { cash: ' en efectivo', transfer: ' por transferencia', bizum: ' por Bizum', other: '' };
+const fmtEur = (c: number) => `${(c / 100).toFixed(2).replace('.', ',')} €`;
+
+type PaymentInput = { userId: string; amountCents: number; method: string; note?: string; idempotencyKey?: string; notifyChild?: boolean };
+
+/** Pago dentro de una transacción ya abierta (lo usa también la aprobación de una petición del hijo). */
+export async function recordPaymentTx(db: any, adult: AuthUser, p: PaymentInput) {
   if (!Number.isInteger(p.amountCents) || p.amountCents <= 0) throw badRequest('Importe no válido');
-  return tx(async (db) => {
-    await assertChild(db, adult.familyId, p.userId);
-    if (p.idempotencyKey) {
-      const dup = await one(db, 'SELECT * FROM payments WHERE idempotency_key = $1 AND family_id = $2', [p.idempotencyKey, adult.familyId]);
-      if (dup) return { ...dup, duplicate: true };
-    }
-    await lockUser(db, p.userId);
-    const available = await moneyBalance(db, p.userId);
-    if (p.amountCents > available) throw conflict('El pago supera el saldo pendiente de este hijo', 'insufficient_balance');
-    const pay = await one(
-      db,
-      `INSERT INTO payments(family_id, user_id, amount_cents, method, note, paid_by, idempotency_key)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [adult.familyId, p.userId, p.amountCents, p.method, p.note ?? '', adult.id, p.idempotencyKey ?? null],
-    );
-    await addMoney(db, { familyId: adult.familyId, userId: p.userId, deltaCents: -p.amountCents, kind: 'payment', refId: pay.id, note: p.note ?? 'Pago', createdBy: adult.id, idempotencyKey: `payment:${pay.id}` });
-    await audit(db, adult.familyId, adult.id, 'allowance.payment', 'payment', pay.id, { userId: p.userId, cents: p.amountCents, method: p.method });
-    await notify(db, { userId: p.userId, event: 'payment', title: 'Has recibido tu paga', body: `${(p.amountCents / 100).toFixed(2).replace('.', ',')} €`, link: '/mesada', dedupeKey: `payment:${pay.id}` });
-    return { ...pay, duplicate: false };
-  });
+  await assertChild(db, adult.familyId, p.userId);
+  if (p.idempotencyKey) {
+    const dup = await one(db, 'SELECT * FROM payments WHERE idempotency_key = $1 AND family_id = $2', [p.idempotencyKey, adult.familyId]);
+    if (dup) return { ...dup, duplicate: true };
+  }
+  await lockUser(db, p.userId);
+  const available = await moneyBalance(db, p.userId);
+  if (p.amountCents > available) throw conflict('El pago supera el saldo pendiente de este hijo', 'insufficient_balance');
+  const pay = await one(
+    db,
+    `INSERT INTO payments(family_id, user_id, amount_cents, method, note, paid_by, idempotency_key)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [adult.familyId, p.userId, p.amountCents, p.method, p.note ?? '', adult.id, p.idempotencyKey ?? null],
+  );
+  await addMoney(db, { familyId: adult.familyId, userId: p.userId, deltaCents: -p.amountCents, kind: 'payment', refId: pay.id, note: p.note ?? 'Pago', createdBy: adult.id, idempotencyKey: `payment:${pay.id}` });
+  await audit(db, adult.familyId, adult.id, 'allowance.payment', 'payment', pay.id, { userId: p.userId, cents: p.amountCents, method: p.method });
+  if (p.notifyChild !== false) {
+    const left = available - p.amountCents;
+    await notify(db, {
+      userId: p.userId, event: 'payment',
+      title: `${adult.displayName} te ha pagado ${fmtEur(p.amountCents)}${METHOD_PHRASE[p.method] ?? ''}.`,
+      body: `Te quedan ${fmtEur(left)}.${p.note?.trim() ? ` ${p.note.trim()}` : ''}`,
+      link: '/mesada', dedupeKey: `payment:${pay.id}`,
+    });
+  }
+  return { ...pay, duplicate: false };
+}
+
+export async function recordPayment(adult: AuthUser, p: PaymentInput) {
+  return tx((db) => recordPaymentTx(db, adult, p));
 }
 
 export async function adjustPoints(adult: AuthUser, p: { userId: string; delta: number; note: string; bonus?: boolean; idempotencyKey?: string }) {

@@ -32,6 +32,13 @@ export function describeAction(a: { action: string; data: any }): string {
     case 'bonus.fulfill': return `cumplió un premio: ${d.label}`;
     case 'screen.spend': return `gastó ${-d.minutes} min de pantalla`;
     case 'screen.adjust': return `ajustó ${d.delta > 0 ? '+' : ''}${d.delta} min de pantalla: ${d.note}`;
+    case 'screen.usage': return `anotó ${d.applied} min de pantalla${d.overflow ? ` (se pasó ${d.overflow} min)` : ''}`;
+    case 'screen.usage_confirm': return 'confirmó una anotación de pantalla';
+    case 'screen.usage_void': return `anuló una anotación de pantalla${d.refunded ? ` (devuelve ${d.refunded} min)` : ''}`;
+    case 'payout.request': return d.kind === 'money' ? `pidió ${eur(d.cents)}` : `pidió ${d.minutes} min de pantalla`;
+    case 'payout.approve': return d.kind === 'money' ? `aprobó una petición de ${eur(d.cents)}` : `aprobó una petición de ${d.minutes} min de pantalla`;
+    case 'payout.reject': return 'rechazó una petición';
+    case 'payout.cancel': return 'canceló su petición';
     case 'holiday.add': return `marcó el festivo ${d.day}`;
     case 'holiday.remove': return `quitó el festivo ${d.day}`;
     case 'user.password_change': return 'cambió su contraseña';

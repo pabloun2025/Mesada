@@ -25,6 +25,9 @@ export const EVENTS = {
   payment: { label: 'Pago registrado', audience: 'child', defaults: [] },
   bonus_won: { label: 'Sorpresa ganada', audience: 'child', defaults: [] },
   screen_changed: { label: 'Cambio en minutos de pantalla', audience: 'child', defaults: [] },
+  payout_requested: { label: 'Petición de dinero o pantalla', audience: 'adult', defaults: ['whatsapp'] },
+  payout_decided: { label: 'Petición de dinero o pantalla resuelta', audience: 'child', defaults: ['whatsapp'] },
+  screen_overuse: { label: 'Pantalla anotada por encima del saldo', audience: 'adult', defaults: ['whatsapp'] },
   badge: { label: 'Insignia u objetivo conseguido', audience: 'child', defaults: [] },
 } satisfies Record<string, EventDef>;
 

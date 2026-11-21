@@ -18,6 +18,7 @@ import insightRoutes from './routes/insights.js';
 import notificationRoutes from './routes/notifications.js';
 import adminRoutes from './routes/admin.js';
 import screenRoutes from './routes/screen.js';
+import payoutRoutes from './routes/payouts.js';
 import holidayRoutes from './routes/holidays.js';
 import bonusRoutes from './routes/bonus.js';
 
@@ -74,6 +75,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(notificationRoutes);
   await app.register(adminRoutes);
   await app.register(screenRoutes);
+  await app.register(payoutRoutes);
   await app.register(holidayRoutes);
   await app.register(bonusRoutes);
 

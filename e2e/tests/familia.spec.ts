@@ -445,6 +445,93 @@ test.describe.serial('Familia completa', () => {
     await expect(adult.getByText('Marcado como cumplido')).toBeVisible();
   });
 
+  test('el adulto paga desde el Panel y el hijo ve el aviso con la forma de pago', async () => {
+    const me = (await api(kid, 'get', '/me')).body.user;
+    expect((await api(adult, 'post', '/adjustments/money', { userId: me.id, deltaCents: 2000, note: 'Regalo de la abuela' })).status).toBe(200);
+    const before = (await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.cents_pending;
+
+    await adult.goto('/');
+    const card = adult.getByRole('article').filter({ hasText: KID.name });
+    await card.getByRole('button', { name: 'Pagar', exact: true }).click();
+    const d = adult.getByRole('dialog');
+    await expect(d.getByLabel('Importe (€)')).toHaveValue(((before) / 100).toFixed(2).replace('.', ','));
+    await d.getByLabel('Importe (€)').fill('5,00');
+    await d.getByRole('radio', { name: 'Transferencia' }).click();
+    await d.getByRole('button', { name: 'Registrar pago' }).click();
+    await expect(adult.getByText('Pago de 5,00 € registrado')).toBeVisible();
+    expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.cents_pending).toBe(before - 500);
+
+    // El aviso del hijo (campana) dice quién, cuánto, cómo y cuánto le queda
+    const n = (await api(kid, 'get', '/notifications')).body.notifications.find((x: any) => x.kind === 'payment');
+    expect(n.title).toBe(`${ADULT.name} te ha pagado 5,00 € por transferencia.`);
+    expect(n.body).toBe(`Te quedan ${((before - 500) / 100).toFixed(2).replace('.', ',')} €.`);
+    await adult.screenshot({ path: `${SHOTS}/16-panel-pagar.png`, fullPage: true });
+  });
+
+  test('el hijo pide minutos de pantalla y el adulto los aprueba', async () => {
+    const me = (await api(kid, 'get', '/me')).body.user;
+    await api(adult, 'post', '/screen/adjust', { userId: me.id, delta: 60, note: 'Fin de semana' });
+    const before = (await api(kid, 'get', `/screen/${me.id}`)).body.balance;
+
+    await kid.setViewportSize({ width: 375, height: 812 });
+    await kid.goto('/mesada');
+    await kid.getByRole('button', { name: 'Pedir pantalla' }).click();
+    const kd = kid.getByRole('dialog');
+    await kd.getByLabel('Minutos').fill('10');
+    await kd.getByRole('radio', { name: 'Tele' }).click();
+    await kd.getByRole('button', { name: 'Enviar petición' }).click();
+    await expect(kid.getByText('Petición enviada. Un adulto la verá')).toBeVisible();
+    await expect(kid.getByText('10 min de tele')).toBeVisible();
+    // Solo una abierta por tipo
+    await expect(kid.getByRole('button', { name: 'Pedir pantalla' })).toBeDisabled();
+    expect(await kid.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await kid.screenshot({ path: `${SHOTS}/17-hijo-pedir-pantalla-375.png`, fullPage: true });
+
+    await adult.goto('/validar');
+    await expect(adult.getByText('Pide 10 min de tele')).toBeVisible();
+    await adult.screenshot({ path: `${SHOTS}/18-validar-peticiones.png`, fullPage: true });
+    await adult.getByRole('button', { name: `Aprobar la petición de ${KID.name}` }).click();
+    await adult.getByRole('dialog').getByRole('button', { name: 'Dar minutos y aprobar' }).click();
+    await expect(adult.getByText('Petición aprobada')).toBeVisible();
+    expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(before - 10);
+
+    const n = (await api(kid, 'get', '/notifications')).body.notifications.find((x: any) => x.kind === 'payout_decided');
+    expect(n.title).toBe(`${ADULT.name} te ha dado 10 min de tele.`);
+    expect(n.body).toBe(`Te quedan ${before - 10} min.`);
+    await kid.goto('/mesada');
+    await expect(kid.getByText('Aprobada', { exact: true }).first()).toBeVisible();
+  });
+
+  test('el hijo anota su pantalla, el adulto la confirma y gana 5 puntos por honesto', async () => {
+    const me = (await api(kid, 'get', '/me')).body.user;
+    const bal = (await api(kid, 'get', `/screen/${me.id}`)).body.balance;
+    const pts = (await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available;
+
+    await kid.goto('/mesada');
+    await kid.getByRole('button', { name: 'Anotar pantalla' }).click();
+    const kd = kid.getByRole('dialog');
+    await kd.getByLabel('Minutos').fill('20');
+    await kd.getByRole('radio', { name: 'Videojuegos' }).click();
+    await kd.getByRole('button', { name: 'Anotar', exact: true }).click();
+    await expect(kid.getByText('Anotado: 20 min de videojuegos. Falta que lo confirme un adulto')).toBeVisible();
+    // Se resta al momento y aún no hay puntos
+    expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(bal - 20);
+    expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available).toBe(pts);
+    await expect(kid.getByText('Por confirmar')).toBeVisible();
+    await kid.screenshot({ path: `${SHOTS}/19-hijo-anotar-pantalla-375.png`, fullPage: true });
+
+    await adult.goto('/validar');
+    await expect(adult.getByText(`${KID.name} anotó 20 min de videojuegos`)).toBeVisible();
+    await adult.getByRole('button', { name: `Confirmar la pantalla de ${KID.name}` }).click();
+    await expect(adult.getByText('Confirmada: +5 puntos por ser honesto')).toBeVisible();
+    expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available).toBe(pts + 5);
+
+    await kid.goto('/mesada');
+    await expect(kid.getByText('Confirmado')).toBeVisible();
+    const notes = (await api(kid, 'get', '/notifications')).body.notifications;
+    expect(notes.some((x: any) => x.title === '+5 puntos por ser honesto')).toBe(true);
+  });
+
   test('la app es instalable (manifest y service worker)', async () => {
     const res = await adult.request.get('/manifest.webmanifest');
     expect(res.ok()).toBe(true);

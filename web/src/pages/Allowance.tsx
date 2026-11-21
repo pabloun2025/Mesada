@@ -9,46 +9,13 @@ import type { User, Wallet } from '../lib/types';
 import { Avatar, Badge, Button, Field, Loading, PageHeader, SectionTitle, Segmented, Sheet, useToast } from '../components/ui';
 import { LedgerList, ScreenList } from '../components/Ledger';
 import { minutesLabel } from '../lib/deadline';
-
-const METHODS = [{ value: 'cash', label: 'Efectivo' }, { value: 'bizum', label: 'Bizum' }, { value: 'transfer', label: 'Transferencia' }, { value: 'other', label: 'Otro' }] as const;
-
-function PaySheet({ child, wallet, onClose }: { child: User; wallet: Wallet; onClose: () => void }) {
-  const [amount, setAmount] = useState(wallet.cents_pending > 0 ? (wallet.cents_pending / 100).toFixed(2).replace('.', ',') : '');
-  const [method, setMethod] = useState<(typeof METHODS)[number]['value']>('cash');
-  const [note, setNote] = useState('');
-  const [error, setError] = useState('');
-  const [key] = useState(newKey); // misma clave en reintentos = sin pagos duplicados
-  const toast = useToast();
-  const invalidate = useInvalidateAll();
-  const pay = useMutation({
-    mutationFn: () => {
-      const cents = parseEuros(amount);
-      if (!cents) throw new Error('Escribe un importe válido, por ejemplo 5,50');
-      return post('/payments', { userId: child.id, amountCents: cents, method, note: note || undefined }, key);
-    },
-    onSuccess: (r) => {
-      toast(r.payment.duplicate ? 'Este pago ya estaba registrado' : `Pago de ${euros(r.payment.amount_cents)} registrado`);
-      invalidate();
-      onClose();
-    },
-    onError: (e: Error) => setError(e.message),
-  });
-  return (
-    <Sheet open onClose={onClose} title={`Pagar a ${child.display_name}`} footer={<Button className="w-full" variant="success" loading={pay.isPending} onClick={() => pay.mutate()}>Registrar pago</Button>}>
-      <p className="mb-4 muted">Saldo pendiente: <strong className="num text-[var(--fg)]">{euros(wallet.cents_pending)}</strong>. Registra aquí el dinero que le das en mano o por Bizum.</p>
-      <div className="space-y-4">
-        <Field label="Importe (€)">{(id) => <input id={id} className="field num text-2xl font-extrabold" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
-        <div><p className="mb-2 text-sm font-bold text-[var(--fg-2)]">Forma de pago</p><Segmented label="Forma de pago" value={method} onChange={setMethod} options={[...METHODS]} /></div>
-        <Field label="Nota (opcional)">{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />}</Field>
-        {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
-      </div>
-    </Sheet>
-  );
-}
+import { CategoryPicker, PaySheet } from '../components/MoneySheets';
+import type { ScreenCategory } from '../lib/types';
 
 /** Gastar o ajustar minutos de pantalla: el saldo nunca baja de 0. */
 function ScreenSheet({ child, minutes, onClose }: { child: User; minutes: number; onClose: () => void }) {
   const [mode, setMode] = useState<'spend' | 'give' | 'take'>('spend');
+  const [category, setCategory] = useState<ScreenCategory>('videojuegos');
   const [value, setValue] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -58,7 +25,7 @@ function ScreenSheet({ child, minutes, onClose }: { child: User; minutes: number
     mutationFn: () => {
       const n = Number(value);
       if (!Number.isInteger(n) || n <= 0) throw new Error('Escribe los minutos');
-      if (mode === 'spend') return post('/screen/spend', { userId: child.id, minutes: n, note });
+      if (mode === 'spend') return post('/screen/spend', { userId: child.id, minutes: n, category, note });
       if (!note.trim()) throw new Error('Indica el motivo');
       return post('/screen/adjust', { userId: child.id, delta: mode === 'give' ? n : -n, note });
     },
@@ -71,6 +38,7 @@ function ScreenSheet({ child, minutes, onClose }: { child: User; minutes: number
         <p className="muted">Saldo: <strong className="num text-[var(--fg)]">{minutesLabel(minutes)}</strong></p>
         <Segmented label="Qué hacer" value={mode} onChange={setMode} options={[{ value: 'spend', label: 'Gastar' }, { value: 'give', label: 'Dar' }, { value: 'take', label: 'Quitar' }]} />
         <Field label="Minutos">{(id) => <input id={id} className="field num text-xl font-bold" inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
+        {mode === 'spend' ? <CategoryPicker value={category} onChange={setCategory} /> : null}
         <Field label={mode === 'spend' ? 'Nota (opcional)' : 'Motivo'}>{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder={mode === 'spend' ? 'Consola, tablet…' : ''} />}</Field>
         {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
         <div className="border-t border-[var(--line)] pt-3"><ScreenList userId={child.id} /></div>
