@@ -107,3 +107,10 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Interés semanal: 1 % de lo ahorrado, redondeado al euro de arriba, como mínimo 1 €.
 - Puede sacar el dinero antes de la meta: recupera lo que puso, pero pierde el interés ganado.
 - Al llegar a la meta, el dinero pasa a su saldo y deja de ganar interés. Luego lo retira como un retiro normal.
+
+### Respuestas extra I6–I7 (21/11)
+- Interés del préstamo sin puntos: los puntos quedan en negativo y lo próximo que gane paga primero esa deuda.
+- Interés del ahorro: lo pagan los padres, automático cada semana (se suma a la meta y cuenta como dinero que deben).
+- Los 2 retiros cuentan de lunes a domingo (el contador vuelve a 0 cada lunes).
+- En Ajustes el padre cambia todos los números (2 retiros, 50 %, 300 %, 10 puntos, 1 %) o apaga cada opción.
+- **Aspecto:** la pantalla de dinero del hijo tiene que parecer una cuenta de banco.
