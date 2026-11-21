@@ -132,3 +132,9 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - teclado numérico grande para el importe, con botones rápidos (5 €, 10 €, todo);
   - pequeña gráfica del saldo de las últimas semanas.
 - Padres, banca para padres: una cuenta por hijo, «Pendiente de pagar» destacado, operaciones por aprobar, préstamos y ahorros como productos.
+
+## I9. Administración sin pedir el código cada vez (21/11)
+**Estado: decidida, sin programar.**
+- El código de la app de autenticación se pide una sola vez en cada dispositivo (móvil u ordenador).
+- Ese dispositivo queda recordado 90 días: en el día a día se entra en Administración sin código.
+- En un dispositivo nuevo, o pasados los 90 días, se vuelve a pedir el código.
