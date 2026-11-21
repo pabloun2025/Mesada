@@ -15,14 +15,14 @@ import { completeInstance, reviewInstance } from '../lib/task-actions.js';
 import { checkInstance } from '../lib/check-tasks.js';
 import { bonusView, bonusLabel, BONUS_COLUMNS } from '../lib/bonus.js';
 import { deadlineAt, deadlineTime, holidaysBetween, reducedPoints } from '../lib/deadline.js';
-import { isValidDate } from '../lib/dates.js';
+import { addDays, isValidDate } from '../lib/dates.js';
 import { notify } from '../lib/notify/dispatch.js';
 
-const dateStr = z.string().refine(isValidDate, 'fecha no válida');
+export const dateStr = z.string().refine(isValidDate, 'fecha no válida');
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
-const bonusBody = z
+export const bonusBody = z
   .object({
     kind: z.enum(['points', 'screen', 'text', 'reward']),
     points: z.number().int().min(1).max(10000).optional(),
@@ -44,7 +44,7 @@ const taskBody = z
     icon: z.string().max(16).default('✅'),
     difficulty: z.enum(['easy', 'medium', 'hard']).default('medium'),
     points: z.number().int().min(0).max(10000),
-    recurrence: z.enum(['once', 'daily', 'weekly', 'monthly']),
+    recurrence: z.enum(['once', 'daily', 'weekly', 'monthly', 'as_needed']),
     weekdays: z.array(z.number().int().min(1).max(7)).max(7).default([]),
     monthDay: z.number().int().min(1).max(31).nullable().default(null),
     startDate: dateStr,
@@ -60,13 +60,20 @@ const taskBody = z
     assignees: z.array(z.string().uuid()).min(1, 'asigna la tarea al menos a una persona').max(20),
     requiresApproval: z.boolean().default(true),
     requiresPhoto: z.boolean().default(false),
+    repeatable: z.boolean().default(false),
+    maxPerDay: z.number().int().min(2).max(50).nullable().default(null),
+    cooldownDays: z.number().int().min(1).max(365).nullable().default(null),
   })
   .refine((t) => !t.endDate || t.endDate >= t.startDate, { message: 'la fecha de fin es anterior al inicio', path: ['endDate'] })
   .refine((t) => t.recurrence !== 'weekly' || t.weekdays.length > 0, { message: 'elige al menos un día de la semana', path: ['weekdays'] })
   .refine((t) => !t.checkMode || t.assignmentMode !== 'shared', { message: 'una tarea que marca un adulto no puede ser compartida', path: ['assignmentMode'] });
 
 /** Columnas a guardar. En tareas de comprobación no hay hora límite ni foto ni validación: las marca un adulto. */
-function taskParams(b: z.infer<typeof taskBody>) {
+function taskParams(b0: z.infer<typeof taskBody>) {
+  // «Cuando haga falta»: compartida entre los asignados, sin hora límite ni comprobación (nunca vence).
+  const b = b0.recurrence === 'as_needed'
+    ? { ...b0, assignmentMode: 'shared' as const, dueTime: null, dueTimeWeekend: null, latePercent: 100, checkMode: false }
+    : b0;
   const c = b.checkMode;
   return [
     b.title, b.description, b.icon, b.difficulty, b.points, b.recurrence, b.weekdays, b.monthDay, b.startDate, b.endDate,
@@ -75,6 +82,10 @@ function taskParams(b: z.infer<typeof taskBody>) {
     b.bonus?.kind ?? null, b.bonus?.kind === 'points' ? b.bonus.points : null, b.bonus?.kind === 'screen' ? b.bonus.minutes : null,
     b.bonus?.kind === 'text' ? b.bonus.text : null, b.bonus?.kind === 'reward' ? b.bonus.rewardId : null,
     b.bonus?.surprise ?? false, b.bonus?.onTimeOnly ?? false,
+    // Repetir en el día: no aplica a las que marca un adulto. Sin tope = ilimitado.
+    c ? false : b.repeatable, c || !b.repeatable ? null : b.maxPerDay,
+    // Espera tras hacerla: solo «Cuando haga falta» y manda sobre las repeticiones del día.
+    b.recurrence === 'as_needed' ? b.cooldownDays : null,
   ];
 }
 
@@ -84,7 +95,7 @@ async function validateReward(familyId: string, b: z.infer<typeof taskBody>) {
   if (!r) throw badRequest('La recompensa del bono no existe');
 }
 
-const TASK_SELECT = `
+export const TASK_SELECT = `
   SELECT t.*, rw.title AS bonus_reward_title, COALESCE(json_agg(json_build_object('id', u.id, 'display_name', u.display_name, 'avatar', u.avatar, 'color', u.color) ORDER BY a.position)
          FILTER (WHERE u.id IS NOT NULL), '[]') AS assignees
     FROM tasks t LEFT JOIN task_assignees a ON a.task_id = t.id LEFT JOIN users u ON u.id = a.user_id LEFT JOIN rewards rw ON rw.id = t.bonus_reward_id`;
@@ -94,10 +105,11 @@ async function validateAssignees(familyId: string, ids: string[]) {
   if (rows.length !== new Set(ids).size) throw badRequest('Alguna persona asignada no pertenece a la familia');
 }
 
-const INSTANCE_SELECT = `
+export const INSTANCE_SELECT = `
   SELECT i.id, i.task_id, i.assignee_id, i.due_date, i.status, i.points, i.completed_by, i.completed_at, i.child_note,
          (i.photo_path IS NOT NULL) AS has_photo, i.reviewed_at, i.review_note,
-         i.deadline_at, i.on_time, i.check_met,
+         i.deadline_at, i.on_time, i.check_met, i.repeat_no, t.repeatable, t.max_per_day, t.cooldown_days,
+         (SELECT count(*)::int FROM task_instances x WHERE x.task_id = i.task_id AND x.due_date = i.due_date AND x.status IN ('submitted','approved') AND x.assignee_id IS NOT DISTINCT FROM i.assignee_id) AS done_count,
          t.title, t.icon, t.description, t.difficulty, t.recurrence, t.assignment_mode, t.requires_approval, t.requires_photo, t.due_time,
          t.due_time_weekend, t.late_percent, t.points AS task_points, t.check_mode, t.penalty_minutes, t.success_minutes,
          t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise, t.bonus_on_time_only, rw.title AS bonus_reward_title,
@@ -110,13 +122,13 @@ const INSTANCE_SELECT = `
     LEFT JOIN rewards rw ON rw.id = t.bonus_reward_id`;
 
 /** Sorpresas que este hijo ya ganó (tras ganarlas la tarea vuelve a ser normal). */
-async function claimedTasks(userId: string): Promise<Set<string>> {
+export async function claimedTasks(userId: string): Promise<Set<string>> {
   const rows = await many(getPool(), 'SELECT task_id FROM bonus_claims WHERE user_id = $1', [userId]);
   return new Set(rows.map((r) => r.task_id));
 }
 
 /** Sustituye las columnas crudas del bono por la vista segura: a un hijo nunca le llega el contenido de una sorpresa sin ganar. */
-function shapeBonus<T extends Record<string, any>>(row: T, role: 'adult' | 'child', claimed: Set<string>, taskId: string) {
+export function shapeBonus<T extends Record<string, any>>(row: T, role: 'adult' | 'child', claimed: Set<string>, taskId: string) {
   const bonus = bonusView(row as any, role, claimed.has(taskId));
   if (role === 'child') {
     const out: Record<string, any> = { ...row };
@@ -139,7 +151,7 @@ export default async function taskRoutes(app: FastifyInstance) {
     const u = requireUser(req);
     const rows = await many(
       getPool(),
-      `${TASK_SELECT} WHERE t.family_id = $1 AND t.active
+      `${TASK_SELECT} WHERE t.family_id = $1 AND t.active AND NOT t.is_extra
          ${u.role === 'child' ? 'AND EXISTS (SELECT 1 FROM task_assignees x WHERE x.task_id = t.id AND x.user_id = $2)' : 'AND $2::uuid IS NOT NULL'}
        GROUP BY t.id, rw.id ORDER BY t.created_at DESC`,
       [u.familyId, u.id],
@@ -156,8 +168,8 @@ export default async function taskRoutes(app: FastifyInstance) {
     const id = await tx(async (db) => {
       const t = await one(
         db,
-        `INSERT INTO tasks(family_id, title, description, icon, difficulty, points, recurrence, weekdays, month_day, start_date, end_date, due_time, due_time_weekend, late_percent, assignment_mode, requires_approval, requires_photo, check_mode, penalty_minutes, success_minutes, bonus_kind, bonus_points, bonus_minutes, bonus_text, bonus_reward_id, bonus_surprise, bonus_on_time_only, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) RETURNING id`,
+        `INSERT INTO tasks(family_id, title, description, icon, difficulty, points, recurrence, weekdays, month_day, start_date, end_date, due_time, due_time_weekend, late_percent, assignment_mode, requires_approval, requires_photo, check_mode, penalty_minutes, success_minutes, bonus_kind, bonus_points, bonus_minutes, bonus_text, bonus_reward_id, bonus_surprise, bonus_on_time_only, repeatable, max_per_day, cooldown_days, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31) RETURNING id`,
         [u.familyId, ...taskParams(b), u.id],
       );
       await db.query(`INSERT INTO task_assignees(task_id, user_id, position) SELECT $1, x, ord FROM unnest($2::uuid[]) WITH ORDINALITY AS y(x, ord)`, [t.id, b.assignees]);
@@ -177,8 +189,8 @@ export default async function taskRoutes(app: FastifyInstance) {
     await validateReward(u.familyId, b);
     await tx(async (db) => {
       const r = await db.query(
-        `UPDATE tasks SET title=$3, description=$4, icon=$5, difficulty=$6, points=$7, recurrence=$8, weekdays=$9, month_day=$10, start_date=$11, end_date=$12, due_time=$13, due_time_weekend=$14, late_percent=$15, assignment_mode=$16, requires_approval=$17, requires_photo=$18, check_mode=$19, penalty_minutes=$20, success_minutes=$21, bonus_kind=$22, bonus_points=$23, bonus_minutes=$24, bonus_text=$25, bonus_reward_id=$26, bonus_surprise=$27, bonus_on_time_only=$28, updated_at=now()
-          WHERE id=$1 AND family_id=$2 AND active`,
+        `UPDATE tasks SET title=$3, description=$4, icon=$5, difficulty=$6, points=$7, recurrence=$8, weekdays=$9, month_day=$10, start_date=$11, end_date=$12, due_time=$13, due_time_weekend=$14, late_percent=$15, assignment_mode=$16, requires_approval=$17, requires_photo=$18, check_mode=$19, penalty_minutes=$20, success_minutes=$21, bonus_kind=$22, bonus_points=$23, bonus_minutes=$24, bonus_text=$25, bonus_reward_id=$26, bonus_surprise=$27, bonus_on_time_only=$28, repeatable=$29, max_per_day=$30, cooldown_days=$31, updated_at=now()
+          WHERE id=$1 AND family_id=$2 AND active AND NOT is_extra`,
         [id, u.familyId, ...taskParams(b)],
       );
       if (!r.rowCount) throw notFound('Tarea no encontrada');
@@ -195,7 +207,7 @@ export default async function taskRoutes(app: FastifyInstance) {
     const u = requireAdult(req);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     await tx(async (db) => {
-      const r = await db.query('UPDATE tasks SET active = false, updated_at = now() WHERE id = $1 AND family_id = $2 AND active', [id, u.familyId]);
+      const r = await db.query('UPDATE tasks SET active = false, updated_at = now() WHERE id = $1 AND family_id = $2 AND active AND NOT is_extra', [id, u.familyId]);
       if (!r.rowCount) throw notFound('Tarea no encontrada');
       const fam = await getFamily(db, u.familyId);
       await db.query(`DELETE FROM task_instances WHERE task_id = $1 AND status = 'pending' AND due_date >= $2`, [id, familyToday(fam)]);
@@ -224,6 +236,7 @@ export default async function taskRoutes(app: FastifyInstance) {
       getPool(),
       `${INSTANCE_SELECT}
         WHERE i.family_id = $1 AND i.due_date BETWEEN $2 AND $3
+          AND NOT i.is_extra
           AND ($4::text[] IS NULL OR i.status = ANY($4))
           AND ($5::uuid IS NULL OR i.assignee_id = $5 OR i.completed_by = $5
                OR (i.assignee_id IS NULL AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = i.task_id AND a.user_id = $5)))
@@ -235,7 +248,16 @@ export default async function taskRoutes(app: FastifyInstance) {
     const claims = u.role === 'child'
       ? new Set((await claimedTasks(u.id)).values())
       : new Set((await many(getPool(), 'SELECT task_id, user_id FROM bonus_claims bc WHERE EXISTS (SELECT 1 FROM tasks t WHERE t.id = bc.task_id AND t.family_id = $1)', [u.familyId])).map((c) => `${c.task_id}:${c.user_id}`));
+    // Espera tras hacerla: la última vez que se pulsó «Hecha» (día local, aunque aún no esté validada).
+    const cdIds = [...new Set(rows.filter((r) => r.cooldown_days).map((r) => r.task_id))];
+    const lastDone = new Map<string, string>();
+    if (cdIds.length) {
+      for (const x of await many(getPool(), `SELECT task_id, max((completed_at AT TIME ZONE $2)::date)::text AS d FROM task_instances WHERE task_id = ANY($1::uuid[]) AND status IN ('submitted','approved') GROUP BY task_id`, [cdIds, fam.timezone])) lastDone.set(x.task_id, x.d);
+    }
     const instances = rows.map((r) => {
+      const ld = r.cooldown_days ? lastDone.get(r.task_id) : undefined;
+      const until = ld && ['pending', 'rejected'].includes(r.status) ? addDays(ld, r.cooldown_days) : null;
+      const blockedUntil = until && until > r.due_date ? until : null;
       // Mientras no se complete, la hora límite se calcula al vuelo (así respeta festivos añadidos después).
       const dl = r.deadline_at ? new Date(r.deadline_at) : deadlineAt(r, r.due_date, holidays.has(r.due_date), fam.timezone);
       const claimed = new Set<string>();
@@ -245,6 +267,7 @@ export default async function taskRoutes(app: FastifyInstance) {
         deadline_at: dl ? dl.toISOString() : null,
         deadline_time: r.check_mode ? null : deadlineTime(r, r.due_date, holidays.has(r.due_date)),
         late_points: reducedPoints(r.task_points, r.late_percent),
+        blocked_until: blockedUntil,
       };
     });
     return { today, instances };

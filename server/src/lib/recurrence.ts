@@ -1,7 +1,7 @@
 import { addDays, dayOfMonth, daysInMonth, diffDays, isoWeekday } from './dates.js';
 
 export interface TaskSchedule {
-  recurrence: 'once' | 'daily' | 'weekly' | 'monthly';
+  recurrence: 'once' | 'daily' | 'weekly' | 'monthly' | 'as_needed';
   weekdays: number[];
   month_day: number | null;
   start_date: string;
@@ -15,6 +15,8 @@ export function occursOn(t: TaskSchedule, d: string): boolean {
   switch (t.recurrence) {
     case 'once':
       return d === t.start_date;
+    case 'as_needed':
+      return true; // siempre disponible; la ocurrencia del día se crea al consultar
     case 'daily':
       return t.weekdays.length === 0 || t.weekdays.includes(isoWeekday(d));
     case 'weekly': {

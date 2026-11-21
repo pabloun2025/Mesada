@@ -60,7 +60,7 @@ export interface Instance {
   icon: string;
   description: string;
   difficulty: 'easy' | 'medium' | 'hard';
-  recurrence: 'once' | 'daily' | 'weekly' | 'monthly';
+  recurrence: 'once' | 'daily' | 'weekly' | 'monthly' | 'as_needed';
   assignment_mode: 'individual' | 'shared' | 'rotation';
   requires_approval: boolean;
   requires_photo: boolean;
@@ -82,6 +82,13 @@ export interface Instance {
   assignee_avatar: string | null;
   assignee_color: string | null;
   completed_by_name: string | null;
+  repeat_no: number;
+  repeatable: boolean;
+  max_per_day: number | null;
+  done_count: number;
+  cooldown_days: number | null;
+  /** Mientras espere tras hacerla (I14): día en que vuelve. */
+  blocked_until: string | null;
 }
 
 /** Bono tal como lo ve quien mira: a un hijo, una sorpresa sin ganar no trae contenido. */
@@ -115,11 +122,14 @@ export interface Task {
   icon: string;
   difficulty: 'easy' | 'medium' | 'hard';
   points: number;
-  recurrence: 'once' | 'daily' | 'weekly' | 'monthly';
+  recurrence: 'once' | 'daily' | 'weekly' | 'monthly' | 'as_needed';
   weekdays: number[];
   month_day: number | null;
   start_date: string;
   end_date: string | null;
+  repeatable?: boolean;
+  max_per_day?: number | null;
+  cooldown_days?: number | null;
   due_time: string | null;
   due_time_weekend: string | null;
   late_percent: number;
@@ -326,4 +336,44 @@ export interface StatementEntry {
   balance_after: number;
   method: PayMethod | null;
   is_withdrawal: boolean;
+}
+
+/** Trabajo extra en el tablón (I11). `assignee_id` null = libre; si no, lo tiene `holder_name`. */
+export interface ExtraBoardItem {
+  id: string;
+  task_id: string;
+  status: InstanceStatus;
+  points: number;
+  extra_deadline: string | null;
+  assignee_id: string | null;
+  completed_by: string | null;
+  has_photo: boolean;
+  review_note: string | null;
+  title: string;
+  icon: string;
+  description: string;
+  requires_photo: boolean;
+  holder_name: string | null;
+  holder_avatar: string | null;
+  mine: boolean;
+  bonus: Bonus | null;
+}
+
+export interface ExtraCatalogItem {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  points: number;
+  requires_approval: boolean;
+  requires_photo: boolean;
+  bonus_kind: 'points' | 'screen' | 'text' | 'reward' | null;
+  bonus_points: number | null;
+  bonus_minutes: number | null;
+  bonus_text: string | null;
+  bonus_reward_id: string | null;
+  bonus_surprise: boolean;
+  bonus_on_time_only: boolean;
+  open_instance_id: string | null;
+  bonus: Bonus | null;
 }

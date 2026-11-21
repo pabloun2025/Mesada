@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Camera, CalendarCheck, Flame, Hourglass, PartyPopper } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Camera, CalendarCheck, Flame, Hammer, Hourglass, PartyPopper } from 'lucide-react';
 import { api } from '../lib/api';
 import { addDays, euros, fmtDate, weekdayLong } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
-import type { Instance, Progress, Wallet, BonusGrant } from '../lib/types';
+import type { ExtraBoardItem, Instance, Progress, Wallet, BonusGrant } from '../lib/types';
 import { minutesLabel } from '../lib/deadline';
 import { Button, Empty, Loading, SectionTitle, Sheet, useToast } from '../components/ui';
 import { LogScreenSheet } from '../components/MoneySheets';
@@ -26,6 +27,7 @@ export default function ChildToday() {
   const wallet = useQuery({ queryKey: ['wallet', user.id], queryFn: () => api<{ wallet: Wallet }>(`/wallet/${user.id}`) });
   const grants = useQuery({ queryKey: ['bonus-grants', 'mine'], queryFn: () => api<{ grants: BonusGrant[] }>('/bonus-grants') });
   const progress = useQuery({ queryKey: ['progress', user.id], queryFn: () => api<Progress>(`/progress/${user.id}`) });
+  const extras = useQuery({ queryKey: ['extras'], queryFn: () => api<{ board: ExtraBoardItem[] }>('/extras') });
   const [logOpen, setLogOpen] = useState(false);
   const [photoFor, setPhotoFor] = useState<Instance | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -60,9 +62,23 @@ export default function ChildToday() {
   });
 
   if (list.isLoading) return <Loading />;
-  const items = list.data?.instances ?? [];
-  const open = items.filter((i) => (i.status === 'pending' || i.status === 'rejected') && !i.check_mode);
-  const doneCount = items.filter((i) => i.status === 'approved' || i.status === 'submitted').length;
+  const raw = list.data?.instances ?? [];
+  // Tareas repetibles: de cada grupo se muestra la abierta o, si ya no queda, la última hecha («Hecha 2 de 3 hoy»).
+  const shown = new Map<string, Instance>();
+  for (const i of [...raw].sort((a, b) => a.repeat_no - b.repeat_no)) {
+    const k = `${i.task_id}|${i.assignee_id}|${i.due_date}`;
+    const cur = shown.get(k);
+    const isOpen = i.status === 'pending' || i.status === 'rejected';
+    if (!cur || isOpen || !(cur.status === 'pending' || cur.status === 'rejected')) shown.set(k, i);
+  }
+  const all = raw.filter((i) => shown.get(`${i.task_id}|${i.assignee_id}|${i.due_date}`) === i);
+  // «Cuando haga falta» va aparte: es opcional y no cuenta en lo que te queda.
+  const optional = all.filter((i) => i.recurrence === 'as_needed');
+  const items = all.filter((i) => i.recurrence !== 'as_needed');
+  const firsts = raw.filter((i) => i.repeat_no === 1 && i.recurrence !== 'as_needed'); // el día cuenta una vez, repita o no
+  const freeExtras = (extras.data?.board ?? []).filter((e) => !e.assignee_id && e.status === 'pending').length;
+  const open = items.filter((i) => (i.status === 'pending' || i.status === 'rejected') && !i.check_mode && i.repeat_no === 1);
+  const doneCount = firsts.filter((i) => i.status === 'approved' || i.status === 'submitted').length;
   const screenMin = wallet.data?.wallet.screen_minutes;
   const pendingGrants = grants.data?.grants ?? [];
   const p = progress.data;
@@ -78,7 +94,7 @@ export default function ChildToday() {
         <div className="text-center sm:text-left">
           <p className="text-sm font-bold muted first-letter:uppercase">{today ? weekdayLong(today) : ''}</p>
           <h1 className="mt-1 text-3xl font-extrabold">
-            {items.length === 0 ? 'Hoy tienes el día libre' : open.length === 0 ? 'Todo hecho por hoy' : open.length === 1 ? 'Te queda 1 tarea' : `Te quedan ${open.length} tareas`}
+            {firsts.length === 0 ? 'Hoy tienes el día libre' : open.length === 0 ? 'Todo hecho por hoy' : open.length === 1 ? 'Te queda 1 tarea' : `Te quedan ${open.length} tareas`}
           </h1>
           <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
@@ -109,7 +125,7 @@ export default function ChildToday() {
       </section>
 
       <section className="mb-8">
-        <SectionTitle>Para hoy {items.length ? <span className="num ml-1 text-base muted">{doneCount}/{items.length}</span> : null}</SectionTitle>
+        <SectionTitle>Para hoy {firsts.length ? <span className="num ml-1 text-base muted">{doneCount}/{firsts.length}</span> : null}</SectionTitle>
         {items.length ? (
           <ul className="space-y-2.5">
             {items.map((i) => (
@@ -120,6 +136,27 @@ export default function ChildToday() {
           <div className="card"><Empty mascot icon={<PartyPopper />} title="Nada por aquí">Disfruta del día.</Empty></div>
         )}
       </section>
+
+      {optional.length ? (
+        <section className="mb-8">
+          <SectionTitle>Cuando haga falta</SectionTitle>
+          <ul className="space-y-2.5">
+            {optional.map((i) => (
+              <TaskRow key={i.id} inst={i} canComplete onComplete={onComplete} busy={complete.isPending} celebrate={family.celebrations_enabled && !i.requires_approval} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {extras.data?.board.length ? (
+        <section className="mb-8">
+          <Link to="/extras" className="card flex items-center gap-3 p-3.5 font-bold">
+            <Hammer size={22} className="text-tangerine" aria-hidden />
+            <span className="flex-1">Trabajos extra{freeExtras ? ` · ${freeExtras} libre${freeExtras === 1 ? '' : 's'}` : ''}</span>
+            <span className="muted" aria-hidden>›</span>
+          </Link>
+        </section>
+      ) : null}
 
       {pendingGrants.length ? (
         <section className="mb-8">
@@ -165,7 +202,7 @@ export default function ChildToday() {
         <Button variant="secondary" className="w-full" onClick={() => fileRef.current?.click()}><Camera size={18} /> {file ? 'Hacer otra' : 'Hacer foto'}</Button>
       </Sheet>
       {logOpen && screenMin != null ? <LogScreenSheet balance={screenMin} onClose={() => setLogOpen(false)} /> : null}
-      {items.length > 0 && open.length === 0 ? <p className="mt-6 flex items-center justify-center gap-2 text-sm muted"><CalendarCheck size={16} aria-hidden /> Mañana más.</p> : null}
+      {firsts.length > 0 && open.length === 0 ? <p className="mt-6 flex items-center justify-center gap-2 text-sm muted"><CalendarCheck size={16} aria-hidden /> Mañana más.</p> : null}
     </div>
   );
 }

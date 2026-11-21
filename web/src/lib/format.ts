@@ -57,3 +57,11 @@ export const fmtTime = (iso: string, timeZone: string) =>
 
 /** «lunes 23 nov» a partir de «2026-11-23». */
 export const fmtWeekdayShort = (d: string) => fmtDate(d, { weekday: 'long', day: 'numeric', month: 'short' }).replace(',', '');
+
+/** «Vuelve mañana» / «Vuelve el jueves» (hasta 6 días) / «Vuelve el 3 dic.» desde `today` hasta `until`. */
+export function backLabel(until: string, today: string) {
+  const n = Math.round((parseDate(until).getTime() - parseDate(today).getTime()) / 86400000);
+  if (n <= 1) return 'Vuelve mañana';
+  if (n <= 6) return `Vuelve el ${WEEKDAYS_LONG[(parseDate(until).getDay() + 6) % 7]}`;
+  return `Vuelve el ${fmtDate(until)}`;
+}

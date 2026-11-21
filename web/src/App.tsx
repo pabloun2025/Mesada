@@ -24,6 +24,7 @@ const ChildProgress = lazy(() => import('./pages/ChildProgress'));
 const ChildMoney = lazy(() => import('./pages/ChildMoney'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Notifications = lazy(() => import('./pages/Notifications'));
+const Extras = lazy(() => import('./pages/Extras'));
 const Admin = lazy(() => import('./pages/Admin'));
 
 export function App() {
@@ -57,6 +58,7 @@ export function App() {
               <Route index element={<ParentDashboard />} />
               <Route path="validar" element={<Approvals />} />
               <Route path="tareas" element={<Tasks />} />
+              <Route path="extras" element={<Extras />} />
               <Route path="mesada" element={<Allowance />} />
               <Route path="premios" element={<Rewards />} />
               <Route path="familia" element={<Family />} />
@@ -72,6 +74,7 @@ export function App() {
               <Route index element={<ChildToday />} />
               <Route path="hoy" element={<Navigate to="/" replace />} />
               <Route path="progreso" element={<ChildProgress />} />
+              <Route path="extras" element={<Extras />} />
               <Route path="premios" element={<Rewards />} />
               <Route path="mesada" element={<ChildMoney />} />
               <Route path="avisos" element={<Notifications />} />

@@ -12,6 +12,26 @@ interface TaskRow extends TaskSchedule {
   assignees: string[]; // ordenados por position
 }
 
+/**
+ * Repeticiones en el día (I13): si una tarea repetible ya tiene hechas y ninguna abierta, abre la siguiente
+ * hasta el máximo. El ámbito es el reparto: compartida = todos los hijos juntos; el resto, por hijo.
+ */
+export async function spawnRepeats(db: Db, familyId: string, day: string, taskId?: string) {
+  await db.query(
+    `INSERT INTO task_instances(task_id, family_id, assignee_id, due_date, points, repeat_no)
+     SELECT g.task_id, g.family_id, g.assignee_id, g.due_date, t.points, g.mx + 1
+       FROM (SELECT task_id, family_id, assignee_id, due_date, max(repeat_no) AS mx,
+                    count(*) FILTER (WHERE status IN ('submitted','approved')) AS done,
+                    count(*) FILTER (WHERE status IN ('pending','rejected')) AS open
+               FROM task_instances WHERE family_id = $1 AND due_date = $2 AND NOT is_extra AND ($3::uuid IS NULL OR task_id = $3)
+              GROUP BY task_id, family_id, assignee_id, due_date) g
+       JOIN tasks t ON t.id = g.task_id AND t.active AND t.repeatable AND NOT t.check_mode AND t.cooldown_days IS NULL
+      WHERE g.done >= 1 AND g.open = 0 AND (t.max_per_day IS NULL OR g.done < t.max_per_day)
+     ON CONFLICT DO NOTHING`,
+    [familyId, day, taskId ?? null],
+  );
+}
+
 export const LOOKBACK_DAYS = 7;
 export const LOOKAHEAD_DAYS = 14;
 
@@ -32,7 +52,7 @@ export async function ensureInstances(db: Db, familyId: string, opts: { from?: s
        FROM tasks t
        LEFT JOIN task_assignees a ON a.task_id = t.id
        LEFT JOIN users u ON u.id = a.user_id
-      WHERE t.family_id = $1 AND t.active AND ($2::uuid IS NULL OR t.id = $2)
+      WHERE t.family_id = $1 AND t.active AND NOT t.is_extra AND ($2::uuid IS NULL OR t.id = $2)
       GROUP BY t.id`,
     [familyId, opts.taskId ?? null],
   );
@@ -44,6 +64,11 @@ export async function ensureInstances(db: Db, familyId: string, opts: { from?: s
     const start = t.recurrence === 'once' ? t.start_date : from;
     const end = t.recurrence === 'once' ? t.start_date : to;
     if (t.recurrence === 'once' && (t.start_date > to)) continue;
+    if (t.recurrence === 'as_needed') {
+      // Una sola ocurrencia compartida, la de hoy; las de días anteriores sin hacer se borran abajo (no son fallo).
+      if (occursOn(t, today)) rows.push([t.id, null, today, t.points]);
+      continue;
+    }
     for (let d = start; d <= end; d = addDays(d, 1)) {
       if (!occursOn(t, d)) continue;
       if (t.assignment_mode === 'individual') {
@@ -68,8 +93,22 @@ export async function ensureInstances(db: Db, familyId: string, opts: { from?: s
     );
   }
 
+  // Repeticiones sin hacer de días pasados: opcionales, se borran (no son fallo).
+  await db.query(`DELETE FROM task_instances WHERE family_id = $1 AND status = 'pending' AND due_date < $2 AND repeat_no > 1`, [familyId, today]);
+  await spawnRepeats(db, familyId, today);
+  // «Cuando haga falta» sin hacer y trabajos extra: nunca vencen como fallo; las ocurrencias vacías se borran.
   await db.query(
-    `UPDATE task_instances SET status = 'expired' WHERE family_id = $1 AND status = 'pending' AND due_date < $2`,
+    `DELETE FROM task_instances i USING tasks t
+      WHERE t.id = i.task_id AND i.family_id = $1 AND i.status = 'pending' AND i.due_date < $2 AND t.recurrence = 'as_needed' AND NOT i.is_extra`,
+    [familyId, today],
+  );
+  // Extra con plazo vencido sin terminar: sale del tablón en silencio y vuelve al catálogo.
+  await db.query(
+    `DELETE FROM task_instances WHERE family_id = $1 AND is_extra AND status IN ('pending','rejected') AND extra_deadline IS NOT NULL AND extra_deadline < $2`,
+    [familyId, today],
+  );
+  await db.query(
+    `UPDATE task_instances SET status = 'expired' WHERE family_id = $1 AND status = 'pending' AND due_date < $2 AND NOT is_extra`,
     [familyId, today],
   );
 

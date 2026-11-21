@@ -140,14 +140,14 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - En un dispositivo nuevo, o pasados los 90 días, se vuelve a pedir el código.
 
 ## I10. Periodicidad «Cuando haga falta» (21/11)
-**Estado: decidida, sin programar.**
+**Estado: construida (21/11), ver D34.**
 - Para tareas sin día ni hora fijos, como sacar la basura o descargar el lavaplatos.
 - Siempre disponible; se puede hacer una vez al día.
 - Si nadie la hace ese día, no pasa nada: no cuenta como fallo, ni en la racha ni en el % cumplido.
 - Con varios hijos es compartida: la marca el primero que la hace y se lleva los puntos.
 
 ## I11. Tareas extra sin fecha (21/11)
-**Estado: decidida, sin programar.**
+**Estado: construida (21/11), ver D35.**
 - Para trabajos ocasionales sin fecha: sacar los hierbajos, limpiar el patio, doblar la ropa…
 - Catálogo guardado de tareas extra; el padre activa una cuando hace falta y sale en el tablón «Trabajos extra».
   - Al hacerla y validarla, sale del tablón y vuelve al catálogo para la próxima vez.
@@ -171,7 +171,7 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Sin maqueta: se programa directo.
 
 ## I13. Repetir una tarea en el mismo día (21/11)
-**Estado: decidida, sin programar.**
+**Estado: construida (21/11), ver D36.**
 - Opción en cada tarea: «Se puede repetir en el día». Por defecto, no: la mayoría solo se hacen una vez al día.
 - Si se puede repetir, el padre pone el máximo de veces (2, 3, 5…) o «sin límite».
 - Cada vez da los puntos completos (dos paseos del perro de 10 = 20 puntos).
@@ -179,7 +179,7 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Si la tarea es compartida, cualquier hijo puede hacerla hasta llegar al máximo entre todos (máximo 3: Ana 2 veces y Leo 1).
 
 ## I14. Días de espera tras hacer una tarea (21/11)
-**Estado: decidida, sin programar.**
+**Estado: construida (21/11), ver D37.**
 - Para tareas como sacar la basura: sin fecha fija, pero no se repiten al día siguiente.
 - Solo en tareas «Cuando haga falta». El padre pone en cada tarea «Después de hacerla, vuelve en N días» (1, 2, 3, 7…). Sin espera, sigue como hasta ahora.
 - Mientras espera, el hijo la ve en gris con «Vuelve el jueves» y no la puede marcar.

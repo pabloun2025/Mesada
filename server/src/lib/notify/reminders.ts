@@ -20,8 +20,8 @@ export async function scheduleReminders(db: Db, familyId: string, now = new Date
       db,
       `SELECT u.id AS user_id, count(i.id)::int AS n
          FROM users u
-         JOIN task_instances i ON i.family_id = u.family_id AND i.due_date = $2 AND i.status IN ('pending','rejected')
-          AND NOT EXISTS (SELECT 1 FROM tasks ck WHERE ck.id = i.task_id AND ck.check_mode)
+         JOIN task_instances i ON i.family_id = u.family_id AND i.due_date = $2 AND i.status IN ('pending','rejected') AND i.repeat_no = 1
+          AND NOT EXISTS (SELECT 1 FROM tasks ck WHERE ck.id = i.task_id AND (ck.check_mode OR ck.is_extra OR ck.recurrence = 'as_needed'))
           AND (i.assignee_id = u.id OR (i.assignee_id IS NULL AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = i.task_id AND a.user_id = u.id)))
         WHERE u.family_id = $1 AND u.role = 'child' AND u.active
         GROUP BY u.id`,
