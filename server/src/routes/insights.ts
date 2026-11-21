@@ -10,6 +10,8 @@ import { BADGES, computeStreak, levelFor, lifetimePoints, pointsEarnedBetween } 
 import { walletSummary } from '../lib/money.js';
 
 const ASSIGNED = `(i.assignee_id = $U OR i.completed_by = $U OR (i.assignee_id IS NULL AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = i.task_id AND a.user_id = $U)))`;
+/** Lo que cuenta para el % cumplido y el «hoy»: ni los trabajos extra, ni las repeticiones, ni las de «cuando haga falta» aún sin hacer. */
+const COUNTED = `NOT i.is_extra AND i.repeat_no = 1 AND NOT (i.status = 'pending' AND EXISTS (SELECT 1 FROM tasks tn WHERE tn.id = i.task_id AND tn.recurrence = 'as_needed'))`;
 const assigned = (param: string) => ASSIGNED.replaceAll('$U', param);
 
 async function progressFor(fam: Family, userId: string) {
@@ -29,7 +31,7 @@ async function progressFor(fam: Family, userId: string) {
               COALESCE(SUM(i.points) FILTER (WHERE i.status = 'approved'),0)::int AS earned,
               COALESCE(SUM(i.points) FILTER (WHERE i.status IN ('expired','rejected') AND i.due_date < $4),0)::int AS missed,
               COALESCE(SUM(i.points) FILTER (WHERE i.status = 'submitted'),0)::int AS waiting
-         FROM task_instances i WHERE i.family_id = $2 AND i.due_date BETWEEN $3 AND $5 AND ${assigned('$1')}
+         FROM task_instances i WHERE i.family_id = $2 AND i.due_date BETWEEN $3 AND $5 AND ${assigned('$1')} AND ${COUNTED}
           AND (i.assignee_id IS NOT NULL OR i.completed_by IS NULL OR i.completed_by = $1)`,
       [userId, fam.id, period.start, today, period.end],
     ),
@@ -103,7 +105,7 @@ export default async function insightRoutes(app: FastifyInstance) {
                     count(*) FILTER (WHERE i.status = 'approved')::int AS approved,
                     count(*) FILTER (WHERE i.status = 'submitted')::int AS submitted,
                     count(*) FILTER (WHERE i.status IN ('pending','rejected'))::int AS pending
-               FROM task_instances i WHERE i.family_id = $2 AND i.due_date = $3 AND ${assigned('$1')}
+               FROM task_instances i WHERE i.family_id = $2 AND i.due_date = $3 AND ${assigned('$1')} AND ${COUNTED}
                 AND (i.assignee_id IS NOT NULL OR i.completed_by IS NULL OR i.completed_by = $1)`,
             [c.id, u.familyId, today],
           ),

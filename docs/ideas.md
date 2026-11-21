@@ -132,3 +132,55 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - teclado numérico grande para el importe, con botones rápidos (5 €, 10 €, todo);
   - pequeña gráfica del saldo de las últimas semanas.
 - Padres, banca para padres: una cuenta por hijo, «Pendiente de pagar» destacado, operaciones por aprobar, préstamos y ahorros como productos.
+
+## I9. Administración sin pedir el código cada vez (21/11)
+**Estado: decidida, sin programar.**
+- El código de la app de autenticación se pide una sola vez en cada dispositivo (móvil u ordenador).
+- Ese dispositivo queda recordado 90 días: en el día a día se entra en Administración sin código.
+- En un dispositivo nuevo, o pasados los 90 días, se vuelve a pedir el código.
+
+## I10. Periodicidad «Cuando haga falta» (21/11)
+**Estado: construida (21/11), ver D34.**
+- Para tareas sin día ni hora fijos, como sacar la basura o descargar el lavaplatos.
+- Siempre disponible; se puede hacer una vez al día.
+- Si nadie la hace ese día, no pasa nada: no cuenta como fallo, ni en la racha ni en el % cumplido.
+- Con varios hijos es compartida: la marca el primero que la hace y se lleva los puntos.
+
+## I11. Tareas extra sin fecha (21/11)
+**Estado: construida (21/11), ver D35.**
+- Para trabajos ocasionales sin fecha: sacar los hierbajos, limpiar el patio, doblar la ropa…
+- Catálogo guardado de tareas extra; el padre activa una cuando hace falta y sale en el tablón «Trabajos extra».
+  - Al hacerla y validarla, sale del tablón y vuelve al catálogo para la próxima vez.
+- Plazo opcional (p. ej., «antes del domingo»); si no, está disponible hasta que alguien la haga.
+- Con varios hijos: el primero que pulsa «Me la pido» se la queda reservada.
+- Valen como cualquier tarea (puntos y bonos).
+
+## I12. Imagen nueva en alta y estilo cielo claro (21/11)
+**Estado: decidida, sin programar.** Imagen original en `docs/marca/diplop-cielo-2000.webp` (2000×1125).
+- La imagen nueva (familia con cielo claro, logo DiploP y tarjeta «Mi mesada») se usa en:
+  - la pantalla de entrada (en el móvil, un recorte vertical: familia arriba, logo y tarjeta debajo);
+  - la vista previa al compartir el enlace (WhatsApp, redes);
+  - una página de bienvenida pública, antes de registrarse.
+- Página de bienvenida: cómo funciona (tareas → puntos → dinero o premios), qué hacen los padres, qué hacen los hijos, y botones «Entrar» y «Crear familia» arriba y al final.
+- Ideas de la imagen para la app:
+  - tarjeta «Mi mesada» en el inicio del hijo: «★ 120 → 6 €»;
+  - tres accesos grandes con ✓: Mis tareas, Mis puntos, Mis recompensas;
+  - estilo claro de cielo en toda la app (hijos y padres), con el modo oscuro aparte;
+  - monedas doradas como adorno al canjear, en el recibo y en la cuenta de dinero.
+- El hijo ve cuánto valen sus puntos en euros: en el inicio («120 ★ = 6 €») y en cada tarea («+10 ★ · 0,50 €»).
+- Sin maqueta: se programa directo.
+
+## I13. Repetir una tarea en el mismo día (21/11)
+**Estado: construida (21/11), ver D36.**
+- Opción en cada tarea: «Se puede repetir en el día». Por defecto, no: la mayoría solo se hacen una vez al día.
+- Si se puede repetir, el padre pone el máximo de veces (2, 3, 5…) o «sin límite».
+- Cada vez da los puntos completos (dos paseos del perro de 10 = 20 puntos).
+- Vale para todos los tipos: diarias, de días fijos y «Cuando haga falta».
+- Si la tarea es compartida, cualquier hijo puede hacerla hasta llegar al máximo entre todos (máximo 3: Ana 2 veces y Leo 1).
+
+## I14. Días de espera tras hacer una tarea (21/11)
+**Estado: construida (21/11), ver D37.**
+- Para tareas como sacar la basura: sin fecha fija, pero no se repiten al día siguiente.
+- Solo en tareas «Cuando haga falta». El padre pone en cada tarea «Después de hacerla, vuelve en N días» (1, 2, 3, 7…). Sin espera, sigue como hasta ahora.
+- Mientras espera, el hijo la ve en gris con «Vuelve el jueves» y no la puede marcar.
+- Cuando vuelve y nadie la hace, no pasa nada: no cuenta como fallo.

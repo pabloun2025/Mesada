@@ -20,6 +20,7 @@ export function describeRecurrence(t: Pick<Task, 'recurrence' | 'weekdays' | 'mo
     case 'daily': return t.weekdays.length ? `Cada ${days(t.weekdays)}` : 'Cada día';
     case 'weekly': return `Cada semana: ${days(t.weekdays)}`;
     case 'monthly': return `El día ${t.month_day ?? Number(t.start_date.slice(8))} de cada mes`;
+    case 'as_needed': return 'Cuando haga falta';
   }
 }
 
@@ -54,6 +55,10 @@ interface Draft {
   assignees: string[];
   requiresApproval: boolean;
   requiresPhoto: boolean;
+  repeatable: boolean;
+  unlimited: boolean;
+  maxPerDay: number;
+  cooldownDays: string;
 }
 
 function toDraft(t: Task | null, today: string): Draft {
@@ -62,6 +67,7 @@ function toDraft(t: Task | null, today: string): Draft {
       title: '', description: '', icon: '✅', difficulty: 'medium', points: 20, recurrence: 'daily', weekdays: [], monthDay: null,
       startDate: today, endDate: '', dueTime: '', dueTimeWeekend: '', latePercent: 100, checkMode: false, penaltyMinutes: 15, successMinutes: 0,
       bonusKind: 'none', bonusPoints: 10, bonusMinutes: 30, bonusText: '', bonusRewardId: '', bonusSurprise: false, bonusOnTimeOnly: false, assignmentMode: 'individual', assignees: [], requiresApproval: true, requiresPhoto: false,
+      repeatable: false, unlimited: false, maxPerDay: 2, cooldownDays: '',
     };
   }
   return {
@@ -71,6 +77,7 @@ function toDraft(t: Task | null, today: string): Draft {
     bonusKind: t.bonus_kind ?? 'none', bonusPoints: t.bonus_points ?? 10, bonusMinutes: t.bonus_minutes ?? 30, bonusText: t.bonus_text ?? '', bonusRewardId: t.bonus_reward_id ?? '',
     bonusSurprise: t.bonus_surprise ?? false, bonusOnTimeOnly: t.bonus_on_time_only ?? false,
     assignmentMode: t.assignment_mode, assignees: t.assignees.map((a) => a.id), requiresApproval: t.requires_approval, requiresPhoto: t.requires_photo,
+    repeatable: !!t.repeatable, unlimited: !!t.repeatable && t.max_per_day == null, maxPerDay: t.max_per_day ?? 2, cooldownDays: t.cooldown_days ? String(t.cooldown_days) : '',
   };
 }
 
@@ -97,9 +104,12 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
         title: d.title, description: d.description, icon: d.icon, difficulty: d.difficulty, points: d.points, recurrence: d.recurrence, weekdays: d.weekdays,
         startDate: d.startDate, assignmentMode: d.assignmentMode, assignees: d.assignees, requiresApproval: d.requiresApproval, requiresPhoto: d.requiresPhoto,
         endDate: d.endDate || null, dueTime: d.dueTime || null, dueTimeWeekend: d.dueTimeWeekend || null, latePercent: d.latePercent,
+        repeatable: d.repeatable && !d.checkMode, maxPerDay: d.repeatable && !d.unlimited ? Math.max(2, d.maxPerDay) : null,
+        cooldownDays: d.recurrence === 'as_needed' && d.cooldownDays ? Math.max(1, Number(d.cooldownDays)) : null,
         checkMode: d.checkMode, penaltyMinutes: d.penaltyMinutes, successMinutes: d.successMinutes, bonus,
         monthDay: d.recurrence === 'monthly' ? d.monthDay ?? Number(d.startDate.slice(8)) : null,
       };
+      if (d.recurrence === 'as_needed') Object.assign(body, { assignmentMode: 'shared', dueTime: null, dueTimeWeekend: null, latePercent: 100, checkMode: false });
       return d.id ? put(`/tasks/${d.id}`, body) : post('/tasks', body);
     },
     onSuccess: () => {
@@ -150,8 +160,9 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
 
         <div>
           <p className="mb-2 text-sm font-bold text-[var(--fg-2)]">¿Cuándo?</p>
-          <Segmented label="Repetición" value={d.recurrence} onChange={(v) => set('recurrence', v)}
-            options={[{ value: 'once', label: 'Una vez' }, { value: 'daily', label: 'Diaria' }, { value: 'weekly', label: 'Semanal' }, { value: 'monthly', label: 'Mensual' }]} />
+          <Segmented label="Repetición" value={d.recurrence} onChange={(v) => setD((x) => ({ ...x, recurrence: v, ...(v === 'as_needed' ? { checkMode: false, assignmentMode: 'shared' as const } : {}) }))}
+            options={[{ value: 'once', label: 'Una vez' }, { value: 'daily', label: 'Diaria' }, { value: 'weekly', label: 'Semanal' }, { value: 'monthly', label: 'Mensual' }, { value: 'as_needed', label: 'Cuando haga falta' }]} />
+          {d.recurrence === 'as_needed' ? <p className="mt-2 text-sm muted">Siempre disponible, una vez al día. La hace quien llegue primero y, si nadie la hace, no pasa nada: no cuenta como fallo.</p> : null}
         </div>
         {d.recurrence === 'daily' || d.recurrence === 'weekly' ? (
           <div>
@@ -190,7 +201,7 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
             })}
           </div>
         </div>
-        {d.assignees.length > 1 ? (
+        {d.assignees.length > 1 && d.recurrence !== 'as_needed' ? (
           <div>
             <Segmented label="Reparto" value={d.assignmentMode} onChange={(v) => set('assignmentMode', v)}
               options={[{ value: 'individual', label: MODE_LABEL.individual }, ...(d.checkMode ? [] : [{ value: 'shared' as const, label: MODE_LABEL.shared }]), { value: 'rotation', label: MODE_LABEL.rotation }]} />
@@ -200,17 +211,29 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
           </div>
         ) : null}
         <div className="divide-y divide-[var(--line)] rounded-2xl bg-[var(--chip)]/50 px-4">
-          <Toggle checked={d.checkMode} onChange={(v) => setD((x) => ({ ...x, checkMode: v, assignmentMode: v && x.assignmentMode === 'shared' ? 'individual' : x.assignmentMode }))}
-            label="La marca un adulto" description="Tu hijo no la reporta: tú marcas «Cumplida» o «No cumplida». Ej.: estar en el coche a la hora de salida." />
+          {d.recurrence !== 'as_needed' ? <Toggle checked={d.checkMode} onChange={(v) => setD((x) => ({ ...x, checkMode: v, assignmentMode: v && x.assignmentMode === 'shared' ? 'individual' : x.assignmentMode }))}
+            label="La marca un adulto" description="Tu hijo no la reporta: tú marcas «Cumplida» o «No cumplida». Ej.: estar en el coche a la hora de salida." /> : null}
           {!d.checkMode ? (
             <>
               <Toggle checked={d.requiresApproval} onChange={(v) => set('requiresApproval', v)} label="Necesita validación" description="Los puntos se suman cuando un adulto la aprueba." />
               <Toggle checked={d.requiresPhoto} onChange={(v) => set('requiresPhoto', v)} label="Pedir foto como prueba" description="Solo la ven los adultos de la familia." />
+              <Toggle checked={d.repeatable} onChange={(v) => set('repeatable', v)} label="Se puede repetir en el día" description="Cada vez da los puntos completos. Si no, solo una vez al día." />
             </>
           ) : null}
         </div>
+        {d.repeatable && !d.checkMode ? (
+          <div className="space-y-3 rounded-2xl border border-[var(--line)] p-4">
+            <Toggle checked={d.unlimited} onChange={(v) => set('unlimited', v)} label="Sin límite" description={d.assignees.length > 1 && d.assignmentMode === 'shared' ? 'Compartida: el máximo cuenta entre todos.' : 'Cada hijo tiene su propio máximo.'} />
+            {!d.unlimited ? <Field label="Máximo de veces al día">{(id) => <input id={id} className="field num w-28" type="number" min={2} max={50} value={d.maxPerDay} onChange={(e) => set('maxPerDay', Math.max(2, Number(e.target.value)))} />}</Field> : null}
+          </div>
+        ) : null}
+        {d.recurrence === 'as_needed' ? (
+          <Field label="Después de hacerla, vuelve en (días)" hint="Vacío = sin espera. Mientras espera, los hijos la ven en gris y no la pueden marcar.">
+            {(id) => <input id={id} className="field num w-28" type="number" min={1} max={365} value={d.cooldownDays} onChange={(e) => set('cooldownDays', e.target.value)} placeholder="Sin espera" />}
+          </Field>
+        ) : null}
 
-        {d.checkMode ? (
+        {d.recurrence === 'as_needed' ? null : d.checkMode ? (
           <div className="space-y-3 rounded-2xl border border-[var(--line)] p-4">
             <p className="text-sm muted">Los puntos de arriba (pueden ser 0) se dan solo si la marcas como cumplida.</p>
             <div className="grid grid-cols-2 gap-3">

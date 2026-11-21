@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { test, expect, devices, type Browser, type Locator, type Page } from '@playwright/test';
 
 /** Código TOTP (RFC 6238) a partir de la clave que muestra la pantalla, como haría la app de autenticación. */
@@ -741,6 +742,141 @@ test.describe.serial('Familia completa', () => {
     await adult.goto('/ajustes');
     await expect(adult.getByRole('heading', { name: 'Banco de los hijos' })).toBeVisible();
     await adult.screenshot({ path: `${SHOTS}/24-ajustes-banco.png`, fullPage: true });
+  });
+
+  test('«Cuando haga falta»: la hace el primero y no cuenta como fallo si nadie la hace', async ({ browser }) => {
+    await adult.goto('/tareas');
+    await adult.getByRole('button', { name: 'Nueva' }).click();
+    const d = adult.getByRole('dialog');
+    await d.getByLabel('Nombre de la tarea').fill('Sacar la basura');
+    await d.getByRole('radio', { name: 'Cuando haga falta' }).click();
+    await d.getByRole('button', { name: KID.name }).click();
+    await d.getByRole('button', { name: 'Hugo' }).click();
+    await expect(d.getByText('si nadie la hace, no pasa nada')).toBeVisible();
+    await adult.screenshot({ path: `${SHOTS}/28-tarea-cuando-haga-falta.png` });
+    await d.getByRole('button', { name: 'Crear tarea' }).click();
+    await expect(adult.getByRole('listitem').filter({ hasText: 'Sacar la basura' })).toContainText('Cuando haga falta');
+
+    await kid.goto('/');
+    const sec = kid.getByRole('heading', { name: 'Cuando haga falta' });
+    await expect(sec).toBeVisible();
+    // Es opcional: no cuenta en «Te quedan…».
+    await expect(kid.getByRole('heading', { name: 'Todo hecho por hoy' })).toBeVisible();
+    await kid.getByRole('button', { name: 'Marcar «Sacar la basura» como hecha' }).click();
+    await expect(kid.getByText('«Sacar la basura» enviada')).toBeVisible();
+
+    const hugo = await newPhonePage(browser);
+    await login(hugo, 'hugo', '1111', true);
+    await expect(hugo.getByText('Hecha por Lucía')).toBeVisible();
+    await expect(hugo.getByRole('button', { name: 'Marcar «Sacar la basura» como hecha' })).toHaveCount(0);
+    await hugo.screenshot({ path: `${SHOTS}/29-hijo-cuando-haga-falta-375.png`, fullPage: true });
+    // Nadie ha fallado: ni vencidas ni puntos perdidos.
+    const me = await api(hugo, 'get', '/me');
+    const prog = await api(hugo, 'get', `/progress/${me.body.user.id}`);
+    expect(prog.body.period.missedPoints).toBe(0);
+    await hugo.context().close();
+    await adult.goto('/validar');
+    await adult.getByRole('button', { name: `Aprobar «Sacar la basura» de ${KID.name}` }).click();
+    await expect(adult.getByText('Tarea aprobada')).toBeVisible();
+  });
+
+  test('Trabajos extra: se activa, el primero se la pide, se valida y vuelve al catálogo', async ({ browser }) => {
+    await adult.goto('/extras');
+    await expect(adult.getByRole('heading', { name: 'Trabajos extra' })).toBeVisible();
+    await adult.getByRole('button', { name: 'Nuevo' }).click();
+    const d = adult.getByRole('dialog');
+    await d.getByLabel('Nombre del trabajo').fill('Quitar hierbajos');
+    await d.getByLabel('Puntos', { exact: true }).fill('30');
+    await d.getByRole('button', { name: 'Crear trabajo' }).click();
+    await expect(adult.getByText('Trabajo creado')).toBeVisible();
+    await adult.getByRole('button', { name: 'Activar' }).click();
+    const a = adult.getByRole('dialog');
+    const week = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+    await a.getByLabel('Plazo (opcional)').fill(week);
+    await a.getByRole('button', { name: 'Poner en el tablón' }).click();
+    await expect(adult.getByText('Puesto en el tablón')).toBeVisible();
+    await adult.screenshot({ path: `${SHOTS}/30-extras-adulto.png`, fullPage: true });
+
+    await kid.goto('/extras');
+    await expect(kid.getByTestId('extra-card')).toContainText('Quitar hierbajos');
+    const hugo = await newPhonePage(browser);
+    await login(hugo, 'hugo', '1111', true);
+    await expect(hugo.getByRole('heading', { name: /Hoy tienes el día libre|Te queda|Todo hecho/ })).toBeVisible();
+    await hugo.goto('/extras');
+    await expect(hugo.getByTestId('extra-card')).toContainText('Quitar hierbajos');
+    await kid.getByRole('button', { name: 'Me la pido' }).click();
+    await expect(kid.getByText('¡Es tuya!')).toBeVisible();
+    // Hugo llega tarde: aún ve el botón, pero al pulsarlo le dice quién la tiene.
+    await hugo.getByRole('button', { name: 'Me la pido' }).click();
+    await expect(hugo.getByText('La tiene Lucía').first()).toBeVisible();
+    await hugo.screenshot({ path: `${SHOTS}/31-extras-hijo-375.png`, fullPage: true });
+    await hugo.context().close();
+
+    await kid.getByRole('button', { name: 'Ya la hice' }).click();
+    await expect(kid.getByText('Enviada. Falta que la validen.')).toBeVisible();
+    await adult.goto('/validar');
+    await adult.getByRole('button', { name: `Aprobar «Quitar hierbajos» de ${KID.name}` }).click();
+    await expect(adult.getByText('Tarea aprobada')).toBeVisible();
+    await adult.goto('/extras');
+    await expect(adult.getByText('Ahora no hay trabajos extra')).toBeVisible();
+    await expect(adult.getByTestId('extra-catalog-item')).toContainText('Quitar hierbajos');
+    await expect(adult.getByRole('button', { name: 'Activar' })).toBeEnabled();
+  });
+
+  test('repetir en el día: «Hecha 1 de 2 hoy» y, al llegar al máximo, ya no se puede', async () => {
+    await adult.goto('/tareas');
+    await adult.getByRole('button', { name: 'Nueva' }).click();
+    const d = adult.getByRole('dialog');
+    await d.getByLabel('Nombre de la tarea').fill('Pasear al perro');
+    await d.getByRole('button', { name: KID.name }).click();
+    await d.getByRole('checkbox', { name: /Necesita validación/ }).check({ force: true });
+    await d.getByRole('checkbox', { name: /Se puede repetir en el día/ }).check({ force: true });
+    await expect(d.getByLabel('Máximo de veces al día')).toHaveValue('2');
+    await adult.screenshot({ path: `${SHOTS}/32-tarea-repetir-en-el-dia.png` });
+    await d.getByRole('button', { name: 'Crear tarea' }).click();
+    await expect(adult.getByText('Tarea creada')).toBeVisible();
+
+    await kid.goto('/');
+    const mark = kid.getByRole('button', { name: 'Marcar «Pasear al perro» como hecha' });
+    await mark.click();
+    await expect(kid.getByText('Hecha 1 de 2 hoy')).toBeVisible();
+    await expect(mark).toBeVisible(); // sigue disponible
+    await mark.click();
+    await expect(kid.getByText('Hecha 2 de 2 hoy')).toBeVisible();
+    await expect(mark).toHaveCount(0);
+    await kid.screenshot({ path: `${SHOTS}/33-hijo-repetir-375.png`, fullPage: true });
+    const me = await api(kid, 'get', '/me');
+    const raw = await api(kid, 'get', `/wallet/${me.body.user.id}`);
+    expect(raw.status).toBe(200);
+  });
+
+  test('«Cuando haga falta» con espera: sale en gris con «Vuelve mañana» y no se puede marcar', async () => {
+    await adult.goto('/tareas');
+    await adult.getByRole('button', { name: 'Nueva' }).click();
+    const d = adult.getByRole('dialog');
+    await d.getByLabel('Nombre de la tarea').fill('Descargar el lavavajillas');
+    await d.getByRole('radio', { name: 'Cuando haga falta' }).click();
+    await d.getByRole('button', { name: KID.name }).click();
+    await d.getByLabel('Después de hacerla, vuelve en (días)').fill('2');
+    await adult.screenshot({ path: `${SHOTS}/34-tarea-espera.png` });
+    await d.getByRole('button', { name: 'Crear tarea' }).click();
+    await expect(adult.getByText('Tarea creada')).toBeVisible();
+
+    await kid.goto('/');
+    await kid.getByRole('button', { name: 'Marcar «Descargar el lavavajillas» como hecha' }).click();
+    await expect(kid.getByText('«Descargar el lavavajillas» enviada')).toBeVisible();
+    // Como si la hubiera hecho ayer: se mueve esa hecha un día atrás y vuelve a aparecer la de hoy.
+    const sql = `UPDATE task_instances SET due_date = due_date - 1, completed_at = completed_at - interval '1 day' WHERE task_id = (SELECT id FROM tasks WHERE title = 'Descargar el lavavajillas');
+      INSERT INTO task_instances(task_id, family_id, assignee_id, due_date, points) SELECT task_id, family_id, NULL, (now() AT TIME ZONE 'Europe/Madrid')::date, points FROM task_instances WHERE task_id = (SELECT id FROM tasks WHERE title = 'Descargar el lavavajillas');`;
+    execFileSync('psql', ['postgres://postgres:postgres@127.0.0.1:5432/mesada_e2e', '-qc', sql]);
+    await kid.goto('/');
+    const row = kid.getByRole('listitem').filter({ hasText: 'Descargar el lavavajillas' });
+    await expect(row).toContainText('Vuelve mañana');
+    await expect(row.getByRole('button')).toHaveCount(0);
+    await kid.screenshot({ path: `${SHOTS}/35-hijo-espera-375.png`, fullPage: true });
+    // Aunque lo intente por la API, el servidor lo rechaza.
+    const inst = (await api(kid, 'get', '/instances')).body.instances.find((i: any) => i.title === 'Descargar el lavavajillas' && i.status === 'pending');
+    expect((await api(kid, 'post', `/instances/${inst.id}/complete`, {})).status).toBe(409);
   });
 
   test('la app es instalable (manifest y service worker)', async () => {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Camera, Check, Clock, Hourglass, RotateCcw, ShieldCheck, Users, X } from 'lucide-react';
 import type { Instance } from '../lib/types';
 import { remaining, useNow } from '../lib/deadline';
+import { backLabel } from '../lib/format';
 import { Avatar, Badge, PointsPill } from './ui';
 import { BonusChip } from './BonusChip';
 
@@ -49,7 +50,8 @@ export function TaskRow({
   celebrate?: boolean;
 }) {
   const [justDone, setJustDone] = useState(false);
-  const doable = canComplete && !inst.check_mode && (inst.status === 'pending' || inst.status === 'rejected');
+  const waiting = !!inst.blocked_until;
+  const doable = canComplete && !inst.check_mode && !waiting && (inst.status === 'pending' || inst.status === 'rejected');
   const finished = inst.status === 'approved' || inst.status === 'submitted';
   const st = STATUS[inst.status];
   const now = useNow();
@@ -59,7 +61,7 @@ export function TaskRow({
   const checkLabel = !check ? null : inst.check_met === true ? 'Cumplida' : inst.check_met === false ? `No cumplida${inst.penalty_minutes ? ` · −${inst.penalty_minutes} min` : ''}` : 'La marca un adulto';
 
   return (
-    <li className="card flex items-center gap-3 p-3 pr-3.5">
+    <li className={`card flex items-center gap-3 p-3 pr-3.5 ${waiting ? 'opacity-60 grayscale' : ''}`} aria-disabled={waiting || undefined}>
       <span aria-hidden className="flex size-12 shrink-0 items-center justify-center rounded-[var(--radius-tile)] bg-[var(--chip)] text-2xl">
         {inst.icon}
       </span>
@@ -78,6 +80,11 @@ export function TaskRow({
               {inst.assignee_name}
             </span>
           ) : null}
+          {waiting ? <Badge tone="muted"><Clock size={12} aria-hidden /> {backLabel(inst.blocked_until!, inst.due_date)}</Badge> : null}
+          {inst.repeatable && inst.done_count > 0 ? (
+            <Badge tone="leaf">{inst.max_per_day ? `Hecha ${inst.done_count} de ${inst.max_per_day} hoy` : `Hecha ${inst.done_count} ${inst.done_count === 1 ? 'vez' : 'veces'} hoy`}</Badge>
+          ) : null}
+          {inst.recurrence === 'as_needed' && !inst.completed_by_name ? <Badge tone="sky">Cuando haga falta</Badge> : null}
           {inst.assignment_mode === 'shared' ? (
             <span className="inline-flex items-center gap-1 muted"><Users size={14} aria-hidden /> {inst.completed_by_name ? `Hecha por ${inst.completed_by_name}` : 'Compartida'}</span>
           ) : null}

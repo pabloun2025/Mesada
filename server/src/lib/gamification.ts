@@ -62,8 +62,9 @@ export async function computeStreak(db: Db, userId: string, today: string): Prom
     `SELECT i.due_date AS d,
             count(*)::int AS assigned,
             count(*) FILTER (WHERE i.status IN ('submitted','approved') AND (i.assignee_id = $1 OR i.completed_by = $1))::int AS done
-       FROM task_instances i
+       FROM task_instances i JOIN tasks t ON t.id = i.task_id
       WHERE i.due_date BETWEEN $2 AND $3
+        AND NOT i.is_extra AND i.repeat_no = 1 AND (t.recurrence <> 'as_needed' OR i.completed_by = $1) -- lo opcional no rompe la racha
         AND (i.assignee_id = $1 OR (i.assignee_id IS NULL AND (i.completed_by = $1 OR EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = i.task_id AND a.user_id = $1))))
       GROUP BY i.due_date`,
     [userId, from, today],
