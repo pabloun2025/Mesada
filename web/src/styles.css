@@ -15,22 +15,23 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
-  Sistema de diseño de Mesada
-  Marino (estructura) · Mandarina (acción y puntos) · Hoja (euros y aprobado) · Cielo (información)
+  Sistema de diseño de DiploP (marca: logotipo marino y amarillo, campo azul, osito)
+  Marino (estructura) · Azul DiploP (acento e interacción; token «tangerine» por compatibilidad)
+  Sol (acción principal y puntos) · Hoja (euros y aprobado) · Cielo (foco e información)
 */
 @theme {
   --font-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
   --font-sans: 'Mesada Digits', 'Atkinson Hyperlegible', ui-sans-serif, system-ui, sans-serif;
 
-  --color-ink: #172a54;
-  --color-ink-2: #3a4a6f;
-  --color-ink-3: #6b7896;
-  --color-paper: #f5f7fb;
+  --color-ink: #142a5c;
+  --color-ink-2: #3b4b70;
+  --color-ink-3: #64738f;
+  --color-paper: #f3f6fb;
   --color-surface: #ffffff;
   --color-line: #e3e8f2;
-  --color-tangerine: #f26b1d;
-  --color-tangerine-deep: #c9500c;
-  --color-tangerine-soft: #fff0e6;
+  --color-tangerine: #1d5fae;
+  --color-tangerine-deep: #154a8c;
+  --color-tangerine-soft: #e5eefa;
   --color-leaf: #1e9e6a;
   --color-leaf-deep: #137a50;
   --color-leaf-soft: #e3f6ec;
@@ -38,8 +39,12 @@
   --color-sky-soft: #e8f0ff;
   --color-berry: #d6336c;
   --color-berry-soft: #fde8ef;
-  --color-sun: #f2b01d;
-  --color-sun-soft: #fff6dc;
+  --color-sun: #ffb800;
+  --color-sun-soft: #fff3cc
+  --color-sun-deep: #e3a200;
+  --color-sun-ink: #6e4a00;
+  --color-brand: #1d5fae;
+  --color-brand-deep: #123f7e;;
 
   --radius-tile: 0.875rem;
   --radius-card: 1.25rem;
@@ -71,6 +76,9 @@
   --fg-3: #8d9abb;
   --line: #24314f;
   --chip: #1d2a4a;
+  /* El azul de marca se aclara en oscuro para que se lea sobre las tarjetas. */
+  --color-tangerine: #6b9fe8;
+  --color-tangerine-deep: #9cc0f5;
 }
 
 @layer base {
@@ -137,6 +145,19 @@
     outline: none;
     border-color: var(--color-sky);
     box-shadow: 0 0 0 3px rgb(79 141 247 / 0.2);
+  }
+  /* Campo azul de la marca, con el degradado de las ilustraciones. */
+  .brand-field {
+    background: radial-gradient(120% 90% at 0% 0%, #3d8bd0 0%, transparent 55%), linear-gradient(160deg, #1f63ad 0%, #154d93 55%, #0f3c78 100%);
+    color: #fff;
+  }
+  @media (max-width: 1023.98px) {
+    .brand-header {
+      background: linear-gradient(160deg, #1f63ad 0%, #154d93 100%);
+      box-shadow: 0 6px 18px -12px rgb(15 60 120 / 0.8);
+      --fg-2: #fff;
+      --chip: rgb(255 255 255 / 0.16);
+    }
   }
   .muted {
     color: var(--fg-3);

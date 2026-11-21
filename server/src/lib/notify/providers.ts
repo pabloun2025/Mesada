@@ -167,16 +167,23 @@ function esc(s: string) {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
+/** Cabecera con el logotipo de DiploP (si hay URL pública) y el nombre en texto por si el cliente bloquea imágenes. */
+function brandHeader() {
+  const base = (env('APP_BASE_URL') || '').replace(/\/$/, '');
+  const text = '<span style="font-size:22px;font-weight:bold;color:#142A5C">Diplo<span style="color:#E3A200">P</span></span>';
+  return `<p style="margin:0 0 16px">${base ? `<img src="${esc(base)}/brand/logo.png" alt="DiploP" width="110" style="display:block;height:auto;border:0">` : text}</p>`;
+}
+
 function emailHtml(msg: OutgoingMessage) {
-  return `<!doctype html><html lang="es"><body style="margin:0;background:#F5F7FB;font-family:Arial,sans-serif;color:#172A54">
+  return `<!doctype html><html lang="es"><body style="margin:0;background:#F3F6FB;font-family:Arial,sans-serif;color:#142A5C">
 <div style="max-width:520px;margin:0 auto;padding:28px 20px">
-<p style="font-size:20px;font-weight:bold;margin:0 0 16px">Mesada</p>
+${brandHeader()}
 <div style="background:#fff;border:1px solid #E3E8F2;border-radius:16px;padding:22px">
 <h1 style="font-size:18px;margin:0 0 10px">${esc(msg.subject)}</h1>
 <p style="font-size:15px;line-height:1.5;margin:0;white-space:pre-line">${esc(msg.body)}</p>
-${msg.link ? `<p style="margin:20px 0 0"><a href="${esc(msg.link)}" style="display:inline-block;background:#F26B1D;color:#fff;padding:11px 18px;border-radius:999px;text-decoration:none;font-weight:bold">Abrir Mesada</a></p>` : ''}
+${msg.link ? `<p style="margin:20px 0 0"><a href="${esc(msg.link)}" style="display:inline-block;background:#FFB800;color:#142A5C;padding:11px 18px;border-radius:999px;text-decoration:none;font-weight:bold">Abrir DiploP</a></p>` : ''}
 </div>
-<p style="font-size:12px;color:#6B7896;margin:16px 4px 0">Recibes este aviso porque tu familia usa Mesada. Los adultos de la familia pueden cambiar qué avisos llegan y por qué medio.</p>
+<p style="font-size:12px;color:#6B7896;margin:16px 4px 0">Recibes este aviso porque tu familia usa DiploP. Los adultos de la familia pueden cambiar qué avisos llegan y por qué medio.</p>
 </div></body></html>`;
 }
 
@@ -198,7 +205,7 @@ export function getProviders(): ProviderSet {
   if (override) return override;
   if (cached) return cached;
   const real = realSendEnabled();
-  const from = `"${env('MAIL_FROM_NAME') || 'Mesada'}" <${env('MAIL_FROM')}>`;
+  const from = `"${env('MAIL_FROM_NAME') || 'DiploP'}" <${env('MAIL_FROM')}>`;
   const emailKind = env('EMAIL_PROVIDER') || 'resend';
   const resendReady = env('RESEND_API_KEY') && env('MAIL_FROM');
   const smtpReady = env('SMTP_HOST') && env('SMTP_USER') && env('SMTP_PASS') && env('MAIL_FROM');

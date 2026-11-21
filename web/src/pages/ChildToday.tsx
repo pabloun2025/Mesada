@@ -64,7 +64,9 @@ export default function ChildToday() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <section className="panel mb-6 flex flex-col items-center gap-5 p-6 sm:flex-row sm:items-center sm:gap-8">
+      {/* Franja de marca: el osito de DiploP se asoma por el borde inferior, como en el banner. */}
+      <section className="relative mb-6 flex flex-col items-center gap-5 overflow-hidden rounded-[var(--radius-panel)] bg-[#0b5a97] p-6 pb-28 text-white shadow-[0_18px_40px_-24px_rgb(11_90_151/0.9)] [--card:#0b5a97] [--chip:#1b6bab] [--line:#2c79b5] [--fg:#fff] [--fg-3:#cfe1f3] sm:flex-row sm:items-center sm:gap-8 sm:pr-48 sm:pb-6">
+        <img src="/brand/peek.png" alt="" width={230} height={113} className="pointer-events-none absolute right-2 bottom-0 w-44 [mask-image:linear-gradient(to_right,transparent,black_22%,black_85%,transparent)] sm:w-52" />
         <WeekRing points={p?.week.points ?? 0} goal={p?.week.goal ?? 0} cents={p?.week.cents ?? 0} />
         <div className="text-center sm:text-left">
           <p className="text-sm font-bold muted first-letter:uppercase">{today ? weekdayLong(today) : ''}</p>
@@ -73,7 +75,7 @@ export default function ChildToday() {
           </h1>
           <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
-              <Flame size={16} className={p?.streak ? 'text-tangerine' : 'text-[var(--fg-3)]'} aria-hidden /> {p?.streak ?? 0} {p?.streak === 1 ? 'día' : 'días'} de racha
+              <Flame size={16} className={p?.streak ? 'text-sun' : 'text-[var(--fg-3)]'} aria-hidden /> {p?.streak ?? 0} {p?.streak === 1 ? 'día' : 'días'} de racha
             </span>
             {p ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
@@ -98,7 +100,7 @@ export default function ChildToday() {
             ))}
           </ul>
         ) : (
-          <div className="card"><Empty icon={<PartyPopper />} title="Nada por aquí">Disfruta del día.</Empty></div>
+          <div className="card"><Empty mascot icon={<PartyPopper />} title="Nada por aquí">Disfruta del día.</Empty></div>
         )}
       </section>
 

@@ -95,3 +95,8 @@ Formato: contexto → decisión → consecuencias. Las más recientes van al fin
 ### D16. Imagen Docker multi-etapa, sin root
 **Decisión:** compilar la web y la API en etapas separadas y dejar una imagen final `node:22-alpine` con el usuario `node`, `HEALTHCHECK`, volúmenes para la base de datos y las fotos, y un servicio de copias con `pg_dump` más las fotos.
 **Consecuencias:** basta con `docker compose up -d --build` en un VPS o en un servidor doméstico. El HTTPS lo pone un proxy inverso delante (guía en `despliegue.md`).
+
+### D22. Marca DiploP (21/11, ilustraciones aportadas por el usuario)
+**Decisión:** la app se presenta como **DiploP** (logotipo marino y amarillo, campo azul, osito con gorra). El repositorio, el dominio `mesada.veryfacil.org`, la cabecera `X-Mesada` y el remitente `mesada@veryfacil.org` no cambian. Recursos en `web/public/brand/` (logotipo transparente y su versión blanca, ilustraciones apaisada y vertical, osito, osito asomado) e iconos PWA nuevos, recortados del diseño entregado.
+**Sistema:** Sol `#FFB800` con texto marino para la acción principal, los puntos y los contadores (contraste ≈ 9:1); Azul DiploP `#1D5FAE` como acento e interacción (el token `tangerine` se conserva por compatibilidad); Marino `#142A5C` para estructura; Hoja para euros. En móvil la cabecera es la franja azul de la marca; en el «Hoy» de los hijos el osito se asoma por el borde, como en el banner; el osito aparece en los estados vacíos de «todo hecho».
+**Pendiente:** las ilustraciones vienen de una lámina de 1536×1024 px; con originales a mayor resolución se verían más nítidas en pantallas grandes.
