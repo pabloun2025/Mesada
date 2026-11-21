@@ -145,3 +145,12 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Siempre disponible; se puede hacer una vez al día.
 - Si nadie la hace ese día, no pasa nada: no cuenta como fallo, ni en la racha ni en el % cumplido.
 - Con varios hijos es compartida: la marca el primero que la hace y se lleva los puntos.
+
+## I11. Tareas extra sin fecha (21/11)
+**Estado: decidida, sin programar.**
+- Para trabajos ocasionales sin fecha: sacar los hierbajos, limpiar el patio, doblar la ropa…
+- Catálogo guardado de tareas extra; el padre activa una cuando hace falta y sale en el tablón «Trabajos extra».
+  - Al hacerla y validarla, sale del tablón y vuelve al catálogo para la próxima vez.
+- Plazo opcional (p. ej., «antes del domingo»); si no, está disponible hasta que alguien la haga.
+- Con varios hijos: el primero que pulsa «Me la pido» se la queda reservada.
+- Valen como cualquier tarea (puntos y bonos).
