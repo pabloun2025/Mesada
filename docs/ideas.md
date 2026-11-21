@@ -169,3 +169,11 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - monedas doradas como adorno al canjear, en el recibo y en la cuenta de dinero.
 - El hijo ve cuánto valen sus puntos en euros: en el inicio («120 ★ = 6 €») y en cada tarea («+10 ★ · 0,50 €»).
 - Sin maqueta: se programa directo.
+
+## I13. Repetir una tarea en el mismo día (21/11)
+**Estado: decidida, sin programar.**
+- Opción en cada tarea: «Se puede repetir en el día». Por defecto, no: la mayoría solo se hacen una vez al día.
+- Si se puede repetir, el padre pone el máximo de veces (2, 3, 5…) o «sin límite».
+- Cada vez da los puntos completos (dos paseos del perro de 10 = 20 puntos).
+- Vale para todos los tipos: diarias, de días fijos y «Cuando haga falta».
+- Si la tarea es compartida, cualquier hijo puede hacerla hasta llegar al máximo entre todos (máximo 3: Ana 2 veces y Leo 1).
