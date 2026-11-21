@@ -9,3 +9,4 @@ test-results/
 playwright-report/
 .playwright-cli/
 web/dev-dist/
+__pycache__/

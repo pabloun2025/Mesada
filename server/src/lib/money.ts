@@ -3,7 +3,8 @@ import type { AuthUser } from './auth.js';
 import { badRequest, conflict, forbidden, notFound } from './errors.js';
 import { familyToday, getFamily, pointsToCents, centsToPoints } from './family.js';
 import { addMoney, addPoints, lockUser, moneyBalance, pointsBalance } from './ledger.js';
-import { audit, notify, notifyAdults } from './audit.js';
+import { audit } from './audit.js';
+import { notify, notifyAdults } from './notify/dispatch.js';
 import { isValidDate, periodBounds } from './dates.js';
 import { evaluateBadges } from './gamification.js';
 
@@ -56,7 +57,7 @@ export async function settlePeriod(adult: AuthUser, userId: string, anyDateInPer
       await addMoney(db, { familyId: adult.familyId, userId, deltaCents: cents, kind: 'conversion', refId: s.id, note: `Cierre ${periodLabel(start, end)}`, createdBy: adult.id, idempotencyKey: `settle-eur:${s.id}` });
     }
     await audit(db, adult.familyId, adult.id, 'allowance.settle', 'settlement', s.id, { userId, start, end, points: converted, cents, capped });
-    await notify(db, userId, 'settlement', 'Cierre de periodo', `${converted} puntos convertidos en ${(cents / 100).toFixed(2).replace('.', ',')} €`, '/mesada');
+    await notify(db, { userId, event: 'settlement', title: 'Cierre de periodo', body: `${converted} puntos convertidos en ${(cents / 100).toFixed(2).replace('.', ',')} €`, link: '/mesada', dedupeKey: `settlement:${s.id}` });
     return s;
   });
 }
@@ -83,7 +84,7 @@ export async function recordPayment(
     );
     await addMoney(db, { familyId: adult.familyId, userId: p.userId, deltaCents: -p.amountCents, kind: 'payment', refId: pay.id, note: p.note ?? 'Pago', createdBy: adult.id, idempotencyKey: `payment:${pay.id}` });
     await audit(db, adult.familyId, adult.id, 'allowance.payment', 'payment', pay.id, { userId: p.userId, cents: p.amountCents, method: p.method });
-    await notify(db, p.userId, 'payment', 'Has recibido tu paga', `${(p.amountCents / 100).toFixed(2).replace('.', ',')} €`, '/mesada');
+    await notify(db, { userId: p.userId, event: 'payment', title: 'Has recibido tu paga', body: `${(p.amountCents / 100).toFixed(2).replace('.', ',')} €`, link: '/mesada', dedupeKey: `payment:${pay.id}` });
     return { ...pay, duplicate: false };
   });
 }
@@ -98,7 +99,7 @@ export async function adjustPoints(adult: AuthUser, p: { userId: string; delta: 
     const r = await addPoints(db, { familyId: adult.familyId, userId: p.userId, delta: p.delta, kind, note: p.note, createdBy: adult.id, idempotencyKey: p.idempotencyKey ? `adj:${adult.familyId}:${p.idempotencyKey}` : null });
     if (r.duplicate) return { duplicate: true };
     await audit(db, adult.familyId, adult.id, 'points.adjust', 'user', p.userId, { delta: p.delta, note: p.note, kind });
-    await notify(db, p.userId, 'points', p.delta > 0 ? `+${p.delta} puntos` : `${p.delta} puntos`, p.note, '/progreso');
+    await notify(db, { userId: p.userId, event: 'points_adjusted', title: p.delta > 0 ? `+${p.delta} puntos` : `${p.delta} puntos`, body: p.note, link: '/progreso', dedupeKey: r.id ? `points:${r.id}` : null });
     return { duplicate: false, balance: await pointsBalance(db, p.userId) };
   });
 }
@@ -156,7 +157,7 @@ export async function requestRedemption(child: AuthUser, rewardId: string) {
     // Los puntos se reservan al pedir; si se rechaza, se devuelven.
     await addPoints(db, { familyId: child.familyId, userId: child.id, delta: -reward.cost_points, kind: 'redemption', refId: red.id, note: reward.title, createdBy: child.id, idempotencyKey: `redeem:${red.id}` });
     await audit(db, child.familyId, child.id, 'reward.request', 'redemption', red.id, { reward: reward.title, cost: reward.cost_points });
-    await notifyAdults(db, child.familyId, 'redemption', `${child.displayName} quiere «${reward.title}»`, `${reward.cost_points} puntos`, '/premios');
+    await notifyAdults(db, child.familyId, { event: 'reward_requested', title: `${child.displayName} quiere «${reward.title}»`, body: `${reward.cost_points} puntos`, link: '/validar', dedupeKey: `redeem:${red.id}` });
     return red;
   });
 }
@@ -173,7 +174,7 @@ export async function decideRedemption(adult: AuthUser, redemptionId: string, de
     }
     await audit(db, adult.familyId, adult.id, `reward.${decision}`, 'redemption', red.id, { note });
     const msg = { approved: 'aprobada', rejected: 'rechazada (puntos devueltos)', delivered: 'entregada' }[decision];
-    await notify(db, red.user_id, 'redemption', `«${red.reward_title}» ${msg}`, note, '/premios');
+    await notify(db, { userId: red.user_id, event: 'reward_decided', title: `«${red.reward_title}» ${msg}`, body: note, link: '/premios', dedupeKey: `redeem-${decision}:${red.id}` });
     if (decision !== 'rejected') {
       const fam = await getFamily(db, adult.familyId);
       await evaluateBadges(db, red.user_id, familyToday(fam), fam.timezone, 0);

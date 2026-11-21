@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16.9-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mesada_test
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: API
+        working-directory: server
+        run: npm ci && npm run typecheck && npm test
+      - name: PWA
+        working-directory: web
+        run: npm ci && npm run build

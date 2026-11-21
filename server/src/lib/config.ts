@@ -19,5 +19,7 @@ export const config = {
   staticDir: process.env.STATIC_DIR ? path.resolve(process.env.STATIC_DIR) : undefined,
   /** Intentos por minuto e IP en login/setup/cambio de contraseña. */
   authRateLimit: Number(process.env.AUTH_RATE_LIMIT ?? 10),
+  /** URL pública, para los enlaces de correos y WhatsApp. */
+  appBaseUrl: process.env.APP_BASE_URL ?? '',
   logLevel: process.env.LOG_LEVEL ?? 'info',
 };

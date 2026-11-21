@@ -2,7 +2,7 @@ import { many, type Db } from './db.js';
 import { addDays } from './dates.js';
 import { occursOn, occurrenceIndex, type TaskSchedule } from './recurrence.js';
 import { familyToday, getFamily } from './family.js';
-import { notify } from './audit.js';
+import { scheduleReminders } from './notify/reminders.js';
 
 interface TaskRow extends TaskSchedule {
   id: string;
@@ -73,28 +73,7 @@ export async function ensureInstances(db: Db, familyId: string, opts: { from?: s
     [familyId, today],
   );
 
-  // Recordatorio diario (uno por niño y día).
-  const counts = await many<{ user_id: string; n: number }>(
-    db,
-    `SELECT u.id AS user_id, count(i.id)::int AS n
-       FROM users u
-       JOIN task_instances i ON i.family_id = u.family_id AND i.due_date = $2 AND i.status = 'pending'
-        AND (i.assignee_id = u.id OR (i.assignee_id IS NULL AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = i.task_id AND a.user_id = u.id)))
-      WHERE u.family_id = $1 AND u.role = 'child' AND u.active
-      GROUP BY u.id`,
-    [familyId, today],
-  );
-  for (const c of counts) {
-    await notify(
-      db,
-      c.user_id,
-      'reminder',
-      c.n === 1 ? 'Tienes 1 tarea para hoy' : `Tienes ${c.n} tareas para hoy`,
-      'Échales un vistazo cuando puedas.',
-      '/hoy',
-      `daily:${c.user_id}:${today}`,
-    );
-  }
+  await scheduleReminders(db, familyId);
   return { today, created: rows.length };
 }
 

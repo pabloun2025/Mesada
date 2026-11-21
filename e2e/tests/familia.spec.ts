@@ -231,6 +231,47 @@ test.describe.serial('Familia completa', () => {
     await p.context().close();
   });
 
+  test('los padres configuran los avisos y WhatsApp queda bloqueado para menores de 13', async () => {
+    await adult.goto('/avisos');
+    await expect(adult.getByText(/modo simulado/)).toBeVisible();
+    const lucia = adult.getByRole('article').filter({ hasText: KID.name });
+    await lucia.getByRole('button', { name: 'Contacto' }).click();
+    const d = adult.getByRole('dialog');
+    await d.getByLabel('Teléfono de WhatsApp').fill('600 11 22 33');
+    await d.getByText('Consentimiento para WhatsApp').click();
+    await d.getByRole('button', { name: 'Guardar' }).click();
+    await expect(adult.getByText('Datos de contacto guardados')).toBeVisible();
+    // Lucía no tiene año de nacimiento: WhatsApp sigue bloqueado y se explica por qué
+    await expect(lucia).toContainText('WhatsApp: Falta el año de nacimiento');
+    const box = lucia.getByLabel(`Recordatorio de tareas del día por WhatsApp para ${KID.name}`);
+    await expect(box).toBeDisabled();
+    // Con el año (14 años) se habilita
+    await adult.goto('/familia');
+    await adult.getByRole('button', { name: `Editar a ${KID.name}` }).click();
+    await adult.getByRole('dialog').getByLabel('Año de nacimiento').fill('2012');
+    await adult.getByRole('dialog').getByRole('button', { name: 'Guardar' }).click();
+    await adult.goto('/avisos');
+    await expect(box).toBeEnabled();
+    await expect(box).toBeChecked();
+    await box.uncheck();
+    await expect(box).not.toBeChecked();
+    await adult.screenshot({ path: `${SHOTS}/09-avisos.png`, fullPage: true });
+    // El hijo ve sus avisos, pero no puede cambiarlos
+    await kid.goto('/avisos');
+    await expect(kid.getByText('Tus avisos los configuran tus padres.')).toBeVisible();
+    await expect(kid.getByRole('checkbox').first()).toBeDisabled();
+  });
+
+  test('enlace de recuperación de contraseña sin revelar cuentas', async ({ browser }) => {
+    const p = await newPhonePage(browser);
+    await p.goto('/');
+    await p.getByRole('link', { name: '¿Has olvidado la contraseña?' }).click();
+    await p.getByLabel('Usuario o correo').fill('no-existe');
+    await p.getByRole('button', { name: 'Enviar enlace' }).click();
+    await expect(p.getByRole('status')).toHaveText('Si la cuenta existe y tiene correo, te hemos enviado un enlace.');
+    await p.context().close();
+  });
+
   test('la app es instalable (manifest y service worker)', async () => {
     const res = await adult.request.get('/manifest.webmanifest');
     expect(res.ok()).toBe(true);

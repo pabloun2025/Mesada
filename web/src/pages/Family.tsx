@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Pencil, UserPlus } from 'lucide-react';
+import { Mail, Pencil, UserPlus } from 'lucide-react';
 import { api, patch, post } from '../lib/api';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
@@ -82,10 +82,33 @@ function MemberEditor({ member, onClose }: { member: User | null; onClose: () =>
   );
 }
 
+function InviteSheet({ onClose }: { onClose: () => void }) {
+  const [f, setF] = useState({ email: '', displayName: '' });
+  const [error, setError] = useState('');
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const send = useMutation({
+    mutationFn: () => post('/invitations', f),
+    onSuccess: () => { toast(`Invitación enviada a ${f.email}`); invalidate(); onClose(); },
+    onError: (e: Error) => setError(e.message),
+  });
+  return (
+    <Sheet open onClose={onClose} title="Invitar a otro adulto" footer={<Button className="w-full" loading={send.isPending} onClick={() => send.mutate()}>Enviar invitación</Button>}>
+      <p className="mb-4 muted">Recibirá un correo con un enlace para crear su usuario. Caduca en 7 días.</p>
+      <div className="space-y-4">
+        <Field label="Nombre">{(id) => <input id={id} className="field" value={f.displayName} onChange={(e) => setF({ ...f, displayName: e.target.value })} />}</Field>
+        <Field label="Correo">{(id) => <input id={id} className="field" type="email" spellCheck={false} autoComplete="off" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />}</Field>
+        {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+      </div>
+    </Sheet>
+  );
+}
+
 export default function Family() {
   const { user } = useSession();
   const { data, isLoading } = useQuery({ queryKey: ['family'], queryFn: () => api<{ members: User[] }>('/family') });
   const [editing, setEditing] = useState<{ m: User | null } | null>(null);
+  const [inviting, setInviting] = useState(false);
   if (isLoading || !data) return <Loading />;
   const groups = [
     { title: 'Hijos', list: data.members.filter((m) => m.role === 'child') },
@@ -93,7 +116,7 @@ export default function Family() {
   ];
   return (
     <div className="max-w-3xl">
-      <PageHeader title="Familia" subtitle="Perfiles, accesos y objetivos." action={<Button onClick={() => setEditing({ m: null })}><UserPlus size={18} /> Añadir</Button>} />
+      <PageHeader title="Familia" subtitle="Perfiles, accesos y objetivos." action={<div className="flex gap-2"><Button variant="secondary" onClick={() => setInviting(true)}><Mail size={18} /> Invitar</Button><Button onClick={() => setEditing({ m: null })}><UserPlus size={18} /> Añadir</Button></div>} />
       {groups.map((g) => (
         <section key={g.title} className="mb-6">
           <h2 className="mb-3 text-lg font-bold">{g.title}</h2>
@@ -111,6 +134,7 @@ export default function Family() {
           </ul>
         </section>
       ))}
+      {inviting ? <InviteSheet onClose={() => setInviting(false)} /> : null}
       {editing ? <MemberEditor member={editing.m} onClose={() => setEditing(null)} /> : null}
     </div>
   );

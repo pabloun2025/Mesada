@@ -68,6 +68,30 @@ Formato: contexto → decisión → consecuencias. Las más recientes van al fin
 **Decisión:** 5 fallos en 15 minutos bloquean esa cuenta 15 minutos. Se desbloquea al cambiar el PIN.
 **Consecuencias:** el estado vive en memoria (se pierde al reiniciar, lo que es aceptable con una sola instancia).
 
+### D17. Reutilizar la infraestructura de TEINVITO con aislamiento
+**Contexto:** el usuario pide no duplicar servicios. El análisis está en `infraestructura-compartida.md`.
+**Decisión:** misma VM de Oracle, mismo túnel de Cloudflare (`mesada.veryfacil.org`), mismo servidor de Evolution API y misma cuenta de Brevo. El proyecto Compose (`mesada-prod`), la base, los usuarios, las sesiones y el repositorio son propios. La app se une a la red de consulares solo con un alias propio.
+**Consecuencias:** ninguna máquina, túnel ni certificado nuevos. El despliegue no lee ni escribe la configuración de otros proyectos, salvo el alta única de la instancia de WhatsApp, que es manual.
+
+### D18. PostgreSQL en contenedor propio, no dentro de `teinvito-postgres`
+**Contexto:** se pidió reutilizar el servidor de base de datos «cuando resulte adecuado».
+**Decisión:** contenedor propio ligero (512 MB como máximo).
+**Consecuencias:** es el patrón del servidor (TEINVITO tampoco comparte el de consulares). Compartirlo exigiría crear roles en la base de producción de TEINVITO **y** unir Mesada a la red interna de TEINVITO, que expone su app. Se acoplarían reinicios, versiones y restauraciones. El coste de tenerlo aparte es mínimo y sin gasto. Cambiarlo es solo cambiar `DATABASE_URL`.
+
+### D19. WhatsApp: instancia propia con token de instancia
+**Contexto:** Evolution API (Baileys) es no oficial, y la clave global controla todas las líneas, incluidas las institucionales.
+**Decisión:** instancia `mesada` vinculada a un teléfono de la familia. Mesada solo guarda el **token de su instancia**; la clave global se usa una vez en el servidor (`deploy/setup-whatsapp.sh`) y no se copia. No hay webhook (solo envío) y se aplican el tope diario y la pausa entre mensajes.
+**Consecuencias:** mínimo privilegio. Que Evolution v2.3.7 acepte el token de instancia en `sendText` **se verifica en la prueba controlada** antes de activar el envío real.
+
+### D20. Correo por SMTP genérico con clave SMTP propia
+**Contexto:** la clave API de Brevo da acceso a toda la cuenta institucional (contactos de campañas), y veryfacil.org ya envía con Resend (firmador).
+**Decisión:** proveedor SMTP genérico (`nodemailer`, la única dependencia nueva). En producción, el relé de Brevo con una **clave SMTP propia de Mesada** (solo envío, revocable por separado). Remitente en veryfacil.org, nunca de la Embajada. Tope mensual propio, porque TEINVITO no ve estos envíos en su contador.
+**Consecuencias:** cambiar a Resend u otro proveedor es cambiar variables de entorno.
+
+### D21. Outbox transaccional y deduplicación en la base de datos
+**Decisión:** los avisos externos se escriben en `notification_outbox` dentro de la transacción de la acción, con `dedupe_key UNIQUE`. Un worker los envía después. Los resultados inciertos no se reintentan.
+**Consecuencias:** ningún aviso por acciones que fallan, ningún duplicado por reintentos o carreras, y trazabilidad de cada envío.
+
 ### D16. Imagen Docker multi-etapa, sin root
 **Decisión:** compilar la web y la API en etapas separadas y dejar una imagen final `node:22-alpine` con el usuario `node`, `HEALTHCHECK`, volúmenes para la base de datos y las fotos, y un servicio de copias con `pg_dump` más las fotos.
 **Consecuencias:** basta con `docker compose up -d --build` en un VPS o en un servidor doméstico. El HTTPS lo pone un proxy inverso delante (guía en `despliegue.md`).

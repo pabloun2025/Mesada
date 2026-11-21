@@ -89,10 +89,19 @@ Tres magnitudes separadas, cada una con su libro de movimientos de solo inserci�
 - Estadísticas: barras por semana (8) o mes (6) y por hijo, más una tabla con los totales (ganado, convertido, pagado y racha).
 - Historial completo e inmutable de acciones (auditoría).
 
-## 8. Notificaciones
+## 8. Notificaciones (módulo común multicanal)
 
-- Avisos dentro de la app (campana con contador): recordatorio diario de las tareas del día (uno por hijo y día), tarea por validar (a los adultos), aprobada o rechazada, insignia nueva, cierre, pago y recompensas.
-- *Pendiente:* notificaciones push del sistema mediante Web Push con VAPID (sin servicios de pago).
+- **Canales:** en la aplicación (campana, siempre), **correo** (SMTP genérico: relé de Brevo con clave propia, o Resend) y **WhatsApp** (Evolution API, con una instancia propia de Mesada en el servidor compartido). *Pendiente:* Web Push.
+- **Eventos (12):** nueva tarea asignada, recordatorio diario, tarea a punto de vencer, tarea enviada para validar (adultos), aprobada (con puntos), devuelta para repasar, ajuste de puntos, recompensa pedida (adultos), recompensa decidida, cierre de mesada, pago registrado e insignia. Cada evento tiene canales por defecto, pensados para ahorrar el cupo de correo: lo frecuente va por WhatsApp y el correo se reserva para lo importante.
+- **Preferencias:** por persona, evento y canal. **Solo los adultos** las cambian: las suyas y las de los hijos, nunca las de otro adulto. Los hijos las ven en solo lectura. Datos de contacto (correo de los adultos, teléfono y consentimiento de WhatsApp) gestionados por un adulto.
+- **Reglas de protección:** WhatsApp solo con teléfono, consentimiento registrado y **13 años como mínimo** (condiciones de WhatsApp en la UE). Con solo el año de nacimiento se toma la edad mínima posible, y sin año no hay WhatsApp. El correo solo se usa para adultos.
+- **Recordatorios configurables por familia:** hora del recordatorio diario, aviso X minutos antes de la hora límite y **horario de silencio** (lo que se genere durante el silencio espera a que termine, salvo los correos críticos).
+- **Sin duplicados:** cada aviso tiene una clave única por canal (`reminder:<hijo>:<fecha>`, `duesoon:<ocurrencia>:<hijo>`, `approved:<ocurrencia>`…). La base de datos impide repetirlo aunque el programador corra varias veces o haya varias instancias.
+- **Outbox transaccional:** el aviso se encola en la misma transacción que la acción. Si la acción falla (por ejemplo, una aprobación duplicada), no sale nada.
+- **Envío:** un worker procesa la cola cada 30 s con `FOR UPDATE SKIP LOCKED`. Los fallos temporales se reintentan con espera creciente (hasta 5 intentos). Un resultado **incierto** (tiempo agotado tras enviar) no se reintenta, para no duplicar; queda marcado. Topes de la instalación: 100 correos al mes y 40 WhatsApp al día (configurables), con 4 s como mínimo entre WhatsApp.
+- **Modo simulado por defecto** (`NOTIFY_REAL_SEND=false`): los avisos se registran y se ven en «Últimos envíos», pero no salen. Las pruebas usan siempre proveedores simulados.
+- **Recuperar la contraseña** (adultos con correo): enlace de un solo uso, válido 30 minutos. La respuesta es la misma exista o no la cuenta, y cambiarla cierra todas las sesiones. Los hijos recuperan el PIN a través de un adulto.
+- **Invitar a otro adulto por correo:** enlace válido 7 días y de un solo uso, con el que crea su usuario y queda dentro de la familia.
 
 ## 9. Experiencia de usuario
 

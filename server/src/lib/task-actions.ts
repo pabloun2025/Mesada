@@ -3,7 +3,8 @@ import type { AuthUser } from './auth.js';
 import { badRequest, conflict, forbidden, notFound } from './errors.js';
 import { familyToday, getFamily } from './family.js';
 import { addPoints } from './ledger.js';
-import { audit, notify, notifyAdults } from './audit.js';
+import { audit } from './audit.js';
+import { notify, notifyAdults } from './notify/dispatch.js';
 import { evaluateBadges } from './gamification.js';
 
 interface InstanceRow {
@@ -85,7 +86,7 @@ export async function completeInstance(
       await award(db, inst, user.id, inst.points, null);
       await evaluateBadges(db, user.id, today, fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [user.id]))!.weekly_goal_points);
     } else {
-      await notifyAdults(db, user.familyId, 'approval', `${user.displayName} ha terminado «${inst.title}»`, 'Pendiente de validar', '/validar');
+      await notifyAdults(db, user.familyId, { event: 'task_submitted', title: `${user.displayName} ha terminado «${inst.title}»`, body: 'Pendiente de validar', link: '/validar', dedupeKey: `submitted:${inst.id}:${Date.now()}` });
     }
     await audit(db, user.familyId, user.id, 'task.complete', 'task_instance', inst.id, { status });
     return { id: inst.id, status, points: autoApprove ? inst.points : 0 };
@@ -119,7 +120,7 @@ export async function reviewInstance(
       if (points !== inst.points) {
         await audit(db, adult.familyId, adult.id, 'task.points_changed', 'task_instance', inst.id, { from: inst.points, to: points });
       }
-      await notify(db, beneficiary, 'approved', `«${inst.title}» aprobada`, `+${points} puntos`, '/progreso');
+      await notify(db, { userId: beneficiary, event: 'task_approved', title: `«${inst.title}» aprobada`, body: `+${points} puntos`, link: '/progreso', dedupeKey: `approved:${inst.id}` });
       await evaluateBadges(db, beneficiary, familyToday(fam), fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [beneficiary]))!.weekly_goal_points);
     } else {
       if (inst.status !== 'submitted') throw conflict('Solo se pueden rechazar tareas enviadas', 'not_submitted');
@@ -128,7 +129,7 @@ export async function reviewInstance(
         [inst.id, adult.id, decision.note ?? null],
       );
       if (beneficiary) {
-        await notify(db, beneficiary, 'rejected', `«${inst.title}» necesita un repaso`, decision.note ?? '', '/hoy');
+        await notify(db, { userId: beneficiary, event: 'task_rejected', title: `«${inst.title}» necesita un repaso`, body: decision.note ?? '', link: '/' });
       }
     }
     await audit(db, adult.familyId, adult.id, decision.approve ? 'task.approve' : 'task.reject', 'task_instance', inst.id, {

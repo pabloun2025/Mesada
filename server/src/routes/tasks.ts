@@ -13,6 +13,7 @@ import { familyToday, getFamily } from '../lib/family.js';
 import { ensureInstancesThrottled, regenerateTask } from '../lib/instances.js';
 import { completeInstance, reviewInstance } from '../lib/task-actions.js';
 import { isValidDate } from '../lib/dates.js';
+import { notify } from '../lib/notify/dispatch.js';
 
 const dateStr = z.string().refine(isValidDate, 'fecha no válida');
 
@@ -58,6 +59,14 @@ const INSTANCE_SELECT = `
     LEFT JOIN users au ON au.id = i.assignee_id
     LEFT JOIN users cu ON cu.id = i.completed_by`;
 
+/** Aviso de tarea nueva a cada hijo asignado (una vez por tarea y persona, aunque se edite). */
+async function notifyAssigned(db: any, taskId: string, title: string, points: number, assignees: string[]) {
+  const kids = await many(db, `SELECT id FROM users WHERE id = ANY($1::uuid[]) AND role = 'child'`, [assignees]);
+  for (const k of kids) {
+    await notify(db, { userId: k.id, event: 'task_assigned', title: `Nueva tarea: ${title}`, body: `+${points} puntos`, link: '/', dedupeKey: `assigned:${taskId}:${k.id}` });
+  }
+}
+
 export default async function taskRoutes(app: FastifyInstance) {
   app.get('/api/tasks', async (req) => {
     const u = requireUser(req);
@@ -86,6 +95,7 @@ export default async function taskRoutes(app: FastifyInstance) {
       await db.query(`INSERT INTO task_assignees(task_id, user_id, position) SELECT $1, x, ord FROM unnest($2::uuid[]) WITH ORDINALITY AS y(x, ord)`, [t.id, b.assignees]);
       await audit(db, u.familyId, u.id, 'task.create', 'task', t.id, { title: b.title, points: b.points });
       await regenerateTask(db, u.familyId, t.id);
+      await notifyAssigned(db, t.id, b.title, b.points, b.assignees);
       return t.id as string;
     });
     return { task: await one(getPool(), `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id`, [id]) };
@@ -108,6 +118,7 @@ export default async function taskRoutes(app: FastifyInstance) {
       await db.query(`INSERT INTO task_assignees(task_id, user_id, position) SELECT $1, x, ord FROM unnest($2::uuid[]) WITH ORDINALITY AS y(x, ord)`, [id, b.assignees]);
       await audit(db, u.familyId, u.id, 'task.update', 'task', id, { title: b.title, points: b.points });
       await regenerateTask(db, u.familyId, id);
+      await notifyAssigned(db, id, b.title, b.points, b.assignees);
     });
     return { task: await one(getPool(), `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id`, [id]) };
   });

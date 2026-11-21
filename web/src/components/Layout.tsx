@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Bell, CalendarCheck, ChartColumn, CircleCheckBig, Gift, House, ListChecks, LogOut, Menu, Moon, PiggyBank, Settings, Sun, Trophy, User, Users, History,
+  Bell, BellRing, CalendarCheck, ChartColumn, CircleCheckBig, Gift, House, ListChecks, LogOut, Menu, Moon, PiggyBank, Settings, Sun, Trophy, User, Users, History,
 } from 'lucide-react';
 import { api, post } from '../lib/api';
 import { useLogout, useSession } from '../lib/session';
@@ -120,9 +120,13 @@ export function Layout() {
         { to: '/familia', label: 'Familia', icon: <Users size={20} /> },
         { to: '/estadisticas', label: 'Estadísticas', icon: <ChartColumn size={20} /> },
         { to: '/actividad', label: 'Historial', icon: <History size={20} /> },
+        { to: '/avisos', label: 'Avisos', icon: <BellRing size={20} /> },
         { to: '/ajustes', label: 'Ajustes', icon: <Settings size={20} /> },
       ]
-    : [{ to: '/perfil', label: 'Mi perfil', icon: <User size={20} /> }];
+    : [
+        { to: '/perfil', label: 'Mi perfil', icon: <User size={20} /> },
+        { to: '/avisos', label: 'Mis avisos', icon: <BellRing size={20} /> },
+      ];
 
   const doLogout = async () => {
     await logout();

@@ -7,6 +7,7 @@ import { Layout } from './components/Layout';
 import { Loading } from './components/ui';
 import { Login } from './pages/Login';
 import { Setup } from './pages/Setup';
+import { AcceptInvitation, Forgot, Reset } from './pages/AccountRecovery';
 
 // Carga diferida por pantalla: el código de adultos no se descarga en el móvil de los hijos y viceversa.
 const ParentDashboard = lazy(() => import('./pages/ParentDashboard'));
@@ -22,6 +23,7 @@ const ChildToday = lazy(() => import('./pages/ChildToday'));
 const ChildProgress = lazy(() => import('./pages/ChildProgress'));
 const ChildMoney = lazy(() => import('./pages/ChildMoney'));
 const Profile = lazy(() => import('./pages/Profile'));
+const Notifications = lazy(() => import('./pages/Notifications'));
 
 export function App() {
   const me = useMe();
@@ -35,6 +37,9 @@ export function App() {
     if (setup.isLoading) return <Loading />;
     return (
       <Routes>
+        <Route path="/recuperar" element={<Forgot />} />
+        <Route path="/restablecer" element={<Reset />} />
+        <Route path="/invitacion" element={<AcceptInvitation />} />
         <Route path="/configurar" element={setup.data?.registrationOpen ? <Setup /> : <Navigate to="/" replace />} />
         <Route path="*" element={setup.data?.needsSetup ? <Navigate to="/configurar" replace /> : <Login canRegister={!!setup.data?.registrationOpen} />} />
       </Routes>
@@ -57,6 +62,7 @@ export function App() {
               <Route path="estadisticas" element={<Stats />} />
               <Route path="actividad" element={<Activity />} />
               <Route path="ajustes" element={<Settings />} />
+              <Route path="avisos" element={<Notifications />} />
               <Route path="perfil" element={<Profile />} />
             </>
           ) : (
@@ -66,6 +72,7 @@ export function App() {
               <Route path="progreso" element={<ChildProgress />} />
               <Route path="premios" element={<Rewards />} />
               <Route path="mesada" element={<ChildMoney />} />
+              <Route path="avisos" element={<Notifications />} />
               <Route path="perfil" element={<Profile />} />
             </>
           )}

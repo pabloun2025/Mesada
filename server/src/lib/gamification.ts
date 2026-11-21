@@ -1,6 +1,6 @@
 import { many, one, type Db } from './db.js';
 import { addDays, startOfWeek } from './dates.js';
-import { notify } from './audit.js';
+import { notify } from './notify/dispatch.js';
 
 export const LEVEL_TITLES = ['Novato', 'Aprendiz', 'Colaborador', 'Constante', 'Fiable', 'Experto', 'Crack', 'Maestro', 'Referente', 'Leyenda'];
 
@@ -111,7 +111,7 @@ export async function evaluateBadges(db: Db, userId: string, today: string, tz: 
   );
   const fresh = r.rows.map((x) => x.badge as string);
   for (const b of fresh) {
-    await notify(db, userId, 'badge', `Nueva insignia: ${BADGES[b].title}`, BADGES[b].description, '/progreso', `badge:${userId}:${b}`);
+    await notify(db, { userId, event: 'badge', title: `Nueva insignia: ${BADGES[b].title}`, body: BADGES[b].description, link: '/progreso', dedupeKey: `badge:${userId}:${b}` });
   }
   return fresh;
 }

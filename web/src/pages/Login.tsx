@@ -51,6 +51,11 @@ export function Login({ canRegister }: { canRegister: boolean }) {
         {error ? <p role="alert" className="rounded-xl bg-berry-soft px-3 py-2 text-sm font-bold text-berry dark:bg-berry/20">{error}</p> : null}
         <Button type="submit" size="lg" className="w-full" loading={loading}>Entrar</Button>
       </form>
+      {who === 'adult' ? (
+        <p className="mt-4 text-center text-sm"><Link to="/recuperar" className="font-bold text-sky underline-offset-2 hover:underline">¿Has olvidado la contraseña?</Link></p>
+      ) : (
+        <p className="mt-4 text-center text-sm muted">¿Has olvidado el PIN? Pide a un adulto que lo cambie.</p>
+      )}
       {canRegister ? (
         <p className="mt-6 text-center text-sm muted">
           ¿Primera vez? <Link to="/configurar" className="font-bold text-sky underline-offset-2 hover:underline">Crea tu familia</Link>
