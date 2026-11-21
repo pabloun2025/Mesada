@@ -154,3 +154,18 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Plazo opcional (p. ej., «antes del domingo»); si no, está disponible hasta que alguien la haga.
 - Con varios hijos: el primero que pulsa «Me la pido» se la queda reservada.
 - Valen como cualquier tarea (puntos y bonos).
+
+## I12. Imagen nueva en alta y estilo cielo claro (21/11)
+**Estado: decidida, sin programar.** Imagen original en `docs/marca/diplop-cielo-2000.webp` (2000×1125).
+- La imagen nueva (familia con cielo claro, logo DiploP y tarjeta «Mi mesada») se usa en:
+  - la pantalla de entrada (en el móvil, un recorte vertical: familia arriba, logo y tarjeta debajo);
+  - la vista previa al compartir el enlace (WhatsApp, redes);
+  - una página de bienvenida pública, antes de registrarse.
+- Página de bienvenida: cómo funciona (tareas → puntos → dinero o premios), qué hacen los padres, qué hacen los hijos, y botones «Entrar» y «Crear familia» arriba y al final.
+- Ideas de la imagen para la app:
+  - tarjeta «Mi mesada» en el inicio del hijo: «★ 120 → 6 €»;
+  - tres accesos grandes con ✓: Mis tareas, Mis puntos, Mis recompensas;
+  - estilo claro de cielo en toda la app (hijos y padres), con el modo oscuro aparte;
+  - monedas doradas como adorno al canjear, en el recibo y en la cuenta de dinero.
+- El hijo ve cuánto valen sus puntos en euros: en el inicio («120 ★ = 6 €») y en cada tarea («+10 ★ · 0,50 €»).
+- Sin maqueta: se programa directo.
