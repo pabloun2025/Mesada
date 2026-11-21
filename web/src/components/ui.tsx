@@ -164,6 +164,19 @@ export function Toggle({ checked, onChange, label, description }: { checked: boo
   );
 }
 
+/** Bloque plegable (nativo, accesible) para agrupar opciones avanzadas sin recargar el formulario. */
+export function Disclosure({ title, summary, defaultOpen = false, children }: { title: string; summary?: string; defaultOpen?: boolean; children: ReactNode }) {
+  return (
+    <details open={defaultOpen} className="group rounded-2xl border border-[var(--line)]">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-2.5 font-bold [&::-webkit-details-marker]:hidden">
+        <span>{title}{summary ? <span className="block text-sm font-normal muted">{summary}</span> : null}</span>
+        <span aria-hidden className="text-[var(--fg-3)] transition group-open:rotate-180">⌄</span>
+      </summary>
+      <div className="space-y-4 px-4 pt-1 pb-4">{children}</div>
+    </details>
+  );
+}
+
 /* ---------- Hoja modal (abajo en móvil, centrada en escritorio) ---------- */
 
 export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {

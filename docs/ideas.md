@@ -1,10 +1,11 @@
 # Ideas del usuario (en recogida, sin construir)
 
-Estado: recogiendo ideas. No se programa nada hasta que el usuario lo confirme.
+Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programarlas.
 
 **Cómo se construirá:** cuando el usuario lo pida, el código lo escribe un agente con el modelo Sonnet. Claude lo supervisa: le da el plan, revisa lo que hace, ejecuta las pruebas y corrige antes de publicar.
 
 ## I1. Hora límite con valor según la hora (21/11)
+**Estado: construida (ver D25).**
 - Algunas tareas tienen una hora límite para hacerlas y reportarlas.
   - Ejemplo, tender la cama: antes de las 9:00 de lunes a viernes, o de las 12:00 el fin de semana.
 - **Decidido:**
@@ -20,6 +21,7 @@ Estado: recogiendo ideas. No se programa nada hasta que el usuario lo confirme.
 - Se configura en Tareas.
 
 ## I2. Bonos extra en tareas (21/11)
+**Estado: construida (ver D26).**
 - Algunas tareas dan un bono además de los puntos.
   - El bono puede verse desde el principio o quedar oculto como sorpresa.
 - **Decidido:**
@@ -39,6 +41,7 @@ Estado: recogiendo ideas. No se programa nada hasta que el usuario lo confirme.
   - La sorpresa se gana una sola vez, la primera vez que completa la tarea; después la tarea sigue normal.
 
 ## I3. Penalización de minutos de pantalla (21/11)
+**Estado: construida (ver D27).**
 - Algunas tareas no cumplidas a tiempo restan minutos del saldo de pantalla.
   - Ejemplo: «Estar en el coche a la hora de salida».
 - Se configura en cada tarea.

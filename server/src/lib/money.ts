@@ -194,7 +194,8 @@ export async function walletSummary(db: any, familyId: string, userId: string) {
       (SELECT COALESCE(SUM(delta_cents),0) FROM money_ledger WHERE user_id = $1 AND account = 'savings')::int AS cents_savings,
       (SELECT COALESCE(SUM(cents),0) FROM settlements WHERE user_id = $1)::int AS cents_converted_total,
       (SELECT COALESCE(SUM(amount_cents),0) FROM payments WHERE user_id = $1)::int AS cents_paid_total,
-      (SELECT COALESCE(SUM(cost_points),0) FROM redemptions WHERE user_id = $1 AND status = 'requested')::int AS points_reserved`,
+      (SELECT COALESCE(SUM(cost_points),0) FROM redemptions WHERE user_id = $1 AND status = 'requested')::int AS points_reserved,
+      (SELECT COALESCE(SUM(delta),0) FROM screen_ledger WHERE user_id = $1)::int AS screen_minutes`,
     [userId],
   );
   const fam = await getFamily(db, familyId);

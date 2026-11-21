@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Camera, Check, Clock, Hourglass, RotateCcw, Users } from 'lucide-react';
+import { Camera, Check, Clock, Hourglass, RotateCcw, ShieldCheck, Users, X } from 'lucide-react';
 import type { Instance } from '../lib/types';
+import { remaining, useNow } from '../lib/deadline';
 import { Avatar, Badge, PointsPill } from './ui';
+import { BonusChip } from './BonusChip';
 
 const STATUS: Record<string, { label: string; tone: 'muted' | 'sky' | 'sun' | 'berry' | 'leaf' }> = {
   pending: { label: 'Por hacer', tone: 'muted' },
@@ -10,6 +12,26 @@ const STATUS: Record<string, { label: string; tone: 'muted' | 'sky' | 'sun' | 'b
   rejected: { label: 'Necesita repaso', tone: 'berry' },
   expired: { label: 'Vencida', tone: 'berry' },
 };
+
+/** Hora límite con cuenta atrás viva; pasada la hora, avisa de que ahora vale menos. */
+function Deadline({ inst }: { inst: Instance }) {
+  const now = useNow();
+  if (!inst.deadline_at || !inst.deadline_time) return null;
+  const left = new Date(inst.deadline_at).getTime() - now;
+  if (left > 0) {
+    const soon = left <= 30 * 60_000;
+    return (
+      <span className={`inline-flex items-center gap-1 font-bold ${soon ? 'text-berry' : 'muted'}`}>
+        <Clock size={14} aria-hidden /> Antes de las {inst.deadline_time}{left < 24 * 3_600_000 ? ` · quedan ${remaining(left)}` : ''}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 font-bold text-berry">
+      <Clock size={14} aria-hidden /> Pasó la hora de las {inst.deadline_time}{inst.late_percent < 100 ? ` · vale el ${inst.late_percent} %` : ''}
+    </span>
+  );
+}
 
 export function TaskRow({
   inst,
@@ -27,9 +49,14 @@ export function TaskRow({
   celebrate?: boolean;
 }) {
   const [justDone, setJustDone] = useState(false);
-  const doable = canComplete && (inst.status === 'pending' || inst.status === 'rejected');
+  const doable = canComplete && !inst.check_mode && (inst.status === 'pending' || inst.status === 'rejected');
   const finished = inst.status === 'approved' || inst.status === 'submitted';
   const st = STATUS[inst.status];
+  const now = useNow();
+  const open = inst.status === 'pending' || inst.status === 'rejected';
+  const isLate = open && !!inst.deadline_at && new Date(inst.deadline_at).getTime() < now && inst.late_points !== inst.points;
+  const check = inst.check_mode;
+  const checkLabel = !check ? null : inst.check_met === true ? 'Cumplida' : inst.check_met === false ? `No cumplida${inst.penalty_minutes ? ` · −${inst.penalty_minutes} min` : ''}` : 'La marca un adulto';
 
   return (
     <li className="card flex items-center gap-3 p-3 pr-3.5">
@@ -39,7 +66,12 @@ export function TaskRow({
       <div className="min-w-0 flex-1">
         <p className={`font-bold leading-snug ${inst.status === 'approved' ? 'text-[var(--fg-3)] line-through decoration-2 decoration-leaf/60' : ''}`}>{inst.title}</p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm">
-          {inst.status !== 'pending' ? <Badge tone={st.tone}>{st.label}</Badge> : null}
+          {check ? (
+            <Badge tone={inst.check_met === true ? 'leaf' : inst.check_met === false ? 'berry' : 'muted'}>
+              {inst.check_met === true ? <Check size={12} aria-hidden /> : inst.check_met === false ? <X size={12} aria-hidden /> : <ShieldCheck size={12} aria-hidden />} {checkLabel}
+            </Badge>
+          ) : inst.status !== 'pending' ? <Badge tone={st.tone}>{st.label}</Badge> : null}
+          {!check && inst.on_time === false && !open ? <Badge tone="sun">Con retraso</Badge> : null}
           {showAssignee && inst.assignee_name ? (
             <span className="inline-flex items-center gap-1 muted">
               <Avatar name={inst.assignee_name} avatar={inst.assignee_avatar} colorKey={inst.assignee_color} size={18} />
@@ -50,15 +82,24 @@ export function TaskRow({
             <span className="inline-flex items-center gap-1 muted"><Users size={14} aria-hidden /> {inst.completed_by_name ? `Hecha por ${inst.completed_by_name}` : 'Compartida'}</span>
           ) : null}
           {inst.assignment_mode === 'rotation' ? <span className="inline-flex items-center gap-1 muted"><RotateCcw size={14} aria-hidden /> Por turnos</span> : null}
-          {inst.due_time ? <span className="inline-flex items-center gap-1 muted"><Clock size={14} aria-hidden /> {inst.due_time.slice(0, 5)}</span> : null}
+          {open && !check ? <Deadline inst={inst} /> : null}
+          {check && open && inst.penalty_minutes ? <span className="muted">Si no se cumple: −{inst.penalty_minutes} min de pantalla</span> : null}
+          {open || inst.status === 'submitted' ? <BonusChip bonus={inst.bonus} /> : null}
           {inst.requires_photo ? <span className="inline-flex items-center gap-1 muted"><Camera size={14} aria-hidden /> Con foto</span> : null}
         </div>
         {inst.status === 'rejected' && inst.review_note ? <p className="mt-1.5 text-sm text-berry">«{inst.review_note}»</p> : null}
       </div>
       <div className="relative flex shrink-0 items-center gap-2.5">
-        <PointsPill points={inst.points} tone={inst.status === 'approved' ? 'leaf' : 'tangerine'} />
+        {isLate ? (
+          <span className="flex items-center gap-1" aria-label={`Ahora vale ${inst.late_points} puntos en vez de ${inst.points}`}>
+            <span className="num text-sm font-bold text-[var(--fg-3)] line-through decoration-2">{inst.points}</span>
+            <PointsPill points={inst.late_points} />
+          </span>
+        ) : check && inst.points === 0 ? null : (
+          <PointsPill points={inst.points} tone={inst.status === 'approved' ? 'leaf' : 'tangerine'} />
+        )}
         {justDone && celebrate ? (
-          <span aria-hidden className="anim-rise num pointer-events-none absolute -top-2 right-1 font-extrabold text-tangerine">+{inst.points}</span>
+          <span aria-hidden className="anim-rise num pointer-events-none absolute -top-2 right-1 font-extrabold text-tangerine">+{isLate ? inst.late_points : inst.points}</span>
         ) : null}
         {doable ? (
           <button

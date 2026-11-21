@@ -1,11 +1,98 @@
-import { useQuery } from '@tanstack/react-query';
-import { CircleCheckBig } from 'lucide-react';
-import { api } from '../lib/api';
-import { relative } from '../lib/format';
-import { useDecideRedemption } from '../lib/hooks';
-import type { Redemption } from '../lib/types';
-import { Avatar, Button, Empty, Loading, PageHeader, PointsPill, SectionTitle } from '../components/ui';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Check, CircleCheckBig, X } from 'lucide-react';
+import { api, post } from '../lib/api';
+import { addDays, fmtDate, relative } from '../lib/format';
+import { useDecideRedemption, useInvalidateAll } from '../lib/hooks';
+import type { BonusGrant, Instance, Redemption } from '../lib/types';
+import { Avatar, Badge, Button, Empty, Loading, PageHeader, PointsPill, SectionTitle, useToast } from '../components/ui';
 import { ApprovalCard } from '../components/ApprovalCard';
+
+/** Tareas que marca un adulto: dos botones, y se puede corregir después. */
+function CheckTasks({ today }: { today: string }) {
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const list = useQuery({
+    queryKey: ['instances', 'checks', today],
+    queryFn: () => api<{ instances: Instance[] }>(`/instances?from=${addDays(today, -6)}&to=${today}`),
+  });
+  const mark = useMutation({
+    mutationFn: (v: { id: string; met: boolean }) => post(`/instances/${v.id}/check`, { met: v.met }),
+    onSuccess: (r) => {
+      toast(r.duplicate ? 'Ya estaba marcada así' : r.met ? 'Marcada como cumplida' : r.penaltyApplied ? `No cumplida: −${r.penaltyApplied} min de pantalla` : 'No cumplida');
+      invalidate();
+    },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  // Hoy se muestran todas (para poder corregir); de días anteriores, solo las que quedaron sin marcar.
+  const items = (list.data?.instances ?? []).filter((i) => i.check_mode && (i.due_date === today || i.check_met === null));
+  if (!items.length) return null;
+  return (
+    <section className="mb-8">
+      <SectionTitle>Para comprobar</SectionTitle>
+      <ul className="space-y-3">
+        {items.map((i) => (
+          <li key={i.id} className="card p-3.5">
+            <div className="flex items-center gap-3">
+              <span aria-hidden className="flex size-12 shrink-0 items-center justify-center rounded-[var(--radius-tile)] bg-[var(--chip)] text-2xl">{i.icon}</span>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold">{i.title}</p>
+                <p className="flex flex-wrap items-center gap-1.5 text-sm muted">
+                  {i.assignee_name && <Avatar name={i.assignee_name} avatar={i.assignee_avatar} colorKey={i.assignee_color} size={18} />}
+                  {i.assignee_name}{i.due_date !== today ? ` · ${fmtDate(i.due_date, { weekday: 'long', day: 'numeric' })}` : ''}
+                  {i.check_met === true ? <Badge tone="leaf">Cumplida</Badge> : i.check_met === false ? <Badge tone="berry">No cumplida</Badge> : null}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button variant={i.check_met === false ? 'danger' : 'secondary'} className="flex-1" size="sm" disabled={mark.isPending} onClick={() => mark.mutate({ id: i.id, met: false })}
+                aria-label={`No cumplida: «${i.title}» de ${i.assignee_name}`}>
+                <X size={16} /> No cumplida{i.penalty_minutes ? ` (−${i.penalty_minutes} min)` : ''}
+              </Button>
+              <Button variant="success" className="flex-1" size="sm" disabled={mark.isPending} onClick={() => mark.mutate({ id: i.id, met: true })}
+                aria-label={`Cumplida: «${i.title}» de ${i.assignee_name}`}>
+                <Check size={16} /> Cumplida
+              </Button>
+            </div>
+            {i.check_met === null && (i.points > 0 || i.success_minutes > 0) ? (
+              <p className="mt-2 text-sm muted">Si se cumple: {[i.points > 0 ? `+${i.points} puntos` : '', i.success_minutes ? `+${i.success_minutes} min de pantalla` : ''].filter(Boolean).join(' · ')}</p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Bonos de texto o recompensa que un adulto tiene que cumplir a mano. */
+function PendingGrants() {
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const list = useQuery({ queryKey: ['bonus-grants', 'pending'], queryFn: () => api<{ grants: BonusGrant[] }>('/bonus-grants') });
+  const fulfill = useMutation({
+    mutationFn: (id: string) => post(`/bonus-grants/${id}/fulfill`),
+    onSuccess: () => { toast('Marcado como cumplido'); invalidate(); },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  const grants = list.data?.grants ?? [];
+  if (!grants.length) return null;
+  return (
+    <section className="mb-8">
+      <SectionTitle>Premios por cumplir</SectionTitle>
+      <ul className="space-y-3">
+        {grants.map((g) => (
+          <li key={g.id} className="card flex flex-wrap items-center gap-3 p-3.5">
+            <Avatar name={g.display_name} avatar={g.avatar} colorKey={g.color} size={40} />
+            <div className="min-w-0 flex-1">
+              <p className="font-bold">{g.surprise ? '🎁 ' : ''}{g.label}</p>
+              <p className="text-sm muted">{g.display_name} · por «{g.task_title}» · pendiente de cumplir</p>
+            </div>
+            <Button size="sm" variant="success" disabled={fulfill.isPending} onClick={() => fulfill.mutate(g.id)}><Check size={16} /> Cumplido</Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 export default function Approvals() {
   const { data, isLoading } = useQuery({ queryKey: ['dashboard'], queryFn: () => api('/dashboard') });
@@ -18,6 +105,8 @@ export default function Approvals() {
   return (
     <div className="max-w-3xl">
       <PageHeader title="Validar" subtitle="Revisa lo que han hecho. Puedes ajustar los puntos antes de aprobar." />
+      <CheckTasks today={data.today} />
+      <PendingGrants />
       <section className="mb-8">
         <SectionTitle>Tareas terminadas</SectionTitle>
         {list.length ? (

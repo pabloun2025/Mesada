@@ -39,3 +39,25 @@ export function LedgerList({ userId }: { userId: string }) {
     </div>
   );
 }
+
+const SCREEN_KIND: Record<string, string> = { bonus: 'Bono', penalty: 'Penalización', spend: 'Gastados', adjustment: 'Ajuste', refund: 'Devolución', task: 'Tarea' };
+
+/** Historial de minutos de pantalla. */
+export function ScreenList({ userId }: { userId: string }) {
+  const { data, isLoading } = useQuery({ queryKey: ['screen', userId], queryFn: () => api<{ balance: number; entries: any[] }>(`/screen/${userId}`) });
+  if (isLoading) return <Loading />;
+  if (!data?.entries.length) return <Empty icon={<History />} title="Sin movimientos de pantalla" />;
+  return (
+    <ul className="divide-y divide-[var(--line)]">
+      {data.entries.map((e) => (
+        <li key={e.id} className="flex items-center gap-3 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-bold">{e.note || SCREEN_KIND[e.kind]}</p>
+            <p className="text-xs muted">{SCREEN_KIND[e.kind]} · {fmtDateTime(e.created_at)}{e.created_by_name ? ` · ${e.created_by_name}` : ''}</p>
+          </div>
+          <span className={`num font-extrabold ${e.delta > 0 ? 'text-leaf' : 'text-[var(--fg-2)]'}`}>{e.delta > 0 ? '+' : ''}{e.delta} min</span>
+        </li>
+      ))}
+    </ul>
+  );
+}

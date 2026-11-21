@@ -8,6 +8,7 @@ import { api, post } from '../lib/api';
 import { useLogout, useSession } from '../lib/session';
 import { relative } from '../lib/format';
 import { Avatar, Empty, IconButton, Sheet } from './ui';
+import { RevealModal } from './RevealModal';
 
 type NavItem = { to: string; label: string; icon: ReactNode; badge?: number; end?: boolean };
 
@@ -99,7 +100,7 @@ export function Layout() {
   const isAdult = user.role === 'adult';
 
   const { data: dash } = useQuery({ queryKey: ['dashboard'], queryFn: () => api('/dashboard'), enabled: isAdult, refetchInterval: 60_000 });
-  const pendingCount = (dash?.pendingApprovals?.length ?? 0) + (dash?.pendingRedemptions ?? 0);
+  const pendingCount = (dash?.pendingApprovals?.length ?? 0) + (dash?.pendingRedemptions ?? 0) + (dash?.pendingChecks ?? 0) + (dash?.pendingGrants ?? 0);
 
   const primary: NavItem[] = isAdult
     ? [
@@ -216,6 +217,7 @@ export function Layout() {
             </button>
           </div>
         </nav>
+        {!isAdult ? <RevealModal /> : null}
         <MoreSheet open={more} onClose={() => setMore(false)} items={secondary} />
       </div>
     </div>

@@ -12,10 +12,30 @@ import { config } from '../lib/config.js';
 import { familyToday, getFamily } from '../lib/family.js';
 import { ensureInstancesThrottled, regenerateTask } from '../lib/instances.js';
 import { completeInstance, reviewInstance } from '../lib/task-actions.js';
+import { checkInstance } from '../lib/check-tasks.js';
+import { bonusView, bonusLabel, BONUS_COLUMNS } from '../lib/bonus.js';
+import { deadlineAt, deadlineTime, holidaysBetween, reducedPoints } from '../lib/deadline.js';
 import { isValidDate } from '../lib/dates.js';
 import { notify } from '../lib/notify/dispatch.js';
 
 const dateStr = z.string().refine(isValidDate, 'fecha no válida');
+
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
+const bonusBody = z
+  .object({
+    kind: z.enum(['points', 'screen', 'text', 'reward']),
+    points: z.number().int().min(1).max(10000).optional(),
+    minutes: z.number().int().min(1).max(1440).optional(),
+    text: z.string().trim().min(1).max(200).optional(),
+    rewardId: z.string().uuid().optional(),
+    surprise: z.boolean().default(false),
+    onTimeOnly: z.boolean().default(false),
+  })
+  .refine((b) => (b.kind === 'points' ? b.points : b.kind === 'screen' ? b.minutes : b.kind === 'text' ? b.text : b.rewardId) !== undefined, {
+    message: 'completa el bono',
+    path: ['kind'],
+  });
 
 const taskBody = z
   .object({
@@ -29,19 +49,45 @@ const taskBody = z
     monthDay: z.number().int().min(1).max(31).nullable().default(null),
     startDate: dateStr,
     endDate: dateStr.nullable().default(null),
-    dueTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().default(null),
+    dueTime: hhmm.nullable().default(null),
+    dueTimeWeekend: hhmm.nullable().default(null),
+    latePercent: z.number().int().min(0).max(100).default(100),
+    checkMode: z.boolean().default(false),
+    penaltyMinutes: z.number().int().min(0).max(1440).default(0),
+    successMinutes: z.number().int().min(0).max(1440).default(0),
+    bonus: bonusBody.nullable().default(null),
     assignmentMode: z.enum(['individual', 'shared', 'rotation']).default('individual'),
     assignees: z.array(z.string().uuid()).min(1, 'asigna la tarea al menos a una persona').max(20),
     requiresApproval: z.boolean().default(true),
     requiresPhoto: z.boolean().default(false),
   })
   .refine((t) => !t.endDate || t.endDate >= t.startDate, { message: 'la fecha de fin es anterior al inicio', path: ['endDate'] })
-  .refine((t) => t.recurrence !== 'weekly' || t.weekdays.length > 0, { message: 'elige al menos un día de la semana', path: ['weekdays'] });
+  .refine((t) => t.recurrence !== 'weekly' || t.weekdays.length > 0, { message: 'elige al menos un día de la semana', path: ['weekdays'] })
+  .refine((t) => !t.checkMode || t.assignmentMode !== 'shared', { message: 'una tarea que marca un adulto no puede ser compartida', path: ['assignmentMode'] });
+
+/** Columnas a guardar. En tareas de comprobación no hay hora límite ni foto ni validación: las marca un adulto. */
+function taskParams(b: z.infer<typeof taskBody>) {
+  const c = b.checkMode;
+  return [
+    b.title, b.description, b.icon, b.difficulty, b.points, b.recurrence, b.weekdays, b.monthDay, b.startDate, b.endDate,
+    c ? null : b.dueTime, c ? null : b.dueTimeWeekend, c ? 100 : b.latePercent, b.assignmentMode, c ? false : b.requiresApproval, c ? false : b.requiresPhoto,
+    c, c ? b.penaltyMinutes : 0, c ? b.successMinutes : 0,
+    b.bonus?.kind ?? null, b.bonus?.kind === 'points' ? b.bonus.points : null, b.bonus?.kind === 'screen' ? b.bonus.minutes : null,
+    b.bonus?.kind === 'text' ? b.bonus.text : null, b.bonus?.kind === 'reward' ? b.bonus.rewardId : null,
+    b.bonus?.surprise ?? false, b.bonus?.onTimeOnly ?? false,
+  ];
+}
+
+async function validateReward(familyId: string, b: z.infer<typeof taskBody>) {
+  if (b.bonus?.kind !== 'reward') return;
+  const r = await one(getPool(), 'SELECT 1 FROM rewards WHERE id = $1 AND family_id = $2 AND active', [b.bonus.rewardId, familyId]);
+  if (!r) throw badRequest('La recompensa del bono no existe');
+}
 
 const TASK_SELECT = `
-  SELECT t.*, COALESCE(json_agg(json_build_object('id', u.id, 'display_name', u.display_name, 'avatar', u.avatar, 'color', u.color) ORDER BY a.position)
+  SELECT t.*, rw.title AS bonus_reward_title, COALESCE(json_agg(json_build_object('id', u.id, 'display_name', u.display_name, 'avatar', u.avatar, 'color', u.color) ORDER BY a.position)
          FILTER (WHERE u.id IS NOT NULL), '[]') AS assignees
-    FROM tasks t LEFT JOIN task_assignees a ON a.task_id = t.id LEFT JOIN users u ON u.id = a.user_id`;
+    FROM tasks t LEFT JOIN task_assignees a ON a.task_id = t.id LEFT JOIN users u ON u.id = a.user_id LEFT JOIN rewards rw ON rw.id = t.bonus_reward_id`;
 
 async function validateAssignees(familyId: string, ids: string[]) {
   const rows = await many(getPool(), `SELECT id FROM users WHERE family_id = $1 AND id = ANY($2::uuid[]) AND active`, [familyId, ids]);
@@ -51,13 +97,34 @@ async function validateAssignees(familyId: string, ids: string[]) {
 const INSTANCE_SELECT = `
   SELECT i.id, i.task_id, i.assignee_id, i.due_date, i.status, i.points, i.completed_by, i.completed_at, i.child_note,
          (i.photo_path IS NOT NULL) AS has_photo, i.reviewed_at, i.review_note,
+         i.deadline_at, i.on_time, i.check_met,
          t.title, t.icon, t.description, t.difficulty, t.recurrence, t.assignment_mode, t.requires_approval, t.requires_photo, t.due_time,
+         t.due_time_weekend, t.late_percent, t.points AS task_points, t.check_mode, t.penalty_minutes, t.success_minutes,
+         t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise, t.bonus_on_time_only, rw.title AS bonus_reward_title,
          au.display_name AS assignee_name, au.avatar AS assignee_avatar, au.color AS assignee_color,
          cu.display_name AS completed_by_name
     FROM task_instances i
     JOIN tasks t ON t.id = i.task_id
     LEFT JOIN users au ON au.id = i.assignee_id
-    LEFT JOIN users cu ON cu.id = i.completed_by`;
+    LEFT JOIN users cu ON cu.id = i.completed_by
+    LEFT JOIN rewards rw ON rw.id = t.bonus_reward_id`;
+
+/** Sorpresas que este hijo ya ganó (tras ganarlas la tarea vuelve a ser normal). */
+async function claimedTasks(userId: string): Promise<Set<string>> {
+  const rows = await many(getPool(), 'SELECT task_id FROM bonus_claims WHERE user_id = $1', [userId]);
+  return new Set(rows.map((r) => r.task_id));
+}
+
+/** Sustituye las columnas crudas del bono por la vista segura: a un hijo nunca le llega el contenido de una sorpresa sin ganar. */
+function shapeBonus<T extends Record<string, any>>(row: T, role: 'adult' | 'child', claimed: Set<string>, taskId: string) {
+  const bonus = bonusView(row as any, role, claimed.has(taskId));
+  if (role === 'child') {
+    const out: Record<string, any> = { ...row };
+    for (const c of [...BONUS_COLUMNS, 'bonus_on_time_only', 'bonus_reward_title']) delete out[c];
+    return { ...out, bonus };
+  }
+  return { ...row, bonus };
+}
 
 /** Aviso de tarea nueva a cada hijo asignado (una vez por tarea y persona, aunque se edite). */
 async function notifyAssigned(db: any, taskId: string, title: string, points: number, assignees: string[]) {
@@ -74,23 +141,24 @@ export default async function taskRoutes(app: FastifyInstance) {
       getPool(),
       `${TASK_SELECT} WHERE t.family_id = $1 AND t.active
          ${u.role === 'child' ? 'AND EXISTS (SELECT 1 FROM task_assignees x WHERE x.task_id = t.id AND x.user_id = $2)' : 'AND $2::uuid IS NOT NULL'}
-       GROUP BY t.id ORDER BY t.created_at DESC`,
+       GROUP BY t.id, rw.id ORDER BY t.created_at DESC`,
       [u.familyId, u.id],
     );
-    return { tasks: rows };
+    const claimed = u.role === 'child' ? await claimedTasks(u.id) : new Set<string>();
+    return { tasks: rows.map((r) => shapeBonus(r, u.role, claimed, r.id)) };
   });
 
   app.post('/api/tasks', async (req) => {
     const u = requireAdult(req);
     const b = taskBody.parse(req.body);
     await validateAssignees(u.familyId, b.assignees);
+    await validateReward(u.familyId, b);
     const id = await tx(async (db) => {
       const t = await one(
         db,
-        `INSERT INTO tasks(family_id, title, description, icon, difficulty, points, recurrence, weekdays, month_day, start_date, end_date, due_time,
-                           assignment_mode, requires_approval, requires_photo, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
-        [u.familyId, b.title, b.description, b.icon, b.difficulty, b.points, b.recurrence, b.weekdays, b.monthDay, b.startDate, b.endDate, b.dueTime, b.assignmentMode, b.requiresApproval, b.requiresPhoto, u.id],
+        `INSERT INTO tasks(family_id, title, description, icon, difficulty, points, recurrence, weekdays, month_day, start_date, end_date, due_time, due_time_weekend, late_percent, assignment_mode, requires_approval, requires_photo, check_mode, penalty_minutes, success_minutes, bonus_kind, bonus_points, bonus_minutes, bonus_text, bonus_reward_id, bonus_surprise, bonus_on_time_only, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) RETURNING id`,
+        [u.familyId, ...taskParams(b), u.id],
       );
       await db.query(`INSERT INTO task_assignees(task_id, user_id, position) SELECT $1, x, ord FROM unnest($2::uuid[]) WITH ORDINALITY AS y(x, ord)`, [t.id, b.assignees]);
       await audit(db, u.familyId, u.id, 'task.create', 'task', t.id, { title: b.title, points: b.points });
@@ -98,7 +166,7 @@ export default async function taskRoutes(app: FastifyInstance) {
       await notifyAssigned(db, t.id, b.title, b.points, b.assignees);
       return t.id as string;
     });
-    return { task: await one(getPool(), `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id`, [id]) };
+    return { task: await one(getPool(), `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id, rw.id`, [id]) };
   });
 
   app.put('/api/tasks/:id', async (req) => {
@@ -106,12 +174,12 @@ export default async function taskRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const b = taskBody.parse(req.body);
     await validateAssignees(u.familyId, b.assignees);
+    await validateReward(u.familyId, b);
     await tx(async (db) => {
       const r = await db.query(
-        `UPDATE tasks SET title=$3, description=$4, icon=$5, difficulty=$6, points=$7, recurrence=$8, weekdays=$9, month_day=$10, start_date=$11,
-                end_date=$12, due_time=$13, assignment_mode=$14, requires_approval=$15, requires_photo=$16, updated_at=now()
+        `UPDATE tasks SET title=$3, description=$4, icon=$5, difficulty=$6, points=$7, recurrence=$8, weekdays=$9, month_day=$10, start_date=$11, end_date=$12, due_time=$13, due_time_weekend=$14, late_percent=$15, assignment_mode=$16, requires_approval=$17, requires_photo=$18, check_mode=$19, penalty_minutes=$20, success_minutes=$21, bonus_kind=$22, bonus_points=$23, bonus_minutes=$24, bonus_text=$25, bonus_reward_id=$26, bonus_surprise=$27, bonus_on_time_only=$28, updated_at=now()
           WHERE id=$1 AND family_id=$2 AND active`,
-        [id, u.familyId, b.title, b.description, b.icon, b.difficulty, b.points, b.recurrence, b.weekdays, b.monthDay, b.startDate, b.endDate, b.dueTime, b.assignmentMode, b.requiresApproval, b.requiresPhoto],
+        [id, u.familyId, ...taskParams(b)],
       );
       if (!r.rowCount) throw notFound('Tarea no encontrada');
       await db.query('DELETE FROM task_assignees WHERE task_id = $1', [id]);
@@ -120,7 +188,7 @@ export default async function taskRoutes(app: FastifyInstance) {
       await regenerateTask(db, u.familyId, id);
       await notifyAssigned(db, id, b.title, b.points, b.assignees);
     });
-    return { task: await one(getPool(), `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id`, [id]) };
+    return { task: await one(getPool(), `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id, rw.id`, [id]) };
   });
 
   app.delete('/api/tasks/:id', async (req) => {
@@ -163,7 +231,31 @@ export default async function taskRoutes(app: FastifyInstance) {
         LIMIT 1000`,
       [u.familyId, q.from ?? today, q.to ?? q.from ?? today, statuses, who],
     );
-    return { today, instances: rows };
+    const holidays = rows.length ? await holidaysBetween(getPool(), u.familyId, q.from ?? today, q.to ?? q.from ?? today) : new Set<string>();
+    const claims = u.role === 'child'
+      ? new Set((await claimedTasks(u.id)).values())
+      : new Set((await many(getPool(), 'SELECT task_id, user_id FROM bonus_claims bc WHERE EXISTS (SELECT 1 FROM tasks t WHERE t.id = bc.task_id AND t.family_id = $1)', [u.familyId])).map((c) => `${c.task_id}:${c.user_id}`));
+    const instances = rows.map((r) => {
+      // Mientras no se complete, la hora límite se calcula al vuelo (así respeta festivos añadidos después).
+      const dl = r.deadline_at ? new Date(r.deadline_at) : deadlineAt(r, r.due_date, holidays.has(r.due_date), fam.timezone);
+      const claimed = new Set<string>();
+      if (u.role === 'child' ? claims.has(r.task_id) : claims.has(`${r.task_id}:${r.assignee_id}`)) claimed.add(r.task_id);
+      return {
+        ...shapeBonus(r, u.role, claimed, r.task_id),
+        deadline_at: dl ? dl.toISOString() : null,
+        deadline_time: r.check_mode ? null : deadlineTime(r, r.due_date, holidays.has(r.due_date)),
+        late_points: reducedPoints(r.task_points, r.late_percent),
+      };
+    });
+    return { today, instances };
+  });
+
+  // Tarea de comprobación: la marca un adulto. Idempotente y corregible.
+  app.post('/api/instances/:id/check', async (req) => {
+    const u = requireAdult(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const b = z.object({ met: z.boolean() }).parse(req.body);
+    return checkInstance(u, id, b.met);
   });
 
   app.post('/api/instances/:id/complete', async (req) => {

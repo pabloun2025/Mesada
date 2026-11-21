@@ -27,6 +27,13 @@ export function describeAction(a: { action: string; data: any }): string {
     case 'family.update': return 'cambió los ajustes de la familia';
     case 'family.create': return 'creó la familia';
     case 'goal.create': return `creó la meta «${d.title}»`;
+    case 'task.check_met': return 'marcó una tarea como cumplida';
+    case 'task.check_not_met': return `marcó una tarea como no cumplida${d.penaltyApplied ? ` (−${d.penaltyApplied} min de pantalla)` : ''}`;
+    case 'bonus.fulfill': return `cumplió un premio: ${d.label}`;
+    case 'screen.spend': return `gastó ${-d.minutes} min de pantalla`;
+    case 'screen.adjust': return `ajustó ${d.delta > 0 ? '+' : ''}${d.delta} min de pantalla: ${d.note}`;
+    case 'holiday.add': return `marcó el festivo ${d.day}`;
+    case 'holiday.remove': return `quitó el festivo ${d.day}`;
     case 'user.password_change': return 'cambió su contraseña';
     default: return a.action;
   }
