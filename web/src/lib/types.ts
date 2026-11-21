@@ -53,10 +53,47 @@ export interface Instance {
   requires_approval: boolean;
   requires_photo: boolean;
   due_time: string | null;
+  due_time_weekend: string | null;
+  late_percent: number;
+  task_points: number;
+  late_points: number;
+  /** Hora límite vigente ese día («HH:MM») y su instante exacto. */
+  deadline_time: string | null;
+  deadline_at: string | null;
+  on_time: boolean | null;
+  check_mode: boolean;
+  check_met: boolean | null;
+  penalty_minutes: number;
+  success_minutes: number;
+  bonus: Bonus | null;
   assignee_name: string | null;
   assignee_avatar: string | null;
   assignee_color: string | null;
   completed_by_name: string | null;
+}
+
+/** Bono tal como lo ve quien mira: a un hijo, una sorpresa sin ganar no trae contenido. */
+export interface Bonus {
+  surprise: boolean;
+  onTimeOnly: boolean;
+  kind?: 'points' | 'screen' | 'text' | 'reward';
+  label?: string | null;
+  claimed?: boolean;
+}
+
+export interface BonusGrant {
+  id: string;
+  user_id: string;
+  task_title: string;
+  kind: 'points' | 'screen' | 'text' | 'reward';
+  label: string;
+  surprise: boolean;
+  revealed_at: string | null;
+  fulfilled_at: string | null;
+  created_at: string;
+  display_name: string;
+  avatar: string;
+  color: string;
 }
 
 export interface Task {
@@ -72,6 +109,19 @@ export interface Task {
   start_date: string;
   end_date: string | null;
   due_time: string | null;
+  due_time_weekend: string | null;
+  late_percent: number;
+  check_mode: boolean;
+  penalty_minutes: number;
+  success_minutes: number;
+  bonus: Bonus | null;
+  bonus_kind?: 'points' | 'screen' | 'text' | 'reward' | null;
+  bonus_points?: number | null;
+  bonus_minutes?: number | null;
+  bonus_text?: string | null;
+  bonus_reward_id?: string | null;
+  bonus_surprise?: boolean;
+  bonus_on_time_only?: boolean;
   assignment_mode: 'individual' | 'shared' | 'rotation';
   requires_approval: boolean;
   requires_photo: boolean;
@@ -87,6 +137,7 @@ export interface Wallet {
   cents_savings: number;
   cents_converted_total: number;
   cents_paid_total: number;
+  screen_minutes: number;
 }
 
 export interface Reward {

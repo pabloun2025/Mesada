@@ -8,7 +8,8 @@ import { useSession } from '../lib/session';
 import type { Wallet } from '../lib/types';
 import { Button, Field, IconButton, Loading, PageHeader, SectionTitle, Sheet, useToast } from '../components/ui';
 import { Bar } from '../components/Ring';
-import { LedgerList } from '../components/Ledger';
+import { LedgerList, ScreenList } from '../components/Ledger';
+import { minutesLabel } from '../lib/deadline';
 
 export default function ChildMoney() {
   const { user, family } = useSession();
@@ -87,6 +88,15 @@ export default function ChildMoney() {
             ))}
           </ul>
         ) : <p className="muted">Ponte una meta (unos auriculares, un juego…) y ve llenando la hucha.</p>}
+      </section>
+
+      <section className="mt-8">
+        <SectionTitle>Mi tiempo de pantalla</SectionTitle>
+        <div className="card p-4">
+          <p className="mb-2 text-sm font-bold muted">Te quedan</p>
+          <p className="num mb-3 text-3xl font-extrabold">{minutesLabel(w.screen_minutes)}</p>
+          <ScreenList userId={user.id} />
+        </div>
       </section>
 
       <section className="mt-8">

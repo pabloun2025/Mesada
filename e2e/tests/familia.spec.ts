@@ -332,6 +332,119 @@ test.describe.serial('Familia completa', () => {
     expect((await api(kid, 'get', '/admin/status')).status).toBe(403);
   });
 
+  test('hora límite y bono visible: el hijo gana minutos de pantalla', async () => {
+    const CAMA = 'Tender la cama';
+    const weekend = ['Sat', 'Sun'].includes(new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'Europe/Madrid' }).format(new Date()));
+    await adult.goto('/tareas');
+    await adult.getByRole('button', { name: 'Nueva' }).click();
+    const d = adult.getByRole('dialog');
+    await d.getByLabel('Nombre de la tarea').fill(CAMA);
+    await d.getByRole('button', { name: KID.name }).click();
+    await d.locator('summary', { hasText: 'Hora límite' }).click();
+    await d.getByLabel('Lunes a viernes').fill('23:59');
+    await d.getByLabel('Fin de semana y festivos').fill('23:58');
+    await d.getByLabel('Valor si llega tarde (%)').fill('50');
+    await d.locator('summary', { hasText: 'Bono extra' }).click();
+    await d.getByLabel('Tipo de bono').selectOption('screen');
+    await d.getByLabel('Minutos de pantalla').fill('30');
+    await adult.screenshot({ path: `${SHOTS}/12-tarea-hora-bono.png` });
+    await d.getByRole('button', { name: 'Crear tarea' }).click();
+    await expect(adult.getByText('Tarea creada')).toBeVisible();
+    await expect(adult.getByRole('listitem').filter({ hasText: CAMA })).toContainText('+30 min de pantalla');
+
+    // El hijo ve la hora límite vigente (L–V o fin de semana), la cuenta atrás y el bono
+    await kid.setViewportSize({ width: 375, height: 812 });
+    await kid.goto('/');
+    const row = kid.getByRole('listitem').filter({ hasText: CAMA }).first();
+    await expect(row).toContainText(`Antes de las ${weekend ? '23:58' : '23:59'}`);
+    await expect(row).toContainText('quedan');
+    await expect(row).toContainText('+30 min de pantalla');
+    expect(await kid.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await kid.screenshot({ path: `${SHOTS}/13-hijo-hora-limite-375.png`, fullPage: true });
+    await kid.getByRole('button', { name: `Marcar «${CAMA}» como hecha` }).click();
+    await expect(kid.getByText(`«${CAMA}» enviada. Falta que la validen.`)).toBeVisible();
+
+    await adult.goto('/validar');
+    await adult.getByRole('button', { name: `Aprobar «${CAMA}» de ${KID.name}` }).click();
+    await expect(adult.getByText('Tarea aprobada')).toBeVisible();
+
+    await kid.goto('/mesada');
+    const screen = kid.getByText('Mi tiempo de pantalla').locator('xpath=ancestor::section');
+    await expect(screen).toContainText('30 min');
+    await kid.screenshot({ path: `${SHOTS}/14-hijo-pantalla-375.png`, fullPage: true });
+    // El adulto ve el saldo en la mesada
+    await adult.goto('/mesada');
+    await expect(adult.getByText('Pantalla:').first()).toContainText('30 min');
+  });
+
+  test('tarea que marca un adulto: «No cumplida» resta minutos y el hijo no puede reportarla', async () => {
+    const COCHE = 'Estar en el coche a la hora';
+    await adult.goto('/tareas');
+    await adult.getByRole('button', { name: 'Nueva' }).click();
+    const d = adult.getByRole('dialog');
+    await d.getByLabel('Nombre de la tarea').fill(COCHE);
+    await d.getByRole('button', { name: KID.name }).click();
+    await d.getByLabel('Puntos', { exact: true }).fill('0');
+    await d.getByLabel('La marca un adulto').check({ force: true });
+    await d.getByLabel('Si no se cumple (min)').fill('15');
+    await d.getByRole('button', { name: 'Crear tarea' }).click();
+    await expect(adult.getByText('Tarea creada')).toBeVisible();
+
+    // El hijo la ve, pero no hay botón de «hecha» y la API se lo impide
+    await kid.goto('/');
+    const row = kid.getByRole('listitem').filter({ hasText: COCHE }).first();
+    await expect(row).toContainText('La marca un adulto');
+    await expect(kid.getByRole('button', { name: `Marcar «${COCHE}» como hecha` })).toHaveCount(0);
+    const inst = (await api(kid, 'get', '/instances')).body.instances.find((i: any) => i.title === COCHE);
+    expect((await api(kid, 'post', `/instances/${inst.id}/complete`, {})).status).toBe(403);
+    expect((await api(kid, 'post', `/instances/${inst.id}/check`, { met: true })).status).toBe(403);
+
+    const me0 = (await api(kid, 'get', '/me')).body.user;
+    const pointsBefore = (await api(kid, 'get', `/wallet/${me0.id}`)).body.wallet.points_available;
+    await adult.goto('/validar');
+    await adult.screenshot({ path: `${SHOTS}/15-validar-comprobar.png`, fullPage: true });
+    await adult.getByRole('button', { name: `No cumplida: «${COCHE}» de ${KID.name}` }).click();
+    await expect(adult.getByText('No cumplida: −15 min de pantalla')).toBeVisible();
+
+    await kid.goto('/mesada');
+    await expect(kid.getByText('Mi tiempo de pantalla').locator('xpath=ancestor::section')).toContainText('15 min');
+    // Corregir: pasa a cumplida y se devuelven exactamente los 15 minutos
+    await adult.getByRole("button", { name: `Cumplida: «${COCHE}» de ${KID.name}`, exact: true }).click();
+    await expect(adult.getByText('Marcada como cumplida')).toBeVisible();
+    const me = (await api(kid, 'get', '/me')).body.user;
+    expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(30);
+    // Los puntos no se han tocado por la penalización
+    expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available).toBe(pointsBefore);
+  });
+
+  test('sorpresa: el hijo no ve su contenido y se revela con animación al abrir la app', async () => {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+    const me = (await api(kid, 'get', '/me')).body.user;
+    const created = await api(adult, 'post', '/tasks', {
+      title: 'Ordenar el cuarto', points: 10, recurrence: 'once', startDate: today, assignees: [me.id],
+      bonus: { kind: 'text', text: 'Helado el sábado', surprise: true },
+    });
+    expect(created.status).toBe(200);
+    await kid.goto('/');
+    const row = kid.getByRole('listitem').filter({ hasText: 'Ordenar el cuarto' });
+    await expect(row).toContainText('Sorpresa');
+    await expect(kid.getByText('Helado el sábado')).toHaveCount(0);
+    const inst = (await api(kid, 'get', '/instances')).body.instances.find((i: any) => i.title === 'Ordenar el cuarto');
+    expect(JSON.stringify(inst)).not.toContain('Helado');
+    expect((await api(kid, 'post', `/instances/${inst.id}/complete`, {})).status).toBe(200);
+    expect((await api(adult, 'post', `/instances/${inst.id}/review`, { approve: true })).status).toBe(200);
+    await kid.goto('/');
+    const modal = kid.getByRole('dialog', { name: 'Sorpresa' });
+    await expect(modal).toContainText('Helado el sábado');
+    await kid.screenshot({ path: `${SHOTS}/16-sorpresa-375.png` });
+    await modal.getByRole('button', { name: '¡Genial!' }).click();
+    await expect(modal).toBeHidden();
+    // El adulto lo ve como pendiente de cumplir y lo marca
+    await adult.goto('/validar');
+    await adult.getByRole('button', { name: 'Cumplido' }).click();
+    await expect(adult.getByText('Marcado como cumplido')).toBeVisible();
+  });
+
   test('la app es instalable (manifest y service worker)', async () => {
     const res = await adult.request.get('/manifest.webmanifest');
     expect(res.ok()).toBe(true);

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
-import { Banknote, CalendarCheck2, History, SlidersHorizontal } from 'lucide-react';
+import { Banknote, CalendarCheck2, History, MonitorSmartphone, SlidersHorizontal } from 'lucide-react';
 import { api, newKey, post } from '../lib/api';
 import { euros, fmtDate, parseEuros } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import type { User, Wallet } from '../lib/types';
 import { Avatar, Badge, Button, Field, Loading, PageHeader, SectionTitle, Segmented, Sheet, useToast } from '../components/ui';
-import { LedgerList } from '../components/Ledger';
+import { LedgerList, ScreenList } from '../components/Ledger';
+import { minutesLabel } from '../lib/deadline';
 
 const METHODS = [{ value: 'cash', label: 'Efectivo' }, { value: 'bizum', label: 'Bizum' }, { value: 'transfer', label: 'Transferencia' }, { value: 'other', label: 'Otro' }] as const;
 
@@ -40,6 +41,39 @@ function PaySheet({ child, wallet, onClose }: { child: User; wallet: Wallet; onC
         <div><p className="mb-2 text-sm font-bold text-[var(--fg-2)]">Forma de pago</p><Segmented label="Forma de pago" value={method} onChange={setMethod} options={[...METHODS]} /></div>
         <Field label="Nota (opcional)">{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />}</Field>
         {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+      </div>
+    </Sheet>
+  );
+}
+
+/** Gastar o ajustar minutos de pantalla: el saldo nunca baja de 0. */
+function ScreenSheet({ child, minutes, onClose }: { child: User; minutes: number; onClose: () => void }) {
+  const [mode, setMode] = useState<'spend' | 'give' | 'take'>('spend');
+  const [value, setValue] = useState('');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const save = useMutation({
+    mutationFn: () => {
+      const n = Number(value);
+      if (!Number.isInteger(n) || n <= 0) throw new Error('Escribe los minutos');
+      if (mode === 'spend') return post('/screen/spend', { userId: child.id, minutes: n, note });
+      if (!note.trim()) throw new Error('Indica el motivo');
+      return post('/screen/adjust', { userId: child.id, delta: mode === 'give' ? n : -n, note });
+    },
+    onSuccess: (r) => { toast(`Hecho. Le quedan ${minutesLabel(r.balance)}`); invalidate(); onClose(); },
+    onError: (e: Error) => setError(e.message),
+  });
+  return (
+    <Sheet open onClose={onClose} title={`Pantalla de ${child.display_name}`} footer={<Button className="w-full" loading={save.isPending} onClick={() => save.mutate()}>{mode === 'spend' ? 'Gastar minutos' : 'Guardar'}</Button>}>
+      <div className="space-y-4">
+        <p className="muted">Saldo: <strong className="num text-[var(--fg)]">{minutesLabel(minutes)}</strong></p>
+        <Segmented label="Qué hacer" value={mode} onChange={setMode} options={[{ value: 'spend', label: 'Gastar' }, { value: 'give', label: 'Dar' }, { value: 'take', label: 'Quitar' }]} />
+        <Field label="Minutos">{(id) => <input id={id} className="field num text-xl font-bold" inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
+        <Field label={mode === 'spend' ? 'Nota (opcional)' : 'Motivo'}>{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder={mode === 'spend' ? 'Consola, tablet…' : ''} />}</Field>
+        {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+        <div className="border-t border-[var(--line)] pt-3"><ScreenList userId={child.id} /></div>
       </div>
     </Sheet>
   );
@@ -90,7 +124,7 @@ export default function Allowance() {
   const kids = (fam.data?.members ?? []).filter((m) => m.role === 'child' && m.active);
   const wallets = useQueries({ queries: kids.map((k) => ({ queryKey: ['wallet', k.id], queryFn: () => api<{ wallet: Wallet }>(`/wallet/${k.id}`) })) });
   const settlements = useQuery({ queryKey: ['settlements'], queryFn: () => api('/settlements') });
-  const [sheet, setSheet] = useState<{ kind: 'pay' | 'adjust' | 'history'; child: User; wallet: Wallet } | null>(null);
+  const [sheet, setSheet] = useState<{ kind: 'pay' | 'adjust' | 'history' | 'screen'; child: User; wallet: Wallet } | null>(null);
   const [closing, setClosing] = useState(false);
   const toast = useToast();
   const invalidate = useInvalidateAll();
@@ -138,10 +172,12 @@ export default function Allowance() {
                       <dd className="text-sm muted">Hucha: {euros(w.cents_savings)}</dd>
                     </div>
                   </dl>
+                  <p className="mt-3 flex items-center gap-2 rounded-2xl bg-[var(--chip)] px-3.5 py-2.5 text-sm"><MonitorSmartphone size={16} aria-hidden /> Pantalla: <strong className="num">{minutesLabel(w.screen_minutes)}</strong></p>
                   <p className="mt-3 text-sm muted">Convertido en total {euros(w.cents_converted_total)} · pagado {euros(w.cents_paid_total)}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button variant="success" size="sm" disabled={w.cents_pending <= 0} onClick={() => setSheet({ kind: 'pay', child: k, wallet: w })}><Banknote size={16} /> Registrar pago</Button>
                     <Button variant="secondary" size="sm" onClick={() => setSheet({ kind: 'adjust', child: k, wallet: w })}><SlidersHorizontal size={16} /> Ajustar</Button>
+                    <Button variant="secondary" size="sm" onClick={() => setSheet({ kind: 'screen', child: k, wallet: w })}><MonitorSmartphone size={16} /> Pantalla</Button>
                     <Button variant="ghost" size="sm" onClick={() => setSheet({ kind: 'history', child: k, wallet: w })}><History size={16} /> Movimientos</Button>
                   </div>
                 </>
@@ -178,6 +214,7 @@ export default function Allowance() {
         <p className="muted">Los puntos disponibles de cada hijo se convertirán en euros ({family.rate_points} pts = {euros(family.rate_cents)}){family.cap_cents != null ? `, con un máximo de ${euros(family.cap_cents)} por ${periodName}. Lo que pase del límite se queda en puntos` : ''}. Cada {periodName} solo se puede cerrar una vez.</p>
       </Sheet>
       {sheet?.kind === 'pay' ? <PaySheet child={sheet.child} wallet={sheet.wallet} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'screen' ? <ScreenSheet child={sheet.child} minutes={sheet.wallet.screen_minutes} onClose={() => setSheet(null)} /> : null}
       {sheet?.kind === 'adjust' ? <AdjustSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
       {sheet?.kind === 'history' ? (
         <Sheet open onClose={() => setSheet(null)} title={`Movimientos de ${sheet.child.display_name}`}><LedgerList userId={sheet.child.id} /></Sheet>

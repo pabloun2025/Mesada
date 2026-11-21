@@ -4,6 +4,7 @@ import { CircleCheckBig, MessageCircle, Flame, Gift, Hourglass, PartyPopper, Tri
 import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 import { euros, relative, weekdayLong } from '../lib/format';
+import { minutesLabel } from '../lib/deadline';
 import { describeAction } from '../lib/activity';
 import type { Instance } from '../lib/types';
 import { Avatar, Empty, Loading, PageHeader, SectionTitle, color } from '../components/ui';
@@ -21,6 +22,7 @@ export default function ParentDashboard() {
   if (isLoading || !data) return <Loading />;
 
   const pending = data.pendingApprovals.length;
+  const toDo = pending + data.pendingChecks + data.pendingGrants;
   return (
     <div>
       <PageHeader title="Panel familiar" subtitle={<span className="inline-block first-letter:uppercase">{weekdayLong(data.today)}</span>} />
@@ -34,9 +36,9 @@ export default function ParentDashboard() {
 
       {/* Resumen: tres cifras que importan */}
       <section className="mb-6 grid grid-cols-3 gap-2.5 sm:gap-4">
-        <Link to="/validar" className={`card flex flex-col p-3.5 sm:p-5 ${pending ? 'border-tangerine/50 bg-tangerine-soft/60 dark:bg-tangerine/10' : ''}`}>
+        <Link to="/validar" className={`card flex flex-col p-3.5 sm:p-5 ${toDo ? 'border-tangerine/50 bg-tangerine-soft/60 dark:bg-tangerine/10' : ''}`}>
           <span className="text-sm font-bold text-[var(--fg-2)]">Por validar</span>
-          <span className="num mt-auto pt-2 text-3xl font-extrabold sm:text-4xl">{pending + data.pendingRedemptions}</span>
+          <span className="num mt-auto pt-2 text-3xl font-extrabold sm:text-4xl">{pending + data.pendingRedemptions + data.pendingChecks + data.pendingGrants}</span>
         </Link>
         <div className="card flex flex-col p-3.5 sm:p-5">
           <span className="text-sm font-bold text-[var(--fg-2)]">Esta semana</span>
@@ -78,7 +80,7 @@ export default function ParentDashboard() {
                       </div>
                     </div>
                   </div>
-                  <dl className="grid grid-cols-3 divide-x divide-[var(--line)] border-t border-[var(--line)] text-center">
+                  <dl className="grid grid-cols-4 divide-x divide-[var(--line)] border-t border-[var(--line)] text-center">
                     <div className="p-3">
                       <dt className="text-xs muted">Puntos</dt>
                       <dd className="num text-lg font-extrabold">{k.wallet.points_available}</dd>
@@ -90,6 +92,10 @@ export default function ParentDashboard() {
                     <div className="p-3">
                       <dt className="text-xs muted">Hucha</dt>
                       <dd className="num text-lg font-extrabold">{euros(k.wallet.cents_savings)}</dd>
+                    </div>
+                    <div className="p-3">
+                      <dt className="text-xs muted">Pantalla</dt>
+                      <dd className="num text-lg font-extrabold">{minutesLabel(k.wallet.screen_minutes)}</dd>
                     </div>
                   </dl>
                 </article>
@@ -111,6 +117,12 @@ export default function ParentDashboard() {
           ) : (
             <div className="card"><Empty mascot icon={<CircleCheckBig />} title="Todo validado">Cuando terminen una tarea, aparecerá aquí.</Empty></div>
           )}
+          {data.pendingChecks || data.pendingGrants ? (
+            <Link to="/validar" className="card mt-3 flex items-center gap-3 p-4 font-bold">
+              <CircleCheckBig className="text-leaf" size={22} aria-hidden />
+              {[data.pendingChecks ? `${data.pendingChecks} por comprobar` : '', data.pendingGrants ? `${data.pendingGrants} ${data.pendingGrants === 1 ? 'premio' : 'premios'} por cumplir` : ''].filter(Boolean).join(' · ')}
+            </Link>
+          ) : null}
           {data.pendingRedemptions ? (
             <Link to="/premios" className="card mt-3 flex items-center gap-3 p-4 font-bold">
               <Gift className="text-tangerine" size={22} aria-hidden />

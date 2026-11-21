@@ -114,7 +114,7 @@ export default async function insightRoutes(app: FastifyInstance) {
         return { ...c, today: todayStats, weekPoints, weekCents: pointsToCents(fam, Math.max(0, weekPoints)), wallet, streak };
       }),
     );
-    const [pendingApprovals, pendingRedemptions, overdue, activity] = await Promise.all([
+    const [pendingApprovals, pendingRedemptions, overdue, pendingChecks, pendingGrants, activity] = await Promise.all([
       many(
         db,
         `SELECT i.id, i.due_date, i.points, i.completed_at, i.child_note, (i.photo_path IS NOT NULL) AS has_photo, t.title, t.icon,
@@ -124,7 +124,10 @@ export default async function insightRoutes(app: FastifyInstance) {
         [u.familyId],
       ),
       one(db, `SELECT count(*)::int AS n FROM redemptions WHERE family_id = $1 AND status = 'requested'`, [u.familyId]),
-      one(db, `SELECT count(*)::int AS n FROM task_instances WHERE family_id = $1 AND status = 'expired' AND due_date >= $2`, [u.familyId, addDays(today, -7)]),
+      // Las tareas de comprobación no cumplidas quedan como «vencidas» pero no se pueden «dar por hechas»: no cuentan aquí.
+      one(db, `SELECT count(*)::int AS n FROM task_instances i JOIN tasks t ON t.id = i.task_id WHERE i.family_id = $1 AND i.status = 'expired' AND i.due_date >= $2 AND NOT t.check_mode`, [u.familyId, addDays(today, -7)]),
+      one(db, `SELECT count(*)::int AS n FROM task_instances i JOIN tasks t ON t.id = i.task_id WHERE i.family_id = $1 AND t.check_mode AND i.check_met IS NULL AND i.status IN ('pending','expired') AND i.due_date BETWEEN $2 AND $3`, [u.familyId, addDays(today, -7), today]),
+      one(db, `SELECT count(*)::int AS n FROM bonus_grants WHERE family_id = $1 AND kind IN ('text','reward') AND fulfilled_at IS NULL AND voided_at IS NULL`, [u.familyId]),
       many(
         db,
         `SELECT a.id, a.action, a.entity, a.data, a.created_at, u.display_name AS actor_name, u.avatar AS actor_avatar, u.color AS actor_color
@@ -139,6 +142,8 @@ export default async function insightRoutes(app: FastifyInstance) {
       pendingApprovals,
       pendingRedemptions: pendingRedemptions.n,
       overdueLastWeek: overdue.n,
+      pendingChecks: pendingChecks.n,
+      pendingGrants: pendingGrants.n,
       activity,
       totals: {
         weekCents: kids.reduce((s, k) => s + k.weekCents, 0),

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Camera, CalendarCheck, Flame, PartyPopper } from 'lucide-react';
+import { Camera, CalendarCheck, Flame, Hourglass, PartyPopper } from 'lucide-react';
 import { api } from '../lib/api';
 import { addDays, euros, fmtDate, weekdayLong } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
-import type { Instance, Progress } from '../lib/types';
+import type { Instance, Progress, Wallet, BonusGrant } from '../lib/types';
+import { minutesLabel } from '../lib/deadline';
 import { Button, Empty, Loading, SectionTitle, Sheet, useToast } from '../components/ui';
 import { WeekRing } from '../components/Ring';
 import { TaskRow } from '../components/TaskRow';
@@ -21,6 +22,8 @@ export default function ChildToday() {
     queryFn: () => api<{ instances: Instance[] }>(`/instances?from=${addDays(today!, 1)}&to=${addDays(today!, 3)}`),
     enabled: !!today,
   });
+  const wallet = useQuery({ queryKey: ['wallet', user.id], queryFn: () => api<{ wallet: Wallet }>(`/wallet/${user.id}`) });
+  const grants = useQuery({ queryKey: ['bonus-grants', 'mine'], queryFn: () => api<{ grants: BonusGrant[] }>('/bonus-grants') });
   const progress = useQuery({ queryKey: ['progress', user.id], queryFn: () => api<Progress>(`/progress/${user.id}`) });
   const [photoFor, setPhotoFor] = useState<Instance | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -43,7 +46,7 @@ export default function ChildToday() {
       return api(`/instances/${inst.id}/complete`, { method: 'POST', body: {} });
     },
     onSuccess: (r, { inst }) => {
-      toast(r.status === 'approved' ? `¡+${r.points} puntos!` : `«${inst.title}» enviada. Falta que la validen.`);
+      toast(r.status === 'approved' ? `¡+${r.points} puntos!` : r.onTime === false ? `«${inst.title}» enviada, con retraso. Falta que la validen.` : `«${inst.title}» enviada. Falta que la validen.`);
       setPhotoFor(null);
       setFile(null);
       invalidate();
@@ -56,8 +59,10 @@ export default function ChildToday() {
 
   if (list.isLoading) return <Loading />;
   const items = list.data?.instances ?? [];
-  const open = items.filter((i) => i.status === 'pending' || i.status === 'rejected');
+  const open = items.filter((i) => (i.status === 'pending' || i.status === 'rejected') && !i.check_mode);
   const doneCount = items.filter((i) => i.status === 'approved' || i.status === 'submitted').length;
+  const screenMin = wallet.data?.wallet.screen_minutes;
+  const pendingGrants = grants.data?.grants ?? [];
   const p = progress.data;
 
   const onComplete = (inst: Instance) => (inst.requires_photo ? setPhotoFor(inst) : complete.mutate({ inst }));
@@ -77,6 +82,11 @@ export default function ChildToday() {
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
               <Flame size={16} className={p?.streak ? 'text-sun' : 'text-[var(--fg-3)]'} aria-hidden /> {p?.streak ?? 0} {p?.streak === 1 ? 'día' : 'días'} de racha
             </span>
+            {screenMin != null ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
+                <span aria-hidden>📱</span> {minutesLabel(screenMin)} de pantalla
+              </span>
+            ) : null}
             {p ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
                 Nivel {p.level.level} · {p.level.title}
@@ -103,6 +113,20 @@ export default function ChildToday() {
           <div className="card"><Empty mascot icon={<PartyPopper />} title="Nada por aquí">Disfruta del día.</Empty></div>
         )}
       </section>
+
+      {pendingGrants.length ? (
+        <section className="mb-8">
+          <SectionTitle>Premios por llegar</SectionTitle>
+          <ul className="space-y-2">
+            {pendingGrants.map((g) => (
+              <li key={g.id} className="card flex items-center gap-3 p-3.5">
+                <Hourglass size={18} className="shrink-0 text-sun-ink" aria-hidden />
+                <span className="min-w-0 flex-1"><span className="block font-bold">{g.label}</span><span className="block text-sm muted">Por «{g.task_title}». Un adulto te lo dará.</span></span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {upcoming.data?.instances.length ? (
         <section>

@@ -1,10 +1,49 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { patch } from '../lib/api';
-import { euros, parseEuros } from '../lib/format';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Trash2 } from 'lucide-react';
+import { api, del, patch, post } from '../lib/api';
+import { euros, fmtDate, parseEuros } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
-import { Button, Field, PageHeader, Segmented, Toggle, useToast } from '../components/ui';
+import { Button, Field, IconButton, PageHeader, Segmented, Toggle, useToast } from '../components/ui';
+
+/** Festivos y vacaciones: esos días rige la hora límite de fin de semana. */
+function Holidays() {
+  const [day, setDay] = useState('');
+  const [label, setLabel] = useState('');
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const list = useQuery({ queryKey: ['holidays'], queryFn: () => api<{ holidays: { day: string; label: string }[] }>('/holidays') });
+  const add = useMutation({
+    mutationFn: () => post('/holidays', { day, label }),
+    onSuccess: () => { setDay(''); setLabel(''); invalidate(); },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  const remove = useMutation({ mutationFn: (d: string) => del(`/holidays/${d}`), onSuccess: () => invalidate() });
+  return (
+    <section className="panel space-y-4 p-5">
+      <div>
+        <h2 className="text-lg font-bold">Festivos y vacaciones</h2>
+        <p className="text-sm muted">Esos días, las tareas con hora límite usan la hora del fin de semana.</p>
+      </div>
+      <form className="grid grid-cols-[auto_1fr_auto] items-end gap-2" onSubmit={(e) => { e.preventDefault(); if (day) add.mutate(); }}>
+        <Field label="Día">{(id) => <input id={id} type="date" className="field" value={day} onChange={(e) => setDay(e.target.value)} required />}</Field>
+        <Field label="Nombre">{(id) => <input id={id} className="field" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder="Puente de diciembre" />}</Field>
+        <Button type="submit" variant="secondary" loading={add.isPending} disabled={!day}>Añadir</Button>
+      </form>
+      {list.data?.holidays.length ? (
+        <ul className="divide-y divide-[var(--line)]">
+          {list.data.holidays.map((h) => (
+            <li key={h.day} className="flex items-center gap-3 py-2">
+              <span className="flex-1"><span className="font-bold">{fmtDate(h.day, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</span>{h.label ? <span className="muted"> · {h.label}</span> : null}</span>
+              <IconButton label={`Quitar ${h.day}`} onClick={() => remove.mutate(h.day)}><Trash2 size={17} /></IconButton>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="text-sm muted">Todavía no has marcado ninguno.</p>}
+    </section>
+  );
+}
 
 export default function Settings() {
   const { family } = useSession();
@@ -64,6 +103,7 @@ export default function Settings() {
           <Toggle checked={f.leaderboardEnabled} onChange={(v) => setF({ ...f, leaderboardEnabled: v })} label="Clasificación entre hermanos" description="Si la desactivas, cada uno solo ve su progreso frente a su objetivo." />
           <Toggle checked={f.celebrationsEnabled} onChange={(v) => setF({ ...f, celebrationsEnabled: v })} label="Celebraciones" description="Pequeña animación al completar tareas." />
         </section>
+        <Holidays />
         {error ? <p role="alert" className="font-bold text-berry">{error}</p> : null}
         <Button size="lg" loading={save.isPending} onClick={() => save.mutate()}>Guardar ajustes</Button>
       </div>

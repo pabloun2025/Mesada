@@ -1,6 +1,7 @@
 import { many, type Db } from '../db.js';
 import { familyToday, getFamily } from '../family.js';
 import { hhmmToMinutes, localMinutes } from './time.js';
+import { deadlineAt, deadlineTime, isHoliday } from '../deadline.js';
 import { notify } from './dispatch.js';
 
 /**
@@ -20,6 +21,7 @@ export async function scheduleReminders(db: Db, familyId: string, now = new Date
       `SELECT u.id AS user_id, count(i.id)::int AS n
          FROM users u
          JOIN task_instances i ON i.family_id = u.family_id AND i.due_date = $2 AND i.status IN ('pending','rejected')
+          AND NOT EXISTS (SELECT 1 FROM tasks ck WHERE ck.id = i.task_id AND ck.check_mode)
           AND (i.assignee_id = u.id OR (i.assignee_id IS NULL AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = i.task_id AND a.user_id = u.id)))
         WHERE u.family_id = $1 AND u.role = 'child' AND u.active
         GROUP BY u.id`,
@@ -38,23 +40,27 @@ export async function scheduleReminders(db: Db, familyId: string, now = new Date
   }
 
   if (f.due_soon_minutes > 0) {
-    const due = await many<{ id: string; title: string; due_min: number; user_id: string }>(
+    // La hora límite depende del día (L–V, fin de semana o festivo), así que se calcula como instante.
+    const due = await many<{ id: string; title: string; due_time: string | null; due_time_weekend: string | null; late_percent: number; user_id: string }>(
       db,
-      `SELECT i.id, t.title, (extract(hour FROM t.due_time) * 60 + extract(minute FROM t.due_time))::int AS due_min, u.id AS user_id
-         FROM task_instances i JOIN tasks t ON t.id = i.task_id
+      `SELECT i.id, t.title, t.due_time, t.due_time_weekend, t.late_percent, u.id AS user_id
+         FROM task_instances i JOIN tasks t ON t.id = i.task_id AND NOT t.check_mode
          JOIN users u ON u.family_id = i.family_id AND u.active AND u.role = 'child'
           AND (u.id = i.assignee_id OR (i.assignee_id IS NULL AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = i.task_id AND a.user_id = u.id)))
-        WHERE i.family_id = $1 AND i.due_date = $2 AND i.status IN ('pending','rejected') AND t.due_time IS NOT NULL`,
+        WHERE i.family_id = $1 AND i.due_date = $2 AND i.status IN ('pending','rejected') AND (t.due_time IS NOT NULL OR t.due_time_weekend IS NOT NULL)`,
       [familyId, today],
     );
+    const holiday = due.length ? await isHoliday(db, familyId, today) : false;
     for (const d of due) {
-      if (nowMin >= d.due_min - f.due_soon_minutes && nowMin < d.due_min) {
-        const hh = `${String(Math.floor(d.due_min / 60)).padStart(2, '0')}:${String(d.due_min % 60).padStart(2, '0')}`;
+      const dl = deadlineAt(d, today, holiday, fam.timezone);
+      if (!dl) continue;
+      const startsAt = dl.getTime() - f.due_soon_minutes * 60_000;
+      if (now.getTime() >= startsAt && now.getTime() < dl.getTime()) {
         await notify(db, {
           userId: d.user_id,
           event: 'task_due_soon',
-          title: `«${d.title}» vence a las ${hh}`,
-          body: 'Todavía estás a tiempo.',
+          title: `«${d.title}» vence a las ${deadlineTime(d, today, holiday)}`,
+          body: d.late_percent < 100 ? `Si llegas tarde, vale el ${d.late_percent} % de los puntos.` : 'Todavía estás a tiempo.',
           link: '/',
           dedupeKey: `duesoon:${d.id}:${d.user_id}`,
         });

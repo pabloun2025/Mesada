@@ -23,6 +23,8 @@ export const EVENTS = {
   reward_decided: { label: 'Recompensa aprobada o rechazada', audience: 'child', defaults: ['whatsapp'] },
   settlement: { label: 'Cierre de mesada', audience: 'any', defaults: ['email'] },
   payment: { label: 'Pago registrado', audience: 'child', defaults: [] },
+  bonus_won: { label: 'Sorpresa ganada', audience: 'child', defaults: [] },
+  screen_changed: { label: 'Cambio en minutos de pantalla', audience: 'child', defaults: [] },
   badge: { label: 'Insignia u objetivo conseguido', audience: 'child', defaults: [] },
 } satisfies Record<string, EventDef>;
 
