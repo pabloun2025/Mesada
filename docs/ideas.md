@@ -65,3 +65,14 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
     - al aprobar, se descuenta.
   - El hijo pide el importe que quiera, hasta su saldo.
   - Los minutos de pantalla se descuentan al aprobar (sin temporizador).
+
+## I5. El hijo anota su propio uso de pantalla y gana puntos por ser honesto (21/11)
+- **Decidido:**
+  - El hijo anota los minutos que usó y en qué: videojuegos, tele, tablet…
+  - Gana 5 puntos por registrar honestamente lo jugado ese día: una vez al día, aunque anote varias veces.
+  - Los minutos se restan del saldo al momento.
+  - Los puntos llegan cuando el padre lo confirma. El padre también puede anularlo.
+  - Si anota más de lo que tiene en el saldo:
+    - el exceso queda registrado y el saldo se queda en 0;
+    - ese día no gana puntos;
+    - el padre recibe un aviso.
