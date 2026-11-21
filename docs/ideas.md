@@ -99,3 +99,11 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - Si no tiene saldo, el saldo queda en negativo: no puede retirar ni pedir otro préstamo hasta volver a positivo.
   - Solo un préstamo a la vez.
 - Se relaciona con I4 («Pedir mi dinero» pasaría a ser el retiro).
+
+## I7. Ahorro programado con interés (21/11)
+**Estado: en recogida.**
+- La hucha pasa a dar interés: cada meta (algo concreto con un valor) es un ahorro programado.
+- El hijo va metiendo dinero de su saldo en la meta.
+- Interés semanal: 1 % de lo ahorrado, redondeado al euro de arriba, como mínimo 1 €.
+- Puede sacar el dinero antes de la meta: recupera lo que puso, pero pierde el interés ganado.
+- Al llegar a la meta, el dinero pasa a su saldo y deja de ganar interés. Luego lo retira como un retiro normal.
