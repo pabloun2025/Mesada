@@ -121,3 +121,14 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - Hijo: tarjeta de cuenta (nombre, número de cuenta de juguete, saldo grande); botones de cajero (Retirar, Canjear puntos, Adelanto, Préstamo, Ahorrar); extracto (fecha, concepto, importe en verde/rojo, saldo tras cada movimiento); productos aparte («Mi préstamo» con cuotas que quedan, «Mis ahorros» con barra hacia la meta e interés ganado).
   - Dos cuentas del mismo banco: «Cuenta de puntos» y «Cuenta de dinero».
   - Los padres también lo ven como un banco: cuentas de cada hijo, retiros, préstamos y lo que deben pagar.
+
+## I8. Aspecto de app de banco moderna (21/11)
+**Estado: maqueta primero; se programa cuando el usuario la apruebe.**
+- Hijo, estilo banco digital:
+  - tarjetas que se deslizan (cuenta de dinero y cuenta de puntos);
+  - botones redondos con icono debajo (Retirar, Canjear, Adelanto, Préstamo, Ahorrar);
+  - extracto con un icono por tipo de movimiento (tarea, canje, retiro, préstamo, interés, compra de meta);
+  - recibo de banco al operar (fecha, importe, saldo nuevo);
+  - teclado numérico grande para el importe, con botones rápidos (5 €, 10 €, todo);
+  - pequeña gráfica del saldo de las últimas semanas.
+- Padres, banca para padres: una cuenta por hijo, «Pendiente de pagar» destacado, operaciones por aprobar, préstamos y ahorros como productos.
