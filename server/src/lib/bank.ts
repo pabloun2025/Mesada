@@ -79,19 +79,19 @@ export async function exchangePoints(child: AuthUser, p: { points: number; idemp
 /** Lo máximo que se puede adelantar ahora (0 si no se puede) y por qué no. */
 export async function advanceRoom(db: Db, fam: Family, userId: string, today: string) {
   const cap = await capStatus(db, fam, userId, today);
-  if (!fam.bank_advance_enabled) return { max: 0, cap, nextWeek: addDays(cap.weekStart, 7), reason: 'El adelanto está desactivado' };
+  if (!fam.bank_advance_enabled) return { max: 0, cap, nextWeek: addDays(cap.weekStart, 7), reason: 'El adelanto está desactivado', hint: 'Desactivado' };
   const nextWeek = addDays(cap.weekStart, 7);
-  if (cap.weeklyCap == null) return { max: 0, cap, nextWeek, reason: NO_CAP };
+  if (cap.weeklyCap == null) return { max: 0, cap, nextWeek, reason: NO_CAP, hint: 'Sin tope' };
   // Mientras pueda canjear (al menos el mínimo) esta semana, el adelanto no hace falta.
   const minCents = pointsToCents(fam, fam.bank_exchange_min_points);
-  if ((cap.remaining ?? 0) >= Math.max(1, minCents)) return { max: 0, cap, nextWeek, reason: `Aún puedes canjear ${fmtEur(cap.remaining!)} esta semana` };
+  if ((cap.remaining ?? 0) >= Math.max(1, minCents)) return { max: 0, cap, nextWeek, reason: `Aún puedes canjear ${fmtEur(cap.remaining!)} esta semana`, hint: 'Canjea antes' };
   const already = (await one<{ n: number }>(db, `SELECT COALESCE(SUM(cents),0)::int AS n FROM cap_uses WHERE user_id = $1 AND kind = 'advance' AND cap_week = $2`, [userId, nextWeek]))!.n;
   const max = Math.max(0, Math.floor((cap.weeklyCap * fam.bank_advance_percent) / 100) - already);
-  if (max <= 0) return { max: 0, cap, nextWeek, reason: 'Ya has adelantado todo lo que se puede de la semana que viene' };
+  if (max <= 0) return { max: 0, cap, nextWeek, reason: 'Ya has adelantado todo lo que se puede de la semana que viene', hint: 'Sin cupo' };
   const bal = await pointsBalance(db, userId);
   const affordable = Math.min(max, pointsToCents(fam, Math.max(0, bal)));
-  if (affordable <= 0) return { max: 0, cap, nextWeek, reason: 'No tienes puntos para adelantar' };
-  return { max: affordable, cap, nextWeek, reason: null as string | null };
+  if (affordable <= 0) return { max: 0, cap, nextWeek, reason: 'No tienes puntos para adelantar', hint: 'Sin puntos' };
+  return { max: affordable, cap, nextWeek, reason: null as string | null, hint: null as string | null };
 }
 
 export async function takeAdvance(child: AuthUser, p: { cents: number; idempotencyKey?: string }) {
@@ -337,28 +337,33 @@ export async function bankOverview(db: Db, familyId: string, userId: string, now
 
   const minPts = fam.bank_exchange_min_points;
   const maxPts = Math.max(0, Math.min(points, cap.remaining == null ? points : maxPointsForCents(fam, cap.remaining)));
+  // Cada motivo lleva además una pista corta para el botón redondo (el motivo completo sale al tocarlo).
   let exchangeReason: string | null = null;
-  if (!fam.bank_exchange_enabled) exchangeReason = 'El canje está desactivado';
-  else if (points < minPts) exchangeReason = `Necesitas al menos ${minPts} puntos`;
-  else if (maxPts < minPts) exchangeReason = cap.remaining === 0 ? 'Ya has llegado al tope de esta semana' : `Esta semana solo te caben ${fmtEur(cap.remaining ?? 0)}`;
+  let exchangeHint: string | null = null;
+  if (!fam.bank_exchange_enabled) { exchangeReason = 'El canje está desactivado'; exchangeHint = 'Desactivado'; }
+  else if (points < minPts) { exchangeReason = `Necesitas al menos ${minPts} puntos`; exchangeHint = `Mín. ${minPts} pts`; }
+  else if (maxPts < minPts) { exchangeReason = cap.remaining === 0 ? 'Ya has llegado al tope de esta semana' : `Esta semana solo te caben ${fmtEur(cap.remaining ?? 0)}`; exchangeHint = 'Tope semanal'; }
 
   let withdrawReason: string | null = null;
-  if (!fam.bank_withdraw_enabled) withdrawReason = 'Retirar está desactivado';
-  else if (money < 0) withdrawReason = 'Tu cuenta está en negativo';
-  else if (money === 0) withdrawReason = 'No tienes dinero que retirar';
-  else if (openWithdrawal) withdrawReason = 'Ya tienes un retiro esperando';
-  else if (withdrawals >= fam.bank_withdraw_per_week) withdrawReason = `Ya hiciste ${withdrawals} retiros esta semana. Vuelve el lunes`;
+  let withdrawHint: string | null = null;
+  if (!fam.bank_withdraw_enabled) { withdrawReason = 'Retirar está desactivado'; withdrawHint = 'Desactivado'; }
+  else if (money < 0) { withdrawReason = 'Tu cuenta está en negativo'; withdrawHint = 'En negativo'; }
+  else if (money === 0) { withdrawReason = 'No tienes dinero que retirar'; withdrawHint = 'Sin saldo'; }
+  else if (openWithdrawal) { withdrawReason = 'Ya tienes un retiro esperando'; withdrawHint = 'En curso'; }
+  else if (withdrawals >= fam.bank_withdraw_per_week) { withdrawReason = `Ya hiciste ${withdrawals} retiros esta semana. Vuelve el lunes`; withdrawHint = 'Vuelve el lunes'; }
 
   let loanReason: string | null = null;
-  if (!fam.bank_loan_enabled) loanReason = 'El préstamo está desactivado';
-  else if (cap.weeklyCap == null) loanReason = NO_CAP;
-  else if (openLoan) loanReason = openLoan.status === 'pending' ? 'Tu préstamo espera respuesta' : 'Ya tienes un préstamo';
-  else if (money < 0) loanReason = 'Tu cuenta está en negativo';
+  let loanHint: string | null = null;
+  if (!fam.bank_loan_enabled) { loanReason = 'El préstamo está desactivado'; loanHint = 'Desactivado'; }
+  else if (cap.weeklyCap == null) { loanReason = NO_CAP; loanHint = 'Sin tope'; }
+  else if (openLoan) { loanReason = openLoan.status === 'pending' ? 'Tu préstamo espera respuesta' : 'Ya tienes un préstamo'; loanHint = openLoan.status === 'pending' ? 'En espera' : 'En curso'; }
+  else if (money < 0) { loanReason = 'Tu cuenta está en negativo'; loanHint = 'En negativo'; }
 
   const goalCount = (await one<{ n: number }>(db, `SELECT count(*)::int AS n FROM savings_goals WHERE user_id = $1 AND status = 'active' AND NOT archived`, [userId]))!.n;
   let saveReason: string | null = null;
-  if (goalCount === 0) saveReason = 'Crea primero una meta';
-  else if (money <= 0) saveReason = 'No tienes dinero para ahorrar';
+  let saveHint: string | null = null;
+  if (goalCount === 0) { saveReason = 'Crea primero una meta'; saveHint = 'Crea una meta'; }
+  else if (money <= 0) { saveReason = 'No tienes dinero para ahorrar'; saveHint = 'Sin saldo'; }
 
   return {
     accounts: { money: accountNumber(userId, 'money'), points: accountNumber(userId, 'points') },
@@ -371,37 +376,98 @@ export async function bankOverview(db: Db, familyId: string, userId: string, now
       withdrawals_used: withdrawals, withdrawals_max: fam.bank_withdraw_per_week,
     },
     actions: {
-      withdraw: { ok: !withdrawReason, reason: withdrawReason, max_cents: Math.max(0, money) },
-      exchange: { ok: !exchangeReason, reason: exchangeReason, min_points: minPts, max_points: maxPts },
-      advance: { ok: !adv.reason, reason: adv.reason, max_cents: adv.max },
-      loan: { ok: !loanReason, reason: loanReason, max_cents: loanMax, max_weeks: fam.bank_loan_max_weeks, interest_points: fam.bank_loan_interest_points },
-      save: { ok: !saveReason, reason: saveReason },
+      withdraw: { ok: !withdrawReason, reason: withdrawReason, hint: withdrawHint, max_cents: Math.max(0, money) },
+      exchange: { ok: !exchangeReason, reason: exchangeReason, hint: exchangeHint, min_points: minPts, max_points: maxPts },
+      advance: { ok: !adv.reason, reason: adv.reason, hint: adv.hint, max_cents: adv.max },
+      loan: { ok: !loanReason, reason: loanReason, hint: loanHint, max_cents: loanMax, max_weeks: fam.bank_loan_max_weeks, interest_points: fam.bank_loan_interest_points },
+      save: { ok: !saveReason, reason: saveReason, hint: saveHint },
     },
     loan: openLoan,
     owed_cents: money + savings,
+    history: await balanceHistory(db, fam, userId, today),
   };
 }
 
-/** Extracto de una cuenta con el saldo tras cada movimiento (más reciente primero). */
-export async function statement(db: Db, userId: string, account: 'money' | 'points') {
-  if (account === 'points') {
-    return many(
-      db,
-      `SELECT * FROM (
-         SELECT l.id, l.delta AS amount, l.kind, l.note, l.created_at, c.display_name AS created_by_name,
-                SUM(l.delta) OVER (ORDER BY l.created_at, l.seq)::int AS balance_after, l.created_at AS ts, l.seq
-           FROM points_ledger l LEFT JOIN users c ON c.id = l.created_by WHERE l.user_id = $1
-       ) s ORDER BY ts DESC, seq DESC LIMIT 200`,
-      [userId],
-    );
-  }
-  return many(
+/**
+ * Saldo de dinero al final de cada una de las últimas `n` semanas (lunes a domingo, en la zona de la familia).
+ * La semana en curso termina «ahora», así que su último punto es el saldo actual. `start_cents` es el saldo
+ * justo antes de la primera semana, para poder decir cuánto ha cambiado en total.
+ */
+export async function balanceHistory(db: Db, fam: Family, userId: string, today: string, n = 8) {
+  const thisWeek = startOfWeek(today);
+  const first = addDays(thisWeek, -7 * (n - 1));
+  const rows = await many<{ week_start: string; balance: number }>(
     db,
-    `SELECT * FROM (
-       SELECT l.id, l.delta_cents AS amount, l.kind, l.note, l.created_at, c.display_name AS created_by_name,
-              SUM(l.delta_cents) OVER (ORDER BY l.created_at, l.seq)::int AS balance_after, l.created_at AS ts, l.seq
-         FROM money_ledger l LEFT JOIN users c ON c.id = l.created_by WHERE l.user_id = $1 AND l.account = 'available'
-     ) s ORDER BY ts DESC, seq DESC LIMIT 200`,
-    [userId],
+    `SELECT to_char(w.ws::date, 'YYYY-MM-DD') AS week_start,
+            COALESCE((SELECT SUM(l.delta_cents) FROM money_ledger l
+                       WHERE l.user_id = $1 AND l.account = 'available'
+                         AND (l.created_at AT TIME ZONE $4)::date <= (w.ws::date + 6)), 0)::int AS balance
+       FROM generate_series($2::date, $3::date, interval '7 days') AS w(ws) ORDER BY w.ws`,
+    [userId, first, thisWeek, fam.timezone],
   );
+  const start = await one<{ b: number }>(
+    db,
+    `SELECT COALESCE(SUM(delta_cents),0)::int AS b FROM money_ledger WHERE user_id = $1 AND account = 'available' AND (created_at AT TIME ZONE $3)::date < $2::date`,
+    [userId, first, fam.timezone],
+  );
+  const weeks = rows.map((r) => ({ week_start: r.week_start, balance_cents: r.balance }));
+  const last = weeks[weeks.length - 1]?.balance_cents ?? 0;
+  const prev = weeks.length > 1 ? weeks[weeks.length - 2].balance_cents : start!.b;
+  return { weeks, start_cents: start!.b, delta_cents: last - start!.b, week_delta_cents: last - prev };
+}
+
+/** Resumen de banco de toda la familia para los padres: lo que deben, préstamos vivos e interés de la semana. */
+export async function familyBankSummary(db: Db, familyId: string, now = new Date()) {
+  const fam = await getFamily(db, familyId);
+  const weekStart = startOfWeek(familyToday(fam, now));
+  const r = await one<{ money: number; savings: number; interest: number; loans: number; loans_left: number }>(
+    db,
+    `SELECT
+       COALESCE((SELECT SUM(l.delta_cents) FROM money_ledger l JOIN users u ON u.id = l.user_id WHERE l.family_id = $1 AND u.active AND u.role = 'child' AND l.account = 'available'),0)::int AS money,
+       COALESCE((SELECT SUM(l.delta_cents) FROM money_ledger l JOIN users u ON u.id = l.user_id WHERE l.family_id = $1 AND u.active AND u.role = 'child' AND l.account = 'savings'),0)::int AS savings,
+       COALESCE((SELECT SUM(l.delta_cents) FROM money_ledger l WHERE l.family_id = $1 AND l.kind = 'interest' AND (l.created_at AT TIME ZONE $3)::date >= $2::date),0)::int AS interest,
+       (SELECT count(*) FROM loans WHERE family_id = $1 AND status = 'active')::int AS loans,
+       COALESCE((SELECT SUM(x.amount_cents - COALESCE((SELECT SUM(c.cents) FROM loan_charges c WHERE c.loan_id = x.id),0)) FROM loans x WHERE x.family_id = $1 AND x.status = 'active'),0)::int AS loans_left`,
+    [familyId, weekStart, fam.timezone],
+  );
+  return {
+    owed_cents: r!.money + r!.savings, money_cents: r!.money, savings_cents: r!.savings,
+    loans_active: r!.loans, loans_remaining_cents: r!.loans_left, interest_week_cents: r!.interest,
+  };
+}
+
+export type StatementAccount = 'money' | 'points' | 'all';
+
+/**
+ * Extracto con el saldo tras cada movimiento (más reciente primero), paginado.
+ * - `points` y `money` son un libro cada uno; `all` los mezcla por fecha.
+ * - En dinero también salen, como movimientos «de meta», el interés, el interés perdido y la compra de la meta
+ *   (viven en la cuenta de ahorro; su saldo es el de esa meta, no el de la cuenta).
+ */
+export async function statement(db: Db, userId: string, account: StatementAccount, o: { limit?: number; offset?: number } = {}) {
+  const limit = Math.min(Math.max(o.limit ?? 200, 1), 200);
+  const offset = Math.max(o.offset ?? 0, 0);
+  const pointsSql = `
+    SELECT l.id, 'points'::text AS account, 'account'::text AS scope, l.delta AS amount, l.kind, l.note, l.created_at, c.display_name AS created_by_name,
+           SUM(l.delta) OVER (ORDER BY l.created_at, l.seq)::int AS balance_after, NULL::text AS method, false AS is_withdrawal, l.seq
+      FROM points_ledger l LEFT JOIN users c ON c.id = l.created_by WHERE l.user_id = $1`;
+  const moneySql = `
+    SELECT l.id, 'money'::text AS account, 'account'::text AS scope, l.delta_cents AS amount, l.kind, l.note, l.created_at, c.display_name AS created_by_name,
+           SUM(l.delta_cents) OVER (ORDER BY l.created_at, l.seq)::int AS balance_after,
+           CASE WHEN l.kind = 'payment' THEN (SELECT p.method FROM payments p WHERE p.id = l.ref_id) END AS method,
+           CASE WHEN l.kind = 'payment' THEN EXISTS (SELECT 1 FROM payout_requests q WHERE q.payment_id = l.ref_id) ELSE false END AS is_withdrawal, l.seq
+      FROM money_ledger l LEFT JOIN users c ON c.id = l.created_by WHERE l.user_id = $1 AND l.account = 'available'
+    UNION ALL
+    SELECT * FROM (
+      SELECT l.id, 'money'::text AS account, 'goal'::text AS scope, l.delta_cents AS amount, l.kind, l.note, l.created_at, c.display_name AS created_by_name,
+             SUM(l.delta_cents) OVER (PARTITION BY l.goal_id ORDER BY l.created_at, l.seq)::int AS balance_after, NULL::text AS method, false AS is_withdrawal, l.seq
+        FROM money_ledger l LEFT JOIN users c ON c.id = l.created_by WHERE l.user_id = $1 AND l.account = 'savings'
+    ) g WHERE g.kind IN ('interest','interest_forfeit','goal_redeem')`;
+  const inner = account === 'points' ? pointsSql : account === 'money' ? moneySql : `${pointsSql} UNION ALL ${moneySql}`;
+  const rows = await many(
+    db,
+    `SELECT * FROM (${inner}) s ORDER BY created_at DESC, seq DESC, id DESC LIMIT $2 OFFSET $3`,
+    [userId, limit + 1, offset],
+  );
+  return { entries: rows.slice(0, limit), has_more: rows.length > limit };
 }

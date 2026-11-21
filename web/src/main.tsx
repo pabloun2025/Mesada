@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from './App';
 import { ToastProvider } from './components/ui';
+import { ReceiptProvider } from './components/Receipt';
 import './styles.css';
 
 registerSW({ immediate: true });
@@ -20,7 +21,9 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ToastProvider>
-          <App />
+          <ReceiptProvider>
+            <App />
+          </ReceiptProvider>
         </ToastProvider>
       </BrowserRouter>
     </QueryClientProvider>

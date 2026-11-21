@@ -179,7 +179,7 @@ export function Disclosure({ title, summary, defaultOpen = false, children }: { 
 
 /* ---------- Hoja modal (abajo en móvil, centrada en escritorio) ---------- */
 
-export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {
+export function Sheet({ open, onClose, title, subtitle, children, footer }: { open: boolean; onClose: () => void; title: string; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -196,9 +196,13 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
     >
       {open ? (
         <div className="anim-sheet flex max-h-[92dvh] flex-col rounded-t-[var(--radius-panel)] bg-[var(--card)] text-[var(--fg)] sm:rounded-[var(--radius-panel)]">
-          <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
-            <h2 className="text-xl font-bold">{title}</h2>
-            <IconButton label="Cerrar" onClick={onClose}><X size={20} /></IconButton>
+          <div aria-hidden className="mx-auto mt-2.5 h-[5px] w-10 shrink-0 rounded-full bg-[var(--line)] sm:hidden" />
+          <div className="flex items-center justify-between gap-3 px-5 pt-3 pb-3 sm:pt-5">
+            <div className="min-w-0">
+              <h2 className="text-xl font-bold">{title}</h2>
+              {subtitle ? <p className="text-sm text-[var(--fg-2)]">{subtitle}</p> : null}
+            </div>
+            <IconButton label="Cerrar" onClick={onClose} className="bg-[var(--chip)]"><X size={20} /></IconButton>
           </div>
           <div className="overflow-y-auto overscroll-contain px-5 pb-5">{children}</div>
           {footer ? <div className="safe-bottom border-t border-[var(--line)] px-5 py-4">{footer}</div> : null}

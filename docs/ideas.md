@@ -123,7 +123,7 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - Los padres también lo ven como un banco: cuentas de cada hijo, retiros, préstamos y lo que deben pagar.
 
 ## I8. Aspecto de app de banco moderna (21/11)
-**Estado: maqueta primero; se programa cuando el usuario la apruebe.**
+**Estado: construida (21/11), ver D33. Maquetas aprobadas en `docs/maquetas/banco/`.**
 - Hijo, estilo banco digital:
   - tarjetas que se deslizan (cuenta de dinero y cuenta de puntos);
   - botones redondos con icono debajo (Retirar, Canjear, Adelanto, Préstamo, Ahorrar);
