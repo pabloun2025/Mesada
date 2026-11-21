@@ -114,3 +114,6 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Los 2 retiros cuentan de lunes a domingo (el contador vuelve a 0 cada lunes).
 - En Ajustes el padre cambia todos los números (2 retiros, 50 %, 300 %, 10 puntos, 1 %) o apaga cada opción.
 - **Aspecto:** la pantalla de dinero del hijo tiene que parecer una cuenta de banco.
+  - Hijo: tarjeta de cuenta (nombre, número de cuenta de juguete, saldo grande); botones de cajero (Retirar, Canjear puntos, Adelanto, Préstamo, Ahorrar); extracto (fecha, concepto, importe en verde/rojo, saldo tras cada movimiento); productos aparte («Mi préstamo» con cuotas que quedan, «Mis ahorros» con barra hacia la meta e interés ganado).
+  - Dos cuentas del mismo banco: «Cuenta de puntos» y «Cuenta de dinero».
+  - Los padres también lo ven como un banco: cuentas de cada hijo, retiros, préstamos y lo que deben pagar.
