@@ -48,6 +48,7 @@ test.describe.serial('Familia completa', () => {
     await adult.getByLabel('Nombre de la familia').fill('Familia Prueba');
     await adult.getByLabel('Tu nombre').fill(ADULT.name);
     await adult.getByLabel('Usuario').fill(ADULT.user);
+    await adult.getByLabel('Correo').fill('ana@example.com');
     await adult.getByLabel('Contraseña').fill(ADULT.pass);
     await adult.getByRole('button', { name: 'Crear familia' }).click();
     await expect(adult.getByRole('heading', { name: 'Familia', exact: true })).toBeVisible();

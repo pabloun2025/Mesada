@@ -39,7 +39,7 @@ export function resetLoginFailures() {
 export async function publicUser(userId: string) {
   return one(
     getPool(),
-    `SELECT id, family_id, role, display_name, username, avatar, color, birth_year, weekly_goal_points, active FROM users WHERE id = $1`,
+    `SELECT id, family_id, role, display_name, username, avatar, color, birth_year, weekly_goal_points, active, email FROM users WHERE id = $1`,
     [userId],
   );
 }
@@ -57,6 +57,7 @@ export default async function authRoutes(app: FastifyInstance) {
         displayName: z.string().trim().min(1).max(60),
         username: usernameSchema,
         password: adultPassword,
+        email: z.string().trim().toLowerCase().email('correo no válido').max(200),
       })
       .parse(req.body);
     const created = await tx(async (db) => {
@@ -70,8 +71,8 @@ export default async function authRoutes(app: FastifyInstance) {
       const fam = await one(db, 'INSERT INTO families(name) VALUES ($1) RETURNING id', [body.familyName]);
       const u = await one(
         db,
-        `INSERT INTO users(family_id, role, display_name, username, password_hash, avatar, color) VALUES ($1,'adult',$2,$3,$4,'owl','indigo') RETURNING id`,
-        [fam.id, body.displayName, body.username, await hashPassword(body.password)],
+        `INSERT INTO users(family_id, role, display_name, username, password_hash, avatar, color, email) VALUES ($1,'adult',$2,$3,$4,'owl','indigo',$5) RETURNING id`,
+        [fam.id, body.displayName, body.username, await hashPassword(body.password), body.email],
       );
       await audit(db, fam.id, u.id, 'family.create', 'family', fam.id, {});
       const s = await createSession(db, u.id, req.headers['user-agent']);
@@ -119,6 +120,16 @@ export default async function authRoutes(app: FastifyInstance) {
     const u = requireUser(req);
     const body = z.object({ avatar: z.string().max(32).optional(), color: z.string().max(32).optional() }).parse(req.body);
     await getPool().query('UPDATE users SET avatar = COALESCE($2, avatar), color = COALESCE($3, color) WHERE id = $1', [u.id, body.avatar ?? null, body.color ?? null]);
+    return { user: await publicUser(u.id) };
+  });
+
+  app.put('/api/me/email', async (req) => {
+    const u = requireUser(req);
+    if (u.role !== 'adult') throw forbidden('El correo de los hijos lo gestiona un adulto');
+    const b = z.object({ email: z.string().trim().toLowerCase().email('correo no válido').max(200) }).parse(req.body);
+    if (await one(getPool(), 'SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [b.email, u.id])) throw badRequest('Ese correo ya lo usa otra cuenta');
+    await getPool().query('UPDATE users SET email = $2 WHERE id = $1', [u.id, b.email]);
+    await audit(getPool(), u.familyId, u.id, 'user.email_change', 'user', u.id);
     return { user: await publicUser(u.id) };
   });
 

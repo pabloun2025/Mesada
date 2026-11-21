@@ -122,6 +122,7 @@ export function Layout() {
         { to: '/actividad', label: 'Historial', icon: <History size={20} /> },
         { to: '/avisos', label: 'Avisos', icon: <BellRing size={20} /> },
         { to: '/ajustes', label: 'Ajustes', icon: <Settings size={20} /> },
+        { to: '/perfil', label: 'Mi perfil', icon: <User size={20} /> },
       ]
     : [
         { to: '/perfil', label: 'Mi perfil', icon: <User size={20} /> },

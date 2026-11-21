@@ -21,7 +21,7 @@ export function Forgot() {
     }
   };
   return (
-    <AuthShell title="Recuperar la contraseña" subtitle="Para adultos con correo guardado. Si eres hijo o hija, pide a un adulto que cambie tu PIN.">
+    <AuthShell title="Recuperar la contraseña" subtitle="Te enviamos un enlace si tu cuenta de adulto tiene un correo guardado en «Mi perfil». Si eres hijo o hija, pide a un adulto que cambie tu PIN.">
       {sent ? (
         <p role="status" className="rounded-2xl bg-leaf-soft p-4 font-bold text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]">{sent}</p>
       ) : (

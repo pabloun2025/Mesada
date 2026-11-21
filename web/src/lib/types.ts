@@ -11,6 +11,7 @@ export interface User {
   birth_year: number | null;
   weekly_goal_points: number;
   active: boolean;
+  email?: string | null;
 }
 
 export interface Family {
