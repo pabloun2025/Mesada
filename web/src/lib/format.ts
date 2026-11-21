@@ -41,3 +41,19 @@ export function parseEuros(s: string): number | null {
 
 export const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 export const WEEKDAYS_LONG = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+
+/** Referencia corta para recibos: prefijo y las 5 últimas letras o cifras del identificador («RT-4F7K2»). */
+export function refCode(prefix: string, id: string) {
+  return `${prefix}-${id.replace(/[^0-9a-z]/gi, '').slice(-5).toUpperCase()}`;
+}
+
+/** Día («2026-11-21») de un instante en la zona horaria de la familia. */
+export function dayKey(iso: string, timeZone: string) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+}
+
+export const fmtTime = (iso: string, timeZone: string) =>
+  new Intl.DateTimeFormat('es-ES', { timeZone, hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+
+/** «lunes 23 nov» a partir de «2026-11-23». */
+export const fmtWeekdayShort = (d: string) => fmtDate(d, { weekday: 'long', day: 'numeric', month: 'short' }).replace(',', '');

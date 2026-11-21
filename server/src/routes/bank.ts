@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getPool, one } from '../lib/db.js';
 import { requireAdult, requireUser, type AuthUser } from '../lib/auth.js';
 import { forbidden, notFound } from '../lib/errors.js';
-import { bankOverview, cancelLoan, decideLoan, exchangePoints, listLoans, requestLoan, statement, takeAdvance } from '../lib/bank.js';
+import { bankOverview, cancelLoan, familyBankSummary, decideLoan, exchangePoints, listLoans, requestLoan, statement, takeAdvance } from '../lib/bank.js';
 import {
   cancelGoalRequest, decideGoalRequest, goalDeposit, goalWithdrawEarly, listGoalRequests, requestGoalAction,
 } from '../lib/savings.js';
@@ -33,9 +33,19 @@ export default async function bankRoutes(app: FastifyInstance) {
   app.get('/api/statement/:userId', async (req) => {
     const u = requireUser(req);
     const { userId } = z.object({ userId: uuid }).parse(req.params);
-    const { account } = z.object({ account: z.enum(['money', 'points']).default('money') }).parse(req.query);
+    const q = z.object({
+      account: z.enum(['money', 'points', 'all']).default('money'),
+      limit: z.coerce.number().int().min(1).max(200).optional(),
+      offset: z.coerce.number().int().min(0).max(100000).optional(),
+    }).parse(req.query);
     await assertCanView(u, userId);
-    return { entries: await statement(getPool(), userId, account) };
+    return statement(getPool(), userId, q.account, q);
+  });
+
+  // Resumen de los padres: lo que deben, préstamos vivos e interés de la semana.
+  app.get('/api/bank-summary', async (req) => {
+    const u = requireAdult(req);
+    return { summary: await familyBankSummary(getPool(), u.familyId) };
   });
 
   // ---------- Canje y adelanto (solo el hijo, sin aprobación) ----------

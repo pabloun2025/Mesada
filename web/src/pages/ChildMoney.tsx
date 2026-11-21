@@ -7,13 +7,13 @@ import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import type { Bank, Goal, PayoutRequest, Wallet } from '../lib/types';
 import { screenPhrase } from '../lib/screen';
-import { LogScreenSheet, RequestMoneySheet, RequestScreenSheet } from '../components/MoneySheets';
-import { AccountCard, AdvanceSheet, AtmButtons, ExchangeSheet, GoalProduct, LoanProduct, LoanSheet, NewGoalSheet, SaveSheet, Statement, type AtmKey } from '../components/Bank';
+import { LogScreenSheet, RequestScreenSheet } from '../components/MoneySheets';
+import { AccountRail, AdvanceSheet, AtmButtons, BalanceTrend, ExchangeSheet, GoalProduct, LoanProduct, LoanSheet, NewGoalSheet, SaveSheet, Statement, WithdrawSheet, type AtmKey } from '../components/Bank';
 import { Badge, Button, Loading, PageHeader, SectionTitle, useToast } from '../components/ui';
 import { ScreenList } from '../components/Ledger';
 import { minutesLabel } from '../lib/deadline';
 
-/** «Mi banco»: dos cuentas, botones de cajero, extracto y productos (préstamo y ahorros). */
+/** «Mi banco»: tarjetas de cuenta, acciones redondas, gráfica del saldo, productos (préstamo y ahorros) y extracto. */
 export default function ChildMoney() {
   const { user, family } = useSession();
   const bankQ = useQuery({ queryKey: ['bank', user.id], queryFn: () => api<{ bank: Bank }>(`/bank/${user.id}`) });
@@ -45,18 +45,7 @@ export default function ChildMoney() {
     <div className="mx-auto max-w-2xl">
       <PageHeader title="Mi banco" subtitle={`${family.rate_points} puntos = ${euros(family.rate_cents)}`} />
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <AccountCard tone="money" title="Cuenta de dinero" number={bank.accounts.money} value={bank.money_cents} unit="eur">
-          <p>Ya cobrado en total: {euros(w.cents_paid_total)}</p>
-          {bank.savings_cents > 0 ? <p>Ahorrado en tus metas: {euros(bank.savings_cents)}</p> : null}
-        </AccountCard>
-        <AccountCard tone="points" title="Cuenta de puntos" number={bank.accounts.points} value={bank.points} unit="pts">
-          <div>
-            <p>Puntos por convertir</p>
-            <p>≈ {euros(w.points_value_cents)}{bank.week.cap_cents != null ? ` · esta semana te caben ${euros(bank.week.remaining_cents ?? 0)}` : ''}</p>
-          </div>
-        </AccountCard>
-      </div>
+      <AccountRail bank={bank} wallet={w} />
       {negative ? (
         <p role="status" className="mt-3 rounded-2xl bg-berry-soft p-3 text-sm font-bold text-berry dark:bg-berry/20">
           Tu cuenta de dinero está en negativo. Lo próximo que ganes la irá devolviendo; mientras tanto no puedes retirar ni pedir otro préstamo.
@@ -68,13 +57,15 @@ export default function ChildMoney() {
 
       <div className="mt-4">
         <AtmButtons bank={bank} onPick={(k) => setSheet(k)} />
-        {bank.actions.withdraw.ok || bank.week.withdrawals_used > 0 ? (
-          <p className="mt-2 text-sm muted">Retiros esta semana: {bank.week.withdrawals_used} de {bank.week.withdrawals_max} (se reinician el lunes).</p>
-        ) : null}
       </div>
 
+      <section className="mt-6" aria-label="Tu saldo">
+        <BalanceTrend history={bank.history} />
+        <p className="mt-2 px-1 text-sm muted">Ya cobrado en total: {euros(w.cents_paid_total)}</p>
+      </section>
+
       {reqs.length ? (
-        <section className="mt-8">
+        <section className="mt-7">
           <SectionTitle>Mis peticiones</SectionTitle>
           <ul className="space-y-2.5">
             {reqs.map((r) => (
@@ -97,33 +88,27 @@ export default function ChildMoney() {
         </section>
       ) : null}
 
-      {bank.loan ? (
-        <section className="mt-8">
-          <SectionTitle>Mi préstamo</SectionTitle>
-          <LoanProduct loan={bank.loan} mine />
-        </section>
-      ) : null}
-
-      <section className="mt-8">
-        <SectionTitle action={<Button size="sm" variant="secondary" onClick={() => setSheet('goal')}><Plus size={16} /> Meta</Button>}>Mis ahorros</SectionTitle>
-        {activeGoals.length ? (
-          <ul className="space-y-2.5">
-            {activeGoals.map((g) => (
-              <GoalProduct key={g.id} goal={g} mine onDeposit={(x) => { setDepositGoal(x.id); setSheet('save'); }} onRemove={(x) => removeGoal.mutate(x.id)} />
-            ))}
-          </ul>
-        ) : <p className="muted">Ponte una meta (unos auriculares, un vinilo…) y mete dinero cada semana: gana interés.</p>}
-        {doneGoals.length ? (
-          <ul className="mt-3 space-y-2.5">{doneGoals.map((g) => <GoalProduct key={g.id} goal={g} mine={false} />)}</ul>
-        ) : null}
+      <section className="mt-7">
+        <SectionTitle action={<Button size="sm" variant="ghost" onClick={() => setSheet('goal')}><Plus size={16} /> Nueva meta</Button>}>Mis productos</SectionTitle>
+        <div className="space-y-3">
+          {bank.loan ? <LoanProduct loan={bank.loan} mine /> : null}
+          {activeGoals.length ? (
+            <ul className="space-y-3">
+              {activeGoals.map((g) => (
+                <GoalProduct key={g.id} goal={g} mine onDeposit={(x) => { setDepositGoal(x.id); setSheet('save'); }} onRemove={(x) => removeGoal.mutate(x.id)} />
+              ))}
+            </ul>
+          ) : !bank.loan ? <p className="muted">Ponte una meta (unos auriculares, un vinilo…) y mete dinero cada semana: gana interés.</p> : null}
+          {doneGoals.length ? <ul className="space-y-3">{doneGoals.map((g) => <GoalProduct key={g.id} goal={g} mine={false} />)}</ul> : null}
+        </div>
       </section>
 
-      <section className="mt-8">
+      <section className="mt-7">
         <SectionTitle>Extracto</SectionTitle>
-        <div className="card p-4"><Statement userId={user.id} /></div>
+        <Statement userId={user.id} loan={bank.loan} />
       </section>
 
-      <section className="mt-8">
+      <section className="mt-7">
         <SectionTitle>Mi tiempo de pantalla</SectionTitle>
         <div className="card p-4">
           <p className="mb-2 text-sm font-bold muted">Te quedan</p>
@@ -136,7 +121,7 @@ export default function ChildMoney() {
         </div>
       </section>
 
-      {sheet === 'withdraw' ? <RequestMoneySheet balanceCents={bank.money_cents} left={Math.max(0, bank.week.withdrawals_max - bank.week.withdrawals_used)} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'withdraw' ? <WithdrawSheet bank={bank} onClose={() => setSheet(null)} /> : null}
       {sheet === 'exchange' ? <ExchangeSheet bank={bank} onClose={() => setSheet(null)} /> : null}
       {sheet === 'advance' ? <AdvanceSheet bank={bank} onClose={() => setSheet(null)} /> : null}
       {sheet === 'loan' ? <LoanSheet bank={bank} onClose={() => setSheet(null)} /> : null}

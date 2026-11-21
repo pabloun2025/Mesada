@@ -225,7 +225,8 @@ export interface ScreenLog {
 
 /* ---------- Banco ---------- */
 
-export interface BankAction { ok: boolean; reason: string | null }
+/** `hint` es la versión corta del motivo (para el botón redondo); `reason` es el motivo completo. */
+export interface BankAction { ok: boolean; reason: string | null; hint: string | null }
 
 export interface Loan {
   id: string;
@@ -262,6 +263,24 @@ export interface Bank {
   };
   loan: Loan | null;
   owed_cents: number;
+  history: BalanceHistory;
+}
+
+/** Saldo de dinero al final de cada una de las últimas 8 semanas (lunes a domingo); el último punto es el saldo de ahora. */
+export interface BalanceHistory {
+  weeks: { week_start: string; balance_cents: number }[];
+  start_cents: number;
+  delta_cents: number;
+  week_delta_cents: number;
+}
+
+export interface BankSummary {
+  owed_cents: number;
+  money_cents: number;
+  savings_cents: number;
+  loans_active: number;
+  loans_remaining_cents: number;
+  interest_week_cents: number;
 }
 
 export interface Goal {
@@ -296,10 +315,15 @@ export interface GoalRequest {
 
 export interface StatementEntry {
   id: string;
+  account: 'money' | 'points';
+  /** `goal`: movimiento de una meta de ahorro (su saldo es el de la meta, no el de la cuenta). */
+  scope: 'account' | 'goal';
   amount: number;
   kind: string;
   note: string;
   created_at: string;
   created_by_name: string | null;
   balance_after: number;
+  method: PayMethod | null;
+  is_withdrawal: boolean;
 }

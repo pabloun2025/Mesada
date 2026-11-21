@@ -79,7 +79,7 @@ export async function goalDeposit(actor: AuthUser, goalId: string, p: { cents: n
     await audit(db, actor.familyId, actor.id, 'savings.deposit', 'savings_goal', goalId, { cents: p.cents, title: g.title });
     const fam = await getFamily(db, actor.familyId);
     await evaluateBadges(db, g.user_id, familyToday(fam), fam.timezone, 0);
-    return { duplicate: false, ...(await goalAmounts(db, goalId)) };
+    return { duplicate: false, entry_id: a.id ?? null, ...(await goalAmounts(db, goalId)) };
   });
 }
 

@@ -40,11 +40,11 @@
   --color-berry: #d6336c;
   --color-berry-soft: #fde8ef;
   --color-sun: #ffb800;
-  --color-sun-soft: #fff3cc
+  --color-sun-soft: #fff3cc;
   --color-sun-deep: #e3a200;
   --color-sun-ink: #6e4a00;
   --color-brand: #1d5fae;
-  --color-brand-deep: #123f7e;;
+  --color-brand-deep: #123f7e;
 
   --radius-tile: 0.875rem;
   --radius-card: 1.25rem;
@@ -203,3 +203,65 @@
 }
 
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+
+/* ---------- Banco ---------- */
+
+/* Carrusel de tarjetas: cada una se detiene al borde (scroll-snap) y el raíl se desborda hasta el borde de la pantalla. */
+.rail {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  margin-inline: -1rem;
+  padding: 0.75rem 1rem 0.25rem;
+  scroll-padding-inline: 1rem;
+  scroll-behavior: smooth;
+}
+.rail::-webkit-scrollbar { display: none; }
+.rail:focus-visible { outline-offset: -3px; }
+@media (min-width: 1024px) { .rail { margin-inline: 0; padding-inline: 0; scroll-padding-inline: 0; } }
+.acct {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex: 0 0 min(19.75rem, 86%);
+  height: 12.25rem;
+  scroll-snap-align: start;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  padding: 1.1rem 1.25rem;
+}
+.acct-money {
+  color: #fff;
+  background: linear-gradient(150deg, #2a70c4 0%, #1d5fae 38%, #123f7e 78%, #142a5c 100%);
+  box-shadow: 0 18px 30px -18px rgb(18 63 126 / 0.8);
+}
+.acct-pts {
+  color: var(--color-ink);
+  background: linear-gradient(150deg, #ffd04d 0%, #ffb800 70%, #f2a900 100%);
+  box-shadow: 0 18px 30px -18px rgb(227 162 0 / 0.8);
+}
+.acct-rays { position: absolute; right: -0.5rem; bottom: -0.5rem; z-index: -1; }
+
+/* Recibo: papel blanco con el borde inferior en zigzag (máscara, sin imágenes). */
+.receipt-paper {
+  background: #fff;
+  color: var(--color-ink);
+  border-radius: 20px 20px 0 0;
+  padding: 1.6rem 1.4rem 2.25rem;
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 22px 100% repeat-x, linear-gradient(#000 0 0) top / 100% calc(100% - 11px) no-repeat;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 22px 100% repeat-x, linear-gradient(#000 0 0) top / 100% calc(100% - 11px) no-repeat;
+}
+@keyframes seal-pop { from { transform: scale(0.3); opacity: 0; } to { transform: none; opacity: 1; } }
+.seal-icon { animation: seal-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.4) both; }
+@keyframes caret-blink { 50% { opacity: 0; } }
+.caret { animation: caret-blink 1.1s steps(1) infinite; }
+.receipt-dialog::backdrop { background: transparent; }
+@media (prefers-reduced-motion: reduce) {
+  .rail { scroll-behavior: auto; }
+  .seal-icon, .caret { animation: none !important; }
+}

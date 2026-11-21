@@ -557,6 +557,11 @@ describe('cuenta y extracto', () => {
     expect(bank.actions.exchange).toMatchObject({ ok: false, reason: 'Necesitas al menos 50 puntos' });
     expect(bank.actions.withdraw).toMatchObject({ ok: false, reason: 'No tienes dinero que retirar' });
     expect(bank.actions.save).toMatchObject({ ok: false, reason: 'Crea primero una meta' });
+    // Cada motivo trae una pista corta para el botón redondo
+    expect(bank.actions.exchange.hint).toBe('Mín. 50 pts');
+    expect(bank.actions.withdraw.hint).toBe('Sin saldo');
+    expect(bank.actions.loan.hint).toBe('Sin tope');
+    expect(bank.actions.save.hint).toBe('Crea una meta');
     await setCap(1000);
     await givePts(L(), 100);
     const b2 = (await F.luciaC.get(`/api/bank/${L()}`)).body.bank;
@@ -568,5 +573,89 @@ describe('cuenta y extracto', () => {
     expect((await F.luciaC.patch('/api/family', { bankLoanEnabled: false })).status).toBe(403);
     expect((await setFamily({ bankLoanMaxWeeks: 0 })).status).toBe(400);
     expect((await setFamily({ bankSavingsRatePercent: 2.5, bankLoanInterestPoints: 5 })).body.family).toMatchObject({ bank_savings_rate_percent: 2.5, bank_loan_interest_points: 5 });
+  });
+});
+
+describe('I8 historial del saldo, extracto paginado y resumen de los padres', () => {
+  const at = (days: number, c: number) =>
+    pool().query(`INSERT INTO money_ledger(family_id, user_id, delta_cents, kind, note, created_at) VALUES ($1,$2,$3,'adjustment','Hist', now() - ($4 || ' days')::interval)`, [F.ids.family, L(), c, String(days)]);
+
+  it('saldo al final de cada una de las 8 últimas semanas, con el cambio total y el de esta semana', async () => {
+    await at(100, 400); // antes de la ventana: cuenta como saldo de partida
+    await at(20, 300);  // hace ~3 semanas
+    await at(0, 250);   // esta semana
+    const h = (await F.luciaC.get(`/api/bank/${L()}`)).body.bank.history;
+    expect(h.weeks).toHaveLength(8);
+    expect(h.weeks[7].week_start).toBe(startOfWeek(today()));
+    expect(h.weeks[0].week_start).toBe(addDays(startOfWeek(today()), -49));
+    expect(h.weeks[0].balance_cents).toBe(400);
+    expect(h.weeks[7].balance_cents).toBe(950);
+    expect(h.start_cents).toBe(400);
+    expect(h.delta_cents).toBe(550);
+    // El saldo nunca baja en la secuencia de este caso y el último punto es el saldo actual
+    expect(h.weeks.map((w: any) => w.balance_cents)).toEqual([...h.weeks.map((w: any) => w.balance_cents)].sort((a, b) => a - b));
+    expect(h.weeks[7].balance_cents).toBe((await F.luciaC.get(`/api/bank/${L()}`)).body.bank.money_cents);
+    expect(h.week_delta_cents).toBe(h.weeks[7].balance_cents - h.weeks[6].balance_cents);
+  });
+
+  it('sin movimientos el historial son ocho ceros', async () => {
+    const h = (await F.luciaC.get(`/api/bank/${L()}`)).body.bank.history;
+    expect(h.weeks.map((w: any) => w.balance_cents)).toEqual(Array(8).fill(0));
+    expect(h).toMatchObject({ start_cents: 0, delta_cents: 0, week_delta_cents: 0 });
+  });
+
+  it('el extracto se pagina (limit, offset y has_more) y «all» mezcla dinero y puntos', async () => {
+    for (let i = 1; i <= 5; i++) await at(i, 100 * i);
+    await givePts(L(), 70);
+    const p1 = (await F.luciaC.get(`/api/statement/${L()}?account=money&limit=2`)).body;
+    expect(p1.entries).toHaveLength(2);
+    expect(p1.has_more).toBe(true);
+    const p3 = (await F.luciaC.get(`/api/statement/${L()}?account=money&limit=2&offset=4`)).body;
+    expect(p3.entries).toHaveLength(1);
+    expect(p3.has_more).toBe(false);
+    const all = (await F.luciaC.get(`/api/statement/${L()}?account=all`)).body.entries;
+    expect(all).toHaveLength(6);
+    expect(all.filter((e: any) => e.account === 'points')).toHaveLength(1);
+    expect(all[0].account).toBe('points'); // lo más reciente primero
+    // Dos páginas seguidas no repiten movimientos
+    const a = (await F.luciaC.get(`/api/statement/${L()}?account=all&limit=3`)).body.entries;
+    const b = (await F.luciaC.get(`/api/statement/${L()}?account=all&limit=3&offset=3`)).body.entries;
+    expect(new Set([...a, ...b].map((e: any) => e.id)).size).toBe(6);
+    expect((await F.luciaC.get(`/api/statement/${L()}?limit=0`)).status).toBe(400);
+  });
+
+  it('el interés de una meta sale en el extracto de dinero como movimiento de meta, con el saldo de la meta', async () => {
+    await giveMoney(L(), 1000);
+    const g = await goal(5000);
+    await F.luciaC.post(`/api/goals/${g.id}/deposit`, { cents: 1000 });
+    await runWeeklyBank(pool(), F.ids.family, monday(1));
+    const st = (await F.luciaC.get(`/api/statement/${L()}?account=money`)).body.entries;
+    const interest = st.find((e: any) => e.kind === 'interest');
+    expect(interest).toMatchObject({ scope: 'goal', amount: 100, balance_after: 1100 });
+    expect(st.find((e: any) => e.kind === 'payment')).toBeUndefined();
+  });
+
+  it('un pago por retiro se marca como retiro y trae la forma de pago', async () => {
+    await giveMoney(L(), 800);
+    const r = await F.luciaC.post('/api/payout-requests', { kind: 'money', amountCents: 500 });
+    await F.mama.post(`/api/payout-requests/${r.body.request.id}/approve`, { method: 'bizum' });
+    const st = (await F.luciaC.get(`/api/statement/${L()}?account=money`)).body.entries;
+    expect(st[0]).toMatchObject({ kind: 'payment', amount: -500, method: 'bizum', is_withdrawal: true, created_by_name: 'Mamá' });
+  });
+
+  it('el resumen de los padres suma lo que deben, préstamos e interés, y los hijos no lo ven', async () => {
+    await setCap(1000);
+    await giveMoney(L(), 1500);
+    await giveMoney(F.ids.hugo, 500);
+    const g = await goal(5000);
+    await F.luciaC.post(`/api/goals/${g.id}/deposit`, { cents: 500 });
+    const l = await F.luciaC.post('/api/loans', { amountCents: 600, weeks: 3 });
+    await F.mama.post(`/api/loans/${l.body.loan.id}/approve`);
+    await runWeeklyBank(pool(), F.ids.family, monday(1));
+    const s = (await F.papaC.get('/api/bank-summary')).body.summary;
+    expect(s).toMatchObject({ money_cents: 1500 - 500 + 600 + 500 - 200, loans_active: 0 + 1, loans_remaining_cents: 600 - 200 });
+    expect(s.savings_cents).toBe(500 + 100);
+    expect(s.owed_cents).toBe(s.money_cents + s.savings_cents);
+    expect((await F.luciaC.get('/api/bank-summary')).status).toBe(403);
   });
 });

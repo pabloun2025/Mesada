@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { newKey, post } from '../lib/api';
-import { euros, parseEuros } from '../lib/format';
+import { euros, refCode } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { minutesLabel } from '../lib/deadline';
 import { PAY_METHODS, SCREEN_CATEGORIES, screenPhrase } from '../lib/screen';
 import type { PayMethod, ScreenCategory, User, Wallet } from '../lib/types';
 import { Button, Field, Sheet, useToast } from '../components/ui';
+import { AmountSheet } from './AmountSheet';
+import { useReceipt } from './Receipt';
 
 /** Grupo de opciones en fila que salta de línea: cabe en 375 px aunque haya seis categorías. */
 function ChipRadio<T extends string>({ label, value, onChange, options }: { label: string; value: T; onChange: (v: T) => void; options: { value: T; label: string; emoji?: string }[] }) {
@@ -46,8 +48,6 @@ export function CategoryPicker({ value, onChange, label = '¿En qué?' }: { valu
   );
 }
 
-const eurInput = (c: number) => (c / 100).toFixed(2).replace('.', ',');
-
 /** Minutos escritos por el usuario: entero positivo o null. */
 function parseMinutes(s: string, max: number): number {
   const n = Number(s);
@@ -64,38 +64,40 @@ function NoteField({ value, onChange, label = 'Nota (opcional)', max = 200 }: { 
   return <Field label={label}>{(id) => <input id={id} className="field" value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} />}</Field>;
 }
 
-/** Registrar un pago de dinero (Panel y Mesada). Misma clave en reintentos = sin pagos duplicados. */
+/** Pagar a un hijo (Panel y Banca familiar): hoja de importe, forma de pago y recibo. Misma clave en reintentos = sin pagos duplicados. */
 export function PaySheet({ child, wallet, onClose }: { child: User; wallet: Wallet; onClose: () => void }) {
-  const [amount, setAmount] = useState(wallet.cents_pending > 0 ? eurInput(wallet.cents_pending) : '');
   const [method, setMethod] = useState<PayMethod>('cash');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [key] = useState(newKey);
   const toast = useToast();
   const invalidate = useInvalidateAll();
+  const showReceipt = useReceipt();
   const pay = useMutation({
-    mutationFn: () => {
-      const cents = parseEuros(amount);
-      if (!cents) throw new Error('Escribe un importe válido, por ejemplo 5,50');
-      return post('/payments', { userId: child.id, amountCents: cents, method, note: note || undefined }, key);
-    },
+    mutationFn: (cents: number) => post('/payments', { userId: child.id, amountCents: cents, method, note: note || undefined }, key),
     onSuccess: (r) => {
-      toast(r.payment.duplicate ? 'Este pago ya estaba registrado' : `Pago de ${euros(r.payment.amount_cents)} registrado`);
       invalidate();
       onClose();
+      if (r.payment.duplicate) return toast('Este pago ya estaba registrado');
+      showReceipt({
+        title: 'Pago registrado', amount: euros(r.payment.amount_cents), at: new Date(r.payment.created_at ?? Date.now()), ref: refCode('PG', r.payment.id),
+        rows: [{ label: 'A', value: child.display_name }, { label: 'Forma de pago', value: PAY_METHODS.find((m) => m.value === method)?.label ?? '' }, { label: 'Importe', value: euros(r.payment.amount_cents) }],
+        total: { label: 'Le quedan', value: euros(wallet.cents_pending - r.payment.amount_cents) },
+        notice: { title: `Avisamos a ${child.display_name}.`, sub: note || undefined, avatar: { name: child.display_name, avatar: child.avatar, color: child.color } },
+      });
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { setError(e.message); toast(e.message, 'error'); },
   });
   return (
-    <Sheet open onClose={onClose} title={`Pagar a ${child.display_name}`} footer={<Button className="w-full" variant="success" loading={pay.isPending} onClick={() => pay.mutate()}>Registrar pago</Button>}>
-      <p className="mb-4 muted">Saldo pendiente: <strong className="num text-[var(--fg)]">{euros(wallet.cents_pending)}</strong>. Anota aquí el dinero que le das.</p>
-      <div className="space-y-4">
-        <Field label="Importe (€)">{(id) => <input id={id} className="field num text-2xl font-extrabold" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
-        <MethodPicker value={method} onChange={setMethod} />
-        <NoteField value={note} onChange={setNote} max={300} />
-        {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
-      </div>
-    </Sheet>
+    <AmountSheet
+      title={`Pagar a ${child.display_name}`} subtitle={<>Saldo pendiente: <b className="text-[var(--fg)]">{euros(wallet.cents_pending)}</b></>}
+      unit="eur" max={Math.max(0, wallet.cents_pending)} initial={Math.max(0, wallet.cents_pending)} chips={[500, 1000]} variant="success"
+      after={(v) => <>Le quedarán {euros(wallet.cents_pending - v)}</>}
+      overReason={(m) => `Solo debes ${euros(m)}`}
+      extra={<><MethodPicker value={method} onChange={setMethod} /><NoteField value={note} onChange={setNote} max={300} /></>}
+      cta={(v) => (v ? `Pagar ${euros(v)}` : 'Pagar')}
+      error={error} loading={pay.isPending} onSubmit={(v) => { setError(''); pay.mutate(v); }} onClose={onClose}
+    />
   );
 }
 
@@ -124,34 +126,6 @@ export function GiveScreenSheet({ child, minutes, onClose }: { child: User; minu
         <CategoryPicker value={category} onChange={setCategory} />
         <NoteField value={note} onChange={setNote} />
         {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
-      </div>
-    </Sheet>
-  );
-}
-
-/** Retiro (como en un cajero): el hijo saca hasta todo su saldo y un adulto se lo paga. */
-export function RequestMoneySheet({ balanceCents, left, onClose }: { balanceCents: number; left?: number; onClose: () => void }) {
-  const [amount, setAmount] = useState(eurInput(balanceCents));
-  const [note, setNote] = useState('');
-  const [key] = useState(newKey);
-  const toast = useToast();
-  const invalidate = useInvalidateAll();
-  const send = useMutation({
-    mutationFn: () => {
-      const cents = parseEuros(amount);
-      if (!cents) throw new Error('Escribe un importe, por ejemplo 5,50');
-      if (cents > balanceCents) throw new Error(`Solo tienes ${euros(balanceCents)} en tu cuenta`);
-      return post('/payout-requests', { kind: 'money', amountCents: cents, note: note || undefined }, key);
-    },
-    onSuccess: () => { toast('Retiro pedido. Un adulto te lo pagará'); invalidate(); onClose(); },
-    onError: (e: Error) => toast(e.message, 'error'),
-  });
-  return (
-    <Sheet open onClose={onClose} title="Retirar dinero" footer={<Button className="w-full" variant="success" loading={send.isPending} onClick={() => send.mutate()}>Retirar</Button>}>
-      <div className="space-y-4">
-        <p className="muted">Tienes <strong className="num text-[var(--fg)]">{euros(balanceCents)}</strong> en tu cuenta. Puedes retirar hasta todo ese dinero.{left != null ? ` Te quedan ${left} ${left === 1 ? 'retiro' : 'retiros'} esta semana.` : ''}</p>
-        <Field label="¿Cuánto quieres retirar? (€)">{(id) => <input id={id} className="field num text-2xl font-extrabold" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
-        <NoteField value={note} onChange={setNote} />
       </div>
     </Sheet>
   );

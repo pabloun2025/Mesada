@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Banca familiar · DiploP</title><style>
+@font-face{font-family:'Bricolage Grotesque Variable';src:url('fonts/bricolage-grotesque-latin-wght-normal.woff2') format('woff2-variations');font-weight:200 800;font-display:swap}
+@font-face{font-family:'Mesada Digits';src:url('fonts/bricolage-grotesque-latin-wght-normal.woff2') format('woff2-variations');font-weight:200 800;unicode-range:U+0030-0039;font-display:swap}
+@font-face{font-family:'Atkinson Hyperlegible';src:url('fonts/atkinson-hyperlegible-latin-400-normal.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Atkinson Hyperlegible';src:url('fonts/atkinson-hyperlegible-latin-700-normal.woff2') format('woff2');font-weight:700;font-display:swap}
+:root{--ink:#142a5c;--ink2:#3b4b70;--ink3:#64738f;--paper:#f3f6fb;--card:#fff;--line:#e3e8f2;--chip:#edf1f8;
+--brand:#1d5fae;--brand-deep:#123f7e;--brand-soft:#e5eefa;--leaf:#1e9e6a;--leaf-deep:#137a50;--leaf-soft:#e3f6ec;
+--berry:#d6336c;--berry-soft:#fde8ef;--sun:#ffb800;--sun-deep:#e3a200;--sun-soft:#fff3cc;--sun-ink:#6e4a00;--sky:#4f8df7;--sky-soft:#e8f0ff;
+--r-tile:.875rem;--r-card:1.25rem;--r-panel:1.75rem;--shadow:0 1px 0 rgb(23 42 84/.04),0 8px 24px -12px rgb(23 42 84/.18);
+--display:'Bricolage Grotesque Variable',ui-sans-serif,system-ui,sans-serif;--sans:'Mesada Digits','Atkinson Hyperlegible',ui-sans-serif,system-ui,sans-serif}
+*{box-sizing:border-box;margin:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--display);letter-spacing:-.02em;line-height:1.1;text-wrap:balance}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--sky);outline-offset:2px;border-radius:.5rem}
+.num{font-family:var(--display);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.ic{flex:none}
+.mvi{width:40px;height:40px;border-radius:99px;display:flex;align-items:center;justify-content:center;flex:none}.mvi.brand{background:var(--brand-soft);color:var(--brand)}.mvi.sun{background:var(--sun-soft);color:var(--sun-ink)}.mvi.berry{background:var(--berry-soft);color:#a8214f}.mvi.sky{background:var(--sky-soft);color:#2a5fc2}.mvi.leaf{background:var(--leaf-soft);color:var(--leaf-deep)}.mvi.chip{background:var(--chip);color:var(--ink2)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card)}
+.chip{display:inline-flex;align-items:center;gap:.25rem;border-radius:99px;padding:.15rem .6rem;font-size:12px;font-weight:700;background:var(--chip);color:var(--ink2)}
+.chip.leaf{background:var(--leaf-soft);color:var(--leaf-deep)}
+.chip.sun{background:var(--sun-soft);color:var(--sun-ink)}
+.chip.brand{background:var(--brand-soft);color:var(--brand-deep)}
+.avatar{display:inline-flex;align-items:center;justify-content:center;border-radius:99px;font-size:1.2rem;flex:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;white-space:nowrap;border-radius:99px;font-weight:700;height:2.75rem;padding:0 1.25rem;transition:transform .12s,filter .12s}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--sun);color:var(--ink);box-shadow:0 6px 16px -8px rgb(227 162 0/.9)}
+.btn.sec{background:var(--chip);color:var(--ink)}
+.btn.ok{background:var(--leaf);color:#fff}
+.btn.bad{background:var(--berry-soft);color:#a8214f}
+.btn.lg{height:3.5rem;font-size:1.1rem;width:100%}
+.btn.sm{height:2.25rem;padding:0 .9rem;font-size:14px}
+.phone{width:100%;max-width:375px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;background:var(--paper);position:relative}
+@media(min-width:420px){body{background:#dfe5f0}.phone{box-shadow:0 0 0 1px var(--line),0 20px 60px -20px rgb(20 42 92/.35)}}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--line)}
+.topbar img{height:30px;width:auto;display:block}
+.tb-right{display:flex;align-items:center;gap:10px}
+.iconbtn{width:40px;height:40px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;color:var(--ink2);position:relative}
+.dot-badge{position:absolute;top:2px;right:0;background:var(--sun);color:var(--ink);border-radius:99px;font-size:11px;font-weight:700;padding:0 5px;line-height:16px}
+.bottomnav{position:sticky;bottom:0;margin-top:auto;z-index:20;display:grid;grid-template-columns:repeat(5,1fr);background:rgb(255 255 255/.96);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.bottomnav a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 0;font-size:11px;font-weight:700;color:var(--ink3);text-decoration:none}
+.bottomnav a span.pill{display:flex;height:32px;width:56px;align-items:center;justify-content:center;border-radius:99px}
+.bottomnav a.on{color:var(--brand)}
+.bottomnav a.on span.pill{background:var(--brand-soft)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+body{background:var(--paper)}
+
+.app{display:grid;grid-template-columns:270px 1fr;min-height:100vh}
+.side{background:var(--card);border-right:1px solid var(--line);padding:22px 16px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:6px}
+.side .brand{display:flex;align-items:flex-end;gap:12px;padding:0 8px 20px}
+.side .brand img{height:42px}
+.side .brand span{font-size:13px;color:var(--ink3);padding-bottom:4px}
+.side a{display:flex;align-items:center;gap:12px;height:44px;padding:0 14px;border-radius:99px;font-weight:700;color:var(--ink2);text-decoration:none}
+.side a.on{background:var(--ink);color:#fff}
+.side .me{margin-top:auto;background:var(--chip);border-radius:20px;padding:12px;display:flex;align-items:center;gap:12px}
+.side .me small{display:block;color:var(--ink3);font-size:12.5px;line-height:1.2}
+.topm{display:none}
+.main{padding:28px 32px 56px;max-width:1010px;width:100%}
+.ph{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px}
+.ph h1{font-size:34px}
+.ph p{color:var(--ink2);font-size:14.5px;margin-top:4px}
+.strip{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:12px;margin-bottom:26px}
+.tile{padding:16px 18px;border-radius:var(--r-card);background:var(--card);border:1px solid var(--line)}
+.tile small{display:block;color:var(--ink3);font-size:13.5px}
+.tile .v{font-size:28px;font-weight:800;margin-top:2px;line-height:1.15}
+.tile .n{font-size:13px;color:var(--ink2);margin-top:2px}
+.tile.hero{background:linear-gradient(150deg,#1d5fae,#142a5c);color:#fff;border:0;position:relative;overflow:hidden;isolation:isolate;box-shadow:0 18px 30px -18px rgb(18 63 126/.8)}
+.tile.hero small,.tile.hero .n{color:#cfe0f7}
+.tile.hero .v{font-size:42px;color:#fff}
+.tile.hero .rays{position:absolute;right:-6px;top:-6px;width:110px;height:110px;transform:scaleY(-1);z-index:-1;opacity:.9}
+.tile.hero .go{margin-top:12px;display:inline-flex;align-items:center;gap:6px;background:var(--sun);color:var(--ink);font-weight:700;border-radius:99px;height:34px;padding:0 14px;font-size:14px}
+.h2{font-size:21px;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.h2 .count{background:var(--sun);color:var(--ink);font-family:var(--display);font-size:14px;border-radius:99px;padding:1px 10px}
+.appr{list-style:none;padding:0;margin-bottom:30px;overflow:hidden}
+.ap{display:grid;grid-template-columns:44px 1fr auto auto;gap:6px 16px;align-items:center;padding:14px 18px}
+.ap+.ap{border-top:1px solid var(--line)}
+.ap .ico{width:44px;height:44px;border-radius:99px;display:flex;align-items:center;justify-content:center}
+.ap b{display:block;font-size:16px;line-height:1.25}
+.ap small{color:var(--ink3);font-size:13.5px}
+.ap .amt{font-size:22px;font-weight:800;text-align:right}
+.ap .btns{display:flex;gap:8px}
+.kids{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.kid{padding:20px;border-radius:var(--r-panel);background:var(--card);border:1px solid var(--line)}
+.kid .kh{display:flex;align-items:center;gap:12px}
+.kid .kh h3{font-size:22px}
+.kid .kh small{display:block;color:var(--ink3);font-size:13px;line-height:1.2}
+.kid .kh .chip{margin-left:auto}
+.bals{display:grid;grid-template-columns:1.25fr 1fr;gap:10px;margin-top:16px}
+.bal{border-radius:18px;padding:14px;background:var(--brand-soft)}
+.bal.pts{background:var(--sun-soft)}
+.bal small{display:block;font-size:13px;color:var(--ink2)}
+.bal .v{font-size:30px;font-weight:800;line-height:1.15;margin-top:2px}
+.bal .n{font-size:12.5px;color:var(--ink3);margin-top:2px}
+.bal .acn{font-family:var(--display);letter-spacing:.06em;font-size:11.5px;color:var(--ink3);margin-top:6px;white-space:nowrap}
+.limit{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:14px;color:var(--ink2)}
+.limit .pips{display:flex;gap:4px}.limit .pips i{width:18px;height:6px;border-radius:99px;background:var(--brand)}.limit .pips i.o{background:#c3cde0}
+.prods{margin-top:16px;display:grid;gap:10px}
+.pr{border:1px solid var(--line);border-radius:18px;padding:12px 14px}
+.pr .t{display:flex;align-items:center;gap:10px;font-weight:700}
+.pr .t .pi{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none}
+.pr .t span.r{margin-left:auto;font-family:var(--display);font-size:16px}
+.pr p{font-size:13.5px;color:var(--ink2);margin-top:6px}
+.pr p b{color:var(--ink)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:10px}.steps i{height:7px;border-radius:99px;background:var(--chip)}.steps i.next{background:var(--sun-soft);box-shadow:inset 0 0 0 2px var(--sun)}
+.bar{height:8px;border-radius:99px;background:var(--chip);margin-top:10px;overflow:hidden}.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--leaf),#38c28a)}
+.pr.empty{border-style:dashed;color:var(--ink3);font-size:14px;background:transparent}
+.pr.empty{border:1px solid var(--line);background:var(--paper)}
+.qa{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:18px}
+.qa .btn{height:44px;padding:0 6px;font-size:14px;gap:6px}
+.pnav{display:none}
+@media(max-width:1100px){.strip{grid-template-columns:1fr 1fr}.strip .hero{grid-column:1/-1}.kids{grid-template-columns:1fr}}
+@media(max-width:860px){
+ .app{grid-template-columns:1fr}.side{display:none}
+ .topm{display:flex;position:sticky;top:0;z-index:20}
+ .main{padding:18px 16px 28px}
+ .ph{flex-direction:column;align-items:flex-start}.ph h1{font-size:28px}
+ .strip{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:22px}
+ .tile{padding:14px}.tile .v{font-size:24px}.tile.hero .v{font-size:38px}
+ .ap{grid-template-columns:44px 1fr;padding:14px}
+ .ap .amt{grid-column:2;text-align:left;font-size:20px}
+ .ap .btns{grid-column:1/-1}.ap .btns .btn{flex:1}
+ .strip .tile:nth-child(4){display:none}
+ .pr .t span.r{white-space:nowrap}.pr .t .of{display:none}
+ .kids{gap:14px}.kid{padding:16px}
+ .bals{grid-template-columns:1fr}
+ .qa{grid-template-columns:1fr 1fr}
+ .pnav{display:grid;position:sticky;bottom:0;z-index:20;grid-template-columns:repeat(5,1fr);background:rgb(255 255 255/.96);backdrop-filter:blur(10px);border-top:1px solid var(--line)}
+ .pnav a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 0;font-size:11px;font-weight:700;color:var(--ink3);text-decoration:none;position:relative}
+ .pnav a .pill{display:flex;height:32px;width:56px;align-items:center;justify-content:center;border-radius:99px}
+ .pnav a.on{color:var(--brand)}.pnav a.on .pill{background:var(--brand-soft)}
+ .pnav .bd{position:absolute;top:6px;left:50%;margin-left:12px;background:var(--sun);color:var(--ink);border-radius:99px;font-size:11px;padding:0 5px;line-height:16px}
+}
+</style></head><body><div class="app">
+<aside class="side" aria-label="Principal"><div class="brand"><img src="assets/logo.png" alt="DiploP"><span>Familia Prueba</span></div>
+<a href="#" class=""><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Panel</a><a href="#" class=""><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>Validar<span class="chip sun" style="margin-left:auto;padding:0 8px;background:var(--sun);color:var(--ink)">2</span></a><a href="#" class=""><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/></svg>Tareas</a><a href="#" class="on"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z"/><path d="M16 10h.01"/><path d="M2 8v1a2 2 0 0 0 2 2h1"/></svg>Mesada</a><a href="#" class=""><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M20 11v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"/><path d="M7.5 7a1 1 0 0 1 0-5A4.8 8 0 0 1 12 7a4.8 8 0 0 1 4.5-5 1 1 0 0 1 0 5"/><rect x="3" y="7" width="18" height="4" rx="1"/></svg>Recompensas</a><a href="#" class=""><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></svg>Familia</a><a href="#" class=""><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Estadísticas</a><a href="#" class=""><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Historial</a><a href="#" class=""><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M22 8c0-2.3-.8-4.3-2-6"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/><path d="M4 2C2.8 3.7 2 5.7 2 8"/></svg>Avisos</a><a href="#" class=""><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>Ajustes</a>
+<div class="me"><span class="avatar" style="width:40px;height:40px;background:#E3E3FB">🦉</span><div><b>Ana</b><small>Adulto</small></div></div></aside>
+<div>
+<header class="topbar topm"><img src="assets/logo.png" alt="DiploP"><div class="tb-right"><button class="iconbtn" aria-label="Avisos"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg><span class="dot-badge num">8</span></button><span class="avatar" style="width:36px;height:36px;background:#E3E3FB">🦉</span></div></header>
+<main class="main">
+<div class="ph"><div><h1>Banca familiar</h1><p>100 puntos = 5,00 € · tope semanal 10,00 € por hijo</p></div><button class="btn primary"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v3"/><path d="M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="m9 15 2 2 4-4"/></svg> Cerrar semana</button></div>
+
+<section class="strip" aria-label="Resumen">
+  <div class="tile hero"><svg class="rays" viewBox="0 0 150 150" width="150" height="150" aria-hidden="true" stroke="#ffb800" stroke-opacity="0.5" stroke-width="3" stroke-linecap="round"><line x1="84.6" y1="140.8" x2="6.4" y2="129.8"/><line x1="88.2" y1="126.9" x2="14.2" y2="99.2"/><line x1="94.6" y1="114.1" x2="28.4" y2="71.0"/><line x1="103.7" y1="102.9" x2="48.4" y2="46.6"/><line x1="115.0" y1="94.0" x2="73.2" y2="27.0"/><line x1="128.0" y1="87.8" x2="101.6" y2="13.3"/></svg><small>Pendiente de pagar</small><div class="v num">48,00 €</div><div class="n">Dinero de los hijos 25,50 € · Ahorros 22,50 €</div></div>
+  <div class="tile"><small>Por aprobar</small><div class="v num">3</div><div class="n">Operaciones</div></div>
+  <div class="tile"><small>Préstamos activos</small><div class="v num">6,00 €</div><div class="n">1 por devolver</div></div>
+  <div class="tile"><small>Interés de esta semana</small><div class="v num">1,00 €</div><div class="n">A cargo de los padres</div></div>
+</section>
+
+<section aria-labelledby="pa"><h2 class="h2" id="pa">Por aprobar <span class="count num">3</span></h2>
+<ul class="card appr" style="list-style:none;padding:0">
+<li class="ap"><span class="ico mvi berry"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg></span><div><b>Retiro de 10,00 €</b><small>Lucía · hace 12 min · de su cuenta de dinero</small></div><div class="amt num">10,00 €</div><div class="btns"><button class="btn sec sm bad"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> Rechazar</button><button class="btn ok sm"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Aprobar</button></div></li>
+<li class="ap"><span class="ico mvi sky"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17"/><path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9"/><path d="m2 16 6 6"/><circle cx="16" cy="9" r="2.9"/><circle cx="6" cy="5" r="3"/></svg></span><div><b>Préstamo en 3 semanas</b><small>Hugo · hace 1 h · cuotas de 2,00 € + 10 pts</small></div><div class="amt num">6,00 €</div><div class="btns"><button class="btn sec sm bad"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> Rechazar</button><button class="btn ok sm"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Aprobar</button></div></li>
+<li class="ap"><span class="ico mvi sun"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 10a4 4 0 0 1-8 0"/><path d="M3.103 6.034h17.794"/><path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"/></svg></span><div><b>Canjear meta «Vinilo»</b><small>Hugo · ayer · meta alcanzada, pagas en la tienda</small></div><div class="amt num">20,00 €</div><div class="btns"><button class="btn sec sm bad"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> Rechazar</button><button class="btn ok sm"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Aprobar</button></div></li>
+</ul></section>
+
+<h2 class="h2">Cuentas de los hijos</h2>
+<section class="kids">
+<article class="kid" aria-label="Cuenta de Lucía">
+  <div class="kh"><span class="avatar" style="width:48px;height:48px;background:#FFE3D1;font-size:1.5rem">🦊</span><div><h3>Lucía</h3><small>12 años</small></div><span class="chip leaf">Al día</span></div>
+  <div class="bals"><div class="bal"><small>Dinero · por pagar</small><div class="v num">17,50 €</div><div class="acn num">ES00 DIPL 5034 6060</div></div>
+  <div class="bal pts"><small>Puntos</small><div class="v num">85</div><div class="n">≈ 4,25 € sin convertir</div></div></div>
+  <div class="limit"><span class="pips" aria-hidden="true"><i></i><i class="o"></i></span>Retiros esta semana: <b>1 de 2</b></div>
+  <div class="prods">
+    <div class="pr"><div class="t"><span class="pi" style="background:var(--sky-soft);color:#2a5fc2"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17"/><path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9"/><path d="m2 16 6 6"/><circle cx="16" cy="9" r="2.9"/><circle cx="6" cy="5" r="3"/></svg></span>Préstamo <span class="chip brand">Activo</span><span class="r num">6,00 €</span></div>
+      <div class="steps" role="img" aria-label="0 de 3 cuotas pagadas"><i class="next"></i><i></i><i></i></div>
+      <p>Quedan <b>3 cuotas</b> de <b class="num">2,00 €</b> + 10 pts · cobro <b>lun 23 nov</b></p></div>
+    <div class="pr"><div class="t"><span class="pi" style="background:var(--leaf-soft);color:var(--leaf-deep)"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>Ahorros · Vinilo<span class="r num">2,50 € <span class="of" style="font-family:var(--sans);font-weight:400;font-size:13px;color:var(--ink3)">/ 20,00 €</span></span></div>
+      <div class="bar"><i style="width:12.5%"></i></div>
+      <p>Interés ganado <b class="num" style="color:var(--leaf-deep)">1,00 €</b></p></div>
+  </div>
+  <div class="qa"><button class="btn ok"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg> Pagar</button><button class="btn sec"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8"/><path d="M10 19v-3.96 3.15"/><path d="M7 19h5"/><rect width="6" height="10" x="16" y="12" rx="2"/></svg> Dar pantalla</button><button class="btn sec"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></svg> Ajustar</button><button class="btn sec"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 16H8"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"/></svg> Extracto</button></div>
+</article>
+
+<article class="kid" aria-label="Cuenta de Hugo">
+  <div class="kh"><span class="avatar" style="width:48px;height:48px;background:#DCE8FF;font-size:1.5rem">🚀</span><div><h3>Hugo</h3><small>9 años</small></div><span class="chip sun">2 por aprobar</span></div>
+  <div class="bals"><div class="bal"><small>Dinero · por pagar</small><div class="v num">8,00 €</div><div class="acn num">ES00 DIPL 0561 8331</div></div>
+  <div class="bal pts"><small>Puntos</small><div class="v num">40</div><div class="n">≈ 2,00 € sin convertir</div></div></div>
+  <div class="limit"><span class="pips" aria-hidden="true"><i class="o"></i><i class="o"></i></span>Retiros esta semana: <b>0 de 2</b></div>
+  <div class="prods">
+    <div class="pr empty"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17"/><path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9"/><path d="m2 16 6 6"/><circle cx="16" cy="9" r="2.9"/><circle cx="6" cy="5" r="3"/></svg> Sin préstamo · pide 6,00 € (por aprobar)</div>
+    <div class="pr"><div class="t"><span class="pi" style="background:var(--leaf-soft);color:var(--leaf-deep)"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>Ahorros · Vinilo<span class="r num">20,00 € <span class="of" style="font-family:var(--sans);font-weight:400;font-size:13px;color:var(--ink3)">/ 20,00 €</span></span></div>
+      <div class="bar"><i style="width:100%"></i></div>
+      <p><span class="chip leaf"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Meta alcanzada</span> &nbsp;Interés ganado <b class="num" style="color:var(--leaf-deep)">3,00 €</b></p></div>
+  </div>
+  <div class="qa"><button class="btn ok"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg> Pagar</button><button class="btn sec"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8"/><path d="M10 19v-3.96 3.15"/><path d="M7 19h5"/><rect width="6" height="10" x="16" y="12" rx="2"/></svg> Dar pantalla</button><button class="btn sec"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></svg> Ajustar</button><button class="btn sec"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 16H8"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"/></svg> Extracto</button></div>
+</article>
+</section>
+</main></div></div>
+<nav class="pnav" aria-label="Principal"><a href="#" class=""><span class="pill"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>Panel</a><a href="#" class=""><span class="pill"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg></span>Validar<span class="bd num">2</span></a><a href="#" class=""><span class="pill"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/></svg></span>Tareas</a><a href="#" class="on"><span class="pill"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z"/><path d="M16 10h.01"/><path d="M2 8v1a2 2 0 0 0 2 2h1"/></svg></span>Mesada</a><a href="#" class=""><span class="pill"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></svg></span>Más</a></nav></body></html>
