@@ -140,7 +140,7 @@ export function Layout() {
     <div className="min-h-dvh lg:grid lg:grid-cols-[17rem_1fr]">
       <a href="#contenido" className="sr-only z-50 rounded-full bg-ink px-4 py-2 font-bold text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3">Saltar al contenido</a>
       {/* Raíl lateral (escritorio) */}
-      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-[var(--line)] bg-[var(--card)] px-4 py-6 lg:flex">
+      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-[var(--line)] bg-[var(--card)] px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:flex">
         <div className="mb-8 flex items-center gap-2.5 px-2">
           <img src="/brand/logo.png" alt="DiploP" width={120} height={58} className="h-12 w-auto dark:hidden" />
           <img src="/brand/logo-white.png" alt="DiploP" width={120} height={58} className="hidden h-12 w-auto dark:block" />
@@ -175,7 +175,7 @@ export function Layout() {
       <div className="flex min-h-dvh flex-col">
         {/* Cabecera */}
         {/* En móvil, la cabecera es la franja azul de la marca; en escritorio, una barra neutra. */}
-        <header className="brand-header sticky top-0 z-30 flex items-center gap-2 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 lg:justify-end lg:border-b lg:border-[var(--line)] lg:bg-[var(--bg)]/85 lg:px-8 lg:py-2.5 lg:backdrop-blur-md">
+        <header className="brand-header sticky top-0 z-30 flex items-center gap-2 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 lg:justify-end lg:border-b lg:border-[var(--line)] lg:bg-[var(--bg)]/85 lg:px-8 lg:pt-[max(0.625rem,env(safe-area-inset-top))] lg:pb-2.5 lg:backdrop-blur-md">
           <div className="flex flex-1 items-center gap-3 lg:hidden">
             <img src="/brand/logo-white.png" alt="DiploP" width={84} height={40} className="h-9 w-auto" />
             <div className="min-w-0 border-l border-white/25 pl-3 leading-tight">

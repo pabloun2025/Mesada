@@ -141,12 +141,12 @@ export function AtmButtons({ bank, onPick }: { bank: Bank; onPick: (k: AtmKey) =
             aria-disabled={!act.ok}
             title={act.reason ?? undefined}
             onClick={() => (act.ok ? onPick(a.key) : toast(act.reason ?? 'Ahora no está disponible', 'error'))}
-            className="group flex flex-col items-center gap-[7px] text-center"
+            className="group flex min-w-0 flex-col items-center gap-[7px] text-center"
           >
-            <span className={`flex size-14 items-center justify-center rounded-full border transition group-active:scale-[0.94] ${act.ok ? 'border-[var(--line)] bg-[var(--card)] text-tangerine shadow-[var(--shadow-lift)] group-hover:border-tangerine' : 'border-transparent bg-[var(--chip)] text-[var(--fg-3)]'}`}>
+            <span className={`flex size-12 min-[360px]:size-14 items-center justify-center rounded-full border transition group-active:scale-[0.94] ${act.ok ? 'border-[var(--line)] bg-[var(--card)] text-tangerine shadow-[var(--shadow-lift)] group-hover:border-tangerine' : 'border-transparent bg-[var(--chip)] text-[var(--fg-3)]'}`}>
               <Icon size={24} aria-hidden />
             </span>
-            <b className={`text-[0.8rem] leading-tight ${act.ok ? '' : 'text-[var(--fg-3)]'}`}>{a.label}</b>
+            <b className={`max-w-full truncate text-[0.72rem] min-[360px]:text-[0.8rem] leading-tight ${act.ok ? '' : 'text-[var(--fg-3)]'}`}>{a.label}</b>
             {!act.ok ? (
               <span className="-mt-1 flex max-w-full items-start justify-center gap-0.5 text-[0.7rem] leading-tight font-bold text-[var(--fg-3)]">
                 <Lock size={11} aria-hidden className="mt-px shrink-0" />
