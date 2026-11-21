@@ -100,7 +100,7 @@ export function Layout() {
   const isAdult = user.role === 'adult';
 
   const { data: dash } = useQuery({ queryKey: ['dashboard'], queryFn: () => api('/dashboard'), enabled: isAdult, refetchInterval: 60_000 });
-  const pendingCount = (dash?.pendingApprovals?.length ?? 0) + (dash?.pendingRedemptions ?? 0) + (dash?.pendingChecks ?? 0) + (dash?.pendingGrants ?? 0);
+  const pendingCount = (dash?.pendingApprovals?.length ?? 0) + (dash?.pendingRedemptions ?? 0) + (dash?.pendingChecks ?? 0) + (dash?.pendingGrants ?? 0) + (dash?.pendingRequests ?? 0) + (dash?.pendingUsage ?? 0);
 
   const primary: NavItem[] = isAdult
     ? [

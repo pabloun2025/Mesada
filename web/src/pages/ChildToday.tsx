@@ -8,6 +8,7 @@ import { useSession } from '../lib/session';
 import type { Instance, Progress, Wallet, BonusGrant } from '../lib/types';
 import { minutesLabel } from '../lib/deadline';
 import { Button, Empty, Loading, SectionTitle, Sheet, useToast } from '../components/ui';
+import { LogScreenSheet } from '../components/MoneySheets';
 import { WeekRing } from '../components/Ring';
 import { TaskRow } from '../components/TaskRow';
 
@@ -25,6 +26,7 @@ export default function ChildToday() {
   const wallet = useQuery({ queryKey: ['wallet', user.id], queryFn: () => api<{ wallet: Wallet }>(`/wallet/${user.id}`) });
   const grants = useQuery({ queryKey: ['bonus-grants', 'mine'], queryFn: () => api<{ grants: BonusGrant[] }>('/bonus-grants') });
   const progress = useQuery({ queryKey: ['progress', user.id], queryFn: () => api<Progress>(`/progress/${user.id}`) });
+  const [logOpen, setLogOpen] = useState(false);
   const [photoFor, setPhotoFor] = useState<Instance | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -86,6 +88,11 @@ export default function ChildToday() {
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
                 <span aria-hidden>📱</span> {minutesLabel(screenMin)} de pantalla
               </span>
+            ) : null}
+            {screenMin != null ? (
+              <button type="button" onClick={() => setLogOpen(true)} className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold underline decoration-dotted underline-offset-4">
+                Anotar pantalla
+              </button>
             ) : null}
             {p ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
@@ -157,6 +164,7 @@ export default function ChildToday() {
         ) : null}
         <Button variant="secondary" className="w-full" onClick={() => fileRef.current?.click()}><Camera size={18} /> {file ? 'Hacer otra' : 'Hacer foto'}</Button>
       </Sheet>
+      {logOpen && screenMin != null ? <LogScreenSheet balance={screenMin} onClose={() => setLogOpen(false)} /> : null}
       {items.length > 0 && open.length === 0 ? <p className="mt-6 flex items-center justify-center gap-2 text-sm muted"><CalendarCheck size={16} aria-hidden /> Mañana más.</p> : null}
     </div>
   );

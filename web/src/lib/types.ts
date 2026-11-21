@@ -173,3 +173,40 @@ export interface Progress {
   };
   badges: { key: string; title: string; description: string; icon: string; awardedAt: string | null }[];
 }
+
+export type ScreenCategory = 'videojuegos' | 'tele' | 'tablet' | 'movil' | 'ordenador' | 'otro';
+export type PayMethod = 'cash' | 'transfer' | 'bizum' | 'other';
+
+export interface PayoutRequest {
+  id: string;
+  user_id: string;
+  kind: 'money' | 'screen';
+  amount_cents: number | null;
+  minutes: number | null;
+  category: ScreenCategory | null;
+  note: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  granted_cents: number | null;
+  granted_minutes: number | null;
+  decision_note: string;
+  created_at: string;
+  display_name: string;
+  avatar: string;
+  color: string;
+}
+
+export interface ScreenLog {
+  id: string;
+  user_id: string;
+  day: string;
+  minutes: number;
+  applied_minutes: number;
+  overflow_minutes: number;
+  category: ScreenCategory;
+  note: string;
+  status: 'pending' | 'confirmed' | 'voided';
+  created_at: string;
+  display_name: string;
+  avatar: string;
+  color: string;
+}

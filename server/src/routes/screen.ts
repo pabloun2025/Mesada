@@ -4,7 +4,7 @@ import { getPool, many, one, tx } from '../lib/db.js';
 import { requireAdult, requireUser } from '../lib/auth.js';
 import { conflict, forbidden, notFound } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
-import { addScreen, screenBalance } from '../lib/screen.js';
+import { addScreen, CATEGORY_PHRASE, SCREEN_CATEGORIES, screenBalance } from '../lib/screen.js';
 import { notify } from '../lib/notify/dispatch.js';
 
 const uuid = z.string().uuid();
@@ -23,8 +23,12 @@ export default async function screenRoutes(app: FastifyInstance) {
     await assertChild(userId, u.familyId);
     const entries = await many(
       getPool(),
-      `SELECT l.id, l.delta, l.kind, l.note, l.created_at, c.display_name AS created_by_name
-         FROM screen_ledger l LEFT JOIN users c ON c.id = l.created_by WHERE l.user_id = $1 ORDER BY l.created_at DESC, l.id LIMIT 100`,
+      // Las anotaciones del hijo (y sus devoluciones) llevan el estado y el exceso del registro al que pertenecen.
+      `SELECT l.id, l.delta, l.kind, l.category, l.note, l.created_at, c.display_name AS created_by_name,
+              g.status AS log_status, g.minutes AS log_minutes, g.overflow_minutes AS log_overflow
+         FROM screen_ledger l LEFT JOIN users c ON c.id = l.created_by
+         LEFT JOIN screen_usage_logs g ON g.id = l.ref_id AND l.kind IN ('usage','refund')
+        WHERE l.user_id = $1 ORDER BY l.created_at DESC, l.id LIMIT 100`,
       [userId],
     );
     return { balance: await screenBalance(getPool(), userId), entries };
@@ -33,12 +37,13 @@ export default async function screenRoutes(app: FastifyInstance) {
   // Gastar minutos (adulto). Se recorta al saldo; si no queda nada, error.
   app.post('/api/screen/spend', async (req) => {
     const u = requireAdult(req);
-    const b = z.object({ userId: uuid, minutes: z.number().int().min(1).max(1440), note: z.string().trim().max(200).default('') }).parse(req.body);
+    const b = z.object({ userId: uuid, minutes: z.number().int().min(1).max(1440), category: z.enum(SCREEN_CATEGORIES).default('otro'), note: z.string().trim().max(200).default('') }).parse(req.body);
     await assertChild(b.userId, u.familyId);
     return tx(async (db) => {
-      const r = await addScreen(db, { familyId: u.familyId, userId: b.userId, delta: -b.minutes, kind: 'spend', note: b.note || 'Tiempo de pantalla', createdBy: u.id });
+      const r = await addScreen(db, { familyId: u.familyId, userId: b.userId, delta: -b.minutes, kind: 'spend', note: b.note || 'Tiempo de pantalla', createdBy: u.id, category: b.category });
       if (r.applied === 0) throw conflict('No quedan minutos de pantalla', 'insufficient_balance');
-      await audit(db, u.familyId, u.id, 'screen.spend', 'user', b.userId, { minutes: -r.applied, requested: b.minutes });
+      await audit(db, u.familyId, u.id, 'screen.spend', 'user', b.userId, { minutes: -r.applied, requested: b.minutes, category: b.category });
+      await notify(db, { userId: b.userId, event: 'screen_changed', title: `${u.displayName} te ha dado ${-r.applied} min ${CATEGORY_PHRASE[b.category]}.`, body: `Te quedan ${r.balance} min.${b.note ? ` ${b.note}` : ''}`, link: '/mesada' });
       return { applied: -r.applied, requested: b.minutes, balance: r.balance };
     });
   });

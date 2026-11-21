@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, CircleCheckBig, X } from 'lucide-react';
 import { api, post } from '../lib/api';
-import { addDays, fmtDate, relative } from '../lib/format';
+import { addDays, euros, fmtDate, relative } from '../lib/format';
 import { useDecideRedemption, useInvalidateAll } from '../lib/hooks';
-import type { BonusGrant, Instance, Redemption } from '../lib/types';
-import { Avatar, Badge, Button, Empty, Loading, PageHeader, PointsPill, SectionTitle, useToast } from '../components/ui';
+import type { BonusGrant, Instance, PayMethod, PayoutRequest, Redemption, ScreenLog, Wallet } from '../lib/types';
+import { screenPhrase } from '../lib/screen';
+import { MethodPicker } from '../components/MoneySheets';
+import { Avatar, Badge, Button, Empty, Field, Loading, PageHeader, PointsPill, SectionTitle, Sheet, useToast } from '../components/ui';
 import { ApprovalCard } from '../components/ApprovalCard';
 
 /** Tareas que marca un adulto: dos botones, y se puede corregir después. */
@@ -94,6 +97,115 @@ function PendingGrants() {
   );
 }
 
+/** Aprobar o rechazar una petición del hijo: dinero pide forma de pago; ambas admiten una nota. */
+function DecideSheet({ req, mode, onClose }: { req: PayoutRequest; mode: 'approve' | 'reject'; onClose: () => void }) {
+  const [method, setMethod] = useState<PayMethod>('cash');
+  const [note, setNote] = useState('');
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const wallet = useQuery({ queryKey: ['wallet', req.user_id], queryFn: () => api<{ wallet: Wallet }>(`/wallet/${req.user_id}`) });
+  const w = wallet.data?.wallet;
+  const what = req.kind === 'money' ? euros(req.amount_cents!) : screenPhrase(req.minutes!, req.category);
+  const left = req.kind === 'money' ? w?.cents_pending : w?.screen_minutes;
+  const asked = req.kind === 'money' ? req.amount_cents! : req.minutes!;
+  const reduced = left != null && left < asked;
+  const decide = useMutation({
+    mutationFn: () => post(`/payout-requests/${req.id}/${mode}`, { method: mode === 'approve' && req.kind === 'money' ? method : undefined, note: note || undefined }),
+    onSuccess: (r) => {
+      toast(mode === 'reject' ? 'Petición rechazada' : r.reduced ? `Aprobada por menos: ${req.kind === 'money' ? euros(r.granted) : `${r.granted} min`} (no había más)` : 'Petición aprobada');
+      invalidate();
+      onClose();
+    },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  return (
+    <Sheet open onClose={onClose} title={mode === 'approve' ? `Aprobar a ${req.display_name}` : `Rechazar a ${req.display_name}`}
+      footer={<Button className="w-full" variant={mode === 'approve' ? 'success' : 'danger'} loading={decide.isPending} onClick={() => decide.mutate()}>{mode === 'approve' ? (req.kind === 'money' ? 'Pagar y aprobar' : 'Dar minutos y aprobar') : 'Rechazar'}</Button>}>
+      <div className="space-y-4">
+        <p>Pide <strong className="num">{what}</strong>{req.note ? <> · «{req.note}»</> : null}.</p>
+        {mode === 'approve' && reduced ? (
+          <p role="status" className="rounded-2xl bg-sun-soft p-3 text-sm font-bold dark:bg-sun/10">
+            Ahora solo tiene {req.kind === 'money' ? euros(left!) : `${left} min`}. Se aprobará por esa cantidad{left! <= 0 ? ' (es 0: no se podrá aprobar)' : ''}.
+          </p>
+        ) : null}
+        {mode === 'approve' && req.kind === 'money' ? <MethodPicker value={method} onChange={setMethod} /> : null}
+        <Field label="Nota (opcional)">{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />}</Field>
+      </div>
+    </Sheet>
+  );
+}
+
+function Requests() {
+  const [open, setOpen] = useState<{ req: PayoutRequest; mode: 'approve' | 'reject' } | null>(null);
+  const list = useQuery({ queryKey: ['payout-requests', 'pending'], queryFn: () => api<{ requests: PayoutRequest[] }>('/payout-requests?status=pending') });
+  const requests = list.data?.requests ?? [];
+  if (!requests.length) return null;
+  return (
+    <section className="mb-8">
+      <SectionTitle>Peticiones de dinero y pantalla</SectionTitle>
+      <ul className="space-y-3">
+        {requests.map((r) => (
+          <li key={r.id} className="card flex flex-wrap items-center gap-3 p-3.5">
+            <Avatar name={r.display_name} avatar={r.avatar} colorKey={r.color} size={40} />
+            <div className="min-w-0 flex-1">
+              <p className="font-bold">{r.kind === 'money' ? `Pide ${euros(r.amount_cents!)}` : `Pide ${screenPhrase(r.minutes!, r.category)}`}</p>
+              <p className="text-sm muted">{r.display_name} · {relative(r.created_at)}{r.note ? ` · «${r.note}»` : ''}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="danger" onClick={() => setOpen({ req: r, mode: 'reject' })} aria-label={`Rechazar la petición de ${r.display_name}`}>Rechazar</Button>
+              <Button size="sm" variant="success" onClick={() => setOpen({ req: r, mode: 'approve' })} aria-label={`Aprobar la petición de ${r.display_name}`}>Aprobar</Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {open ? <DecideSheet key={open.req.id + open.mode} req={open.req} mode={open.mode} onClose={() => setOpen(null)} /> : null}
+    </section>
+  );
+}
+
+/** Pantalla que el hijo ha anotado: ya está restada; el adulto la confirma (con puntos de honestidad) o la anula. */
+function UsageLogs() {
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const list = useQuery({ queryKey: ['screen-logs', 'pending'], queryFn: () => api<{ logs: ScreenLog[] }>('/screen-logs?status=pending') });
+  const act = useMutation({
+    mutationFn: (v: { id: string; action: 'confirm' | 'void' }) => post(`/screen-logs/${v.id}/${v.action}`),
+    onSuccess: (r, v) => {
+      toast(v.action === 'void' ? (r.refunded ? `Anulada: devueltos ${r.refunded} min` : 'Anulada') : r.honesty ? 'Confirmada: +5 puntos por ser honesto' : 'Confirmada');
+      invalidate();
+    },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  const logs = list.data?.logs ?? [];
+  if (!logs.length) return null;
+  return (
+    <section className="mb-8">
+      <SectionTitle>Pantalla anotada</SectionTitle>
+      <ul className="space-y-3">
+        {logs.map((l) => (
+          <li key={l.id} className="card p-3.5">
+            <div className="flex items-center gap-3">
+              <Avatar name={l.display_name} avatar={l.avatar} colorKey={l.color} size={40} />
+              <div className="min-w-0 flex-1">
+                <p className="font-bold">{l.display_name} anotó {screenPhrase(l.minutes, l.category)}</p>
+                <p className="flex flex-wrap items-center gap-1.5 text-sm muted">
+                  {fmtDate(l.day, { weekday: 'long', day: 'numeric' })}{l.note ? ` · «${l.note}»` : ''}
+                  {l.overflow_minutes > 0 ? <Badge tone="berry">Se pasó {l.overflow_minutes} min</Badge> : null}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button variant="secondary" size="sm" className="flex-1" disabled={act.isPending} onClick={() => act.mutate({ id: l.id, action: 'void' })} aria-label={`Anular la pantalla de ${l.display_name}`}><X size={16} /> Anular</Button>
+              <Button variant="success" size="sm" className="flex-1" disabled={act.isPending} onClick={() => act.mutate({ id: l.id, action: 'confirm' })} aria-label={`Confirmar la pantalla de ${l.display_name}`}><Check size={16} /> Confirmar</Button>
+            </div>
+            {l.overflow_minutes > 0 ? <p className="mt-2 text-sm muted">Tenía menos minutos de los que anotó: hoy no gana puntos de honestidad.</p> : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function Approvals() {
   const { data, isLoading } = useQuery({ queryKey: ['dashboard'], queryFn: () => api('/dashboard') });
   const reds = useQuery({ queryKey: ['redemptions', 'requested'], queryFn: () => api<{ redemptions: Redemption[] }>('/redemptions?status=requested') });
@@ -106,6 +218,8 @@ export default function Approvals() {
     <div className="max-w-3xl">
       <PageHeader title="Validar" subtitle="Revisa lo que han hecho. Puedes ajustar los puntos antes de aprobar." />
       <CheckTasks today={data.today} />
+      <Requests />
+      <UsageLogs />
       <PendingGrants />
       <section className="mb-8">
         <SectionTitle>Tareas terminadas</SectionTitle>

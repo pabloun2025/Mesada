@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { PiggyBank, Plus, Target, Trash2 } from 'lucide-react';
+import { Banknote, MonitorPlay, NotebookPen, PiggyBank, Plus, Target, Trash2 } from 'lucide-react';
 import { api, del, newKey, post } from '../lib/api';
-import { euros, parseEuros } from '../lib/format';
+import { euros, parseEuros, relative } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
-import type { Wallet } from '../lib/types';
-import { Button, Field, IconButton, Loading, PageHeader, SectionTitle, Sheet, useToast } from '../components/ui';
+import type { PayoutRequest, Wallet } from '../lib/types';
+import { screenPhrase } from '../lib/screen';
+import { LogScreenSheet, RequestMoneySheet, RequestScreenSheet } from '../components/MoneySheets';
+import { Badge, Button, Field, IconButton, Loading, PageHeader, SectionTitle, Sheet, useToast } from '../components/ui';
 import { Bar } from '../components/Ring';
 import { LedgerList, ScreenList } from '../components/Ledger';
 import { minutesLabel } from '../lib/deadline';
@@ -15,6 +17,8 @@ export default function ChildMoney() {
   const { user, family } = useSession();
   const { data, isLoading } = useQuery({ queryKey: ['wallet', user.id], queryFn: () => api<{ wallet: Wallet }>(`/wallet/${user.id}`) });
   const goals = useQuery({ queryKey: ['goals', user.id], queryFn: () => api(`/goals/${user.id}`) });
+  const requests = useQuery({ queryKey: ['payout-requests', 'mine'], queryFn: () => api<{ requests: PayoutRequest[] }>('/payout-requests') });
+  const [sheet, setSheet] = useState<'money' | 'screen' | 'log' | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [amount, setAmount] = useState('');
@@ -41,10 +45,17 @@ export default function ChildMoney() {
     onSuccess: () => { setGoalOpen(false); setGoal({ title: '', target: '' }); invalidate(); },
     onError: (e: Error) => toast(e.message, 'error'),
   });
+  const cancel = useMutation({
+    mutationFn: (id: string) => post(`/payout-requests/${id}/cancel`),
+    onSuccess: () => { toast('Petición cancelada'); invalidate(); },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
   const removeGoal = useMutation({ mutationFn: (id: string) => del(`/goals/${id}`), onSuccess: invalidate });
 
   if (isLoading || !data) return <Loading />;
   const w = data.wallet;
+  const reqs = (requests.data?.requests ?? []).slice(0, 6);
+  const hasPending = (kind: string) => reqs.some((r) => r.kind === kind && r.status === 'pending');
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title="Mi dinero" subtitle={`${family.rate_points} puntos = ${euros(family.rate_cents)}`} />
@@ -67,8 +78,9 @@ export default function ChildMoney() {
           </div>
         </dl>
       </section>
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <Button variant="success" disabled={w.cents_pending <= 0} onClick={() => setSaveOpen(true)}><PiggyBank size={18} /> Guardar en la hucha</Button>
+        <Button variant="secondary" disabled={w.cents_pending <= 0 || hasPending('money')} onClick={() => setSheet('money')}><Banknote size={18} /> Pedir mi dinero</Button>
       </div>
 
       <section className="mt-8">
@@ -90,11 +102,39 @@ export default function ChildMoney() {
         ) : <p className="muted">Ponte una meta (unos auriculares, un juego…) y ve llenando la hucha.</p>}
       </section>
 
+      {reqs.length ? (
+        <section className="mt-8">
+          <SectionTitle>Mis peticiones</SectionTitle>
+          <ul className="space-y-2.5">
+            {reqs.map((r) => (
+              <li key={r.id} className="card flex flex-wrap items-center gap-3 p-3.5">
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold">{r.kind === 'money' ? euros(r.amount_cents!) : screenPhrase(r.minutes!, r.category)}</p>
+                  <p className="text-sm muted">{relative(r.created_at)}{r.decision_note ? ` · «${r.decision_note}»` : ''}</p>
+                </div>
+                {r.status === 'pending' ? (
+                  <>
+                    <Badge tone="sun">Esperando</Badge>
+                    <Button size="sm" variant="ghost" disabled={cancel.isPending} onClick={() => cancel.mutate(r.id)} aria-label={`Cancelar mi petición de ${r.kind === 'money' ? euros(r.amount_cents!) : screenPhrase(r.minutes!, r.category)}`}>Cancelar</Button>
+                  </>
+                ) : r.status === 'approved' ? (
+                  <Badge tone="leaf">Aprobada{r.kind === 'money' && r.granted_cents !== r.amount_cents ? ` (${euros(r.granted_cents ?? 0)})` : r.kind === 'screen' && r.granted_minutes !== r.minutes ? ` (${r.granted_minutes} min)` : ''}</Badge>
+                ) : <Badge tone={r.status === 'rejected' ? 'berry' : 'muted'}>{r.status === 'rejected' ? 'Rechazada' : 'Cancelada'}</Badge>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="mt-8">
         <SectionTitle>Mi tiempo de pantalla</SectionTitle>
         <div className="card p-4">
           <p className="mb-2 text-sm font-bold muted">Te quedan</p>
           <p className="num mb-3 text-3xl font-extrabold">{minutesLabel(w.screen_minutes)}</p>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" disabled={w.screen_minutes <= 0 || hasPending('screen')} onClick={() => setSheet('screen')}><MonitorPlay size={16} /> Pedir pantalla</Button>
+            <Button size="sm" variant="secondary" onClick={() => setSheet('log')}><NotebookPen size={16} /> Anotar pantalla</Button>
+          </div>
           <ScreenList userId={user.id} />
         </div>
       </section>
@@ -104,6 +144,9 @@ export default function ChildMoney() {
         <div className="card p-4"><LedgerList userId={user.id} /></div>
       </section>
 
+      {sheet === 'money' ? <RequestMoneySheet balanceCents={w.cents_pending} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'screen' ? <RequestScreenSheet balance={w.screen_minutes} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'log' ? <LogScreenSheet balance={w.screen_minutes} onClose={() => setSheet(null)} /> : null}
       <Sheet open={saveOpen} onClose={() => setSaveOpen(false)} title="Guardar en la hucha" footer={<Button className="w-full" variant="success" loading={save.isPending} onClick={() => save.mutate()}>Guardar</Button>}>
         <p className="mb-4 muted">Para sacar dinero de la hucha tendrás que pedírselo a un adulto.</p>
         <Field label="Importe (€)">{(id) => <input id={id} className="field num text-2xl font-extrabold" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
