@@ -28,7 +28,7 @@ describe('proveedor Resend', () => {
     const body = JSON.parse(String(init.body));
     expect(body).toMatchObject({ from: '"Mesada" <avisos@veryfacil.org>', to: ['ana@example.com'], subject: 'Prueba' });
     expect(body.text).toBe('Hola\n\nhttps://mesada.veryfacil.org/');
-    expect(body.html).toContain('Abrir Mesada');
+    expect(body.html).toContain('Abrir DiploP');
   });
 
   it('clasifica las respuestas: 429 y 5xx se reintentan; 401 y 422 no', async () => {

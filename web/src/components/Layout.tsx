@@ -18,7 +18,7 @@ function useTheme() {
     setDark(next);
     document.documentElement.classList.toggle('dark', next);
     localStorage.setItem('mesada:theme', next ? 'dark' : 'light');
-    document.querySelector('meta[name=theme-color]')?.setAttribute('content', next ? '#0C1428' : '#172A54');
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', '#1A58A3');
   };
   return { dark, toggle };
 }
@@ -34,7 +34,7 @@ function Notifications() {
     <>
       <IconButton label={unread ? `Avisos (${unread} sin leer)` : 'Avisos'} onClick={() => setOpen(true)} className="relative">
         <Bell size={20} />
-        {unread ? <span className="num absolute top-1 right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-tangerine px-1 text-[11px] font-bold text-white">{unread > 9 ? '9+' : unread}</span> : null}
+        {unread ? <span className="num absolute top-1 right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-sun px-1 text-[11px] font-bold text-ink ring-2 ring-[var(--bg)]">{unread > 9 ? '9+' : unread}</span> : null}
       </IconButton>
       <Sheet
         open={open}
@@ -57,7 +57,7 @@ function Notifications() {
                     if (n.link) navigate(n.link);
                   }}
                 >
-                  <span className={`mt-2 size-2 shrink-0 rounded-full ${n.read_at ? 'bg-transparent' : 'bg-tangerine'}`} aria-hidden />
+                  <span className={`mt-2 size-2 shrink-0 rounded-full ${n.read_at ? 'bg-transparent' : 'bg-sun'}`} aria-hidden />
                   <span className="min-w-0 flex-1">
                     <span className="block font-bold">{n.title}</span>
                     {n.body ? <span className="block text-sm muted">{n.body}</span> : null}
@@ -140,11 +140,9 @@ export function Layout() {
       {/* Raíl lateral (escritorio) */}
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-[var(--line)] bg-[var(--card)] px-4 py-6 lg:flex">
         <div className="mb-8 flex items-center gap-2.5 px-2">
-          <img src="/favicon.svg" alt="" width={36} height={36} className="size-9" />
-          <div>
-            <p className="font-display text-xl leading-none font-extrabold">Mesada</p>
-            <p className="text-sm muted">{family.name}</p>
-          </div>
+          <img src="/brand/logo.png" alt="DiploP" width={120} height={58} className="h-12 w-auto dark:hidden" />
+          <img src="/brand/logo-white.png" alt="DiploP" width={120} height={58} className="hidden h-12 w-auto dark:block" />
+          <p className="mt-3 self-end text-sm muted">{family.name}</p>
         </div>
         <nav className="flex flex-1 flex-col gap-1" aria-label="Principal">
           {[...primary, ...secondary].map((i) => (
@@ -158,7 +156,7 @@ export function Layout() {
             >
               {i.icon}
               <span className="flex-1">{i.label}</span>
-              {i.badge ? <span className="num rounded-full bg-tangerine px-2 text-sm text-white">{i.badge}</span> : null}
+              {i.badge ? <span className="num rounded-full bg-sun px-2 text-sm text-ink">{i.badge}</span> : null}
             </NavLink>
           ))}
         </nav>
@@ -174,12 +172,13 @@ export function Layout() {
 
       <div className="flex min-h-dvh flex-col">
         {/* Cabecera */}
-        <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-[var(--line)] bg-[var(--bg)]/85 px-4 py-2.5 backdrop-blur-md lg:justify-end lg:px-8">
-          <div className="flex flex-1 items-center gap-2.5 lg:hidden">
-            <Avatar name={user.display_name} avatar={user.avatar} colorKey={user.color} size={34} />
-            <div className="leading-tight">
-              <p className="font-display font-extrabold">Hola, {user.display_name}</p>
-              <p className="text-xs muted">{family.name}</p>
+        {/* En móvil, la cabecera es la franja azul de la marca; en escritorio, una barra neutra. */}
+        <header className="brand-header sticky top-0 z-30 flex items-center gap-2 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 lg:justify-end lg:border-b lg:border-[var(--line)] lg:bg-[var(--bg)]/85 lg:px-8 lg:py-2.5 lg:backdrop-blur-md">
+          <div className="flex flex-1 items-center gap-3 lg:hidden">
+            <img src="/brand/logo-white.png" alt="DiploP" width={84} height={40} className="h-9 w-auto" />
+            <div className="min-w-0 border-l border-white/25 pl-3 leading-tight">
+              <p className="truncate font-display font-extrabold text-white">Hola, {user.display_name}</p>
+              <p className="truncate text-xs text-white/75">{family.name}</p>
             </div>
           </div>
           <IconButton label={theme.dark ? 'Modo claro' : 'Modo oscuro'} onClick={theme.toggle}>{theme.dark ? <Sun size={20} /> : <Moon size={20} />}</IconButton>
@@ -205,7 +204,7 @@ export function Layout() {
                   <>
                     <span className={`flex h-8 w-14 items-center justify-center rounded-full transition ${isActive ? 'bg-tangerine-soft dark:bg-tangerine/20' : ''}`}>{i.icon}</span>
                     {i.label}
-                    {i.badge ? <span className="num absolute top-1.5 left-1/2 ml-3 rounded-full bg-tangerine px-1.5 text-[11px] text-white">{i.badge}</span> : null}
+                    {i.badge ? <span className="num absolute top-1.5 left-1/2 ml-3 rounded-full bg-sun px-1.5 text-[11px] text-ink">{i.badge}</span> : null}
                   </>
                 )}
               </NavLink>

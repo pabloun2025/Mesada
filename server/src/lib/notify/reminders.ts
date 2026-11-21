@@ -30,7 +30,7 @@ export async function scheduleReminders(db: Db, familyId: string, now = new Date
         userId: r.user_id,
         event: 'task_reminder',
         title: r.n === 1 ? 'Te queda 1 tarea de hoy' : `Te quedan ${r.n} tareas de hoy`,
-        body: 'Márcalas en Mesada cuando las termines.',
+        body: 'Márcalas en DiploP cuando las termines.',
         link: '/',
         dedupeKey: `reminder:${r.user_id}:${today}`,
       });

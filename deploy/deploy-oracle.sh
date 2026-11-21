@@ -48,7 +48,7 @@ values = {
     'EMAIL_PROVIDER': pick('EMAIL_PROVIDER', 'resend'),
     'RESEND_API_KEY': pick('RESEND_API_KEY'),
     'MAIL_FROM': pick('MAIL_FROM', 'mesada@veryfacil.org'),
-    'MAIL_FROM_NAME': pick('MAIL_FROM_NAME', 'Mesada'),
+    'MAIL_FROM_NAME': 'DiploP' if pick('MAIL_FROM_NAME', 'DiploP') == 'Mesada' else pick('MAIL_FROM_NAME', 'DiploP'),
     # WhatsApp: instancia propia en la Evolution de consulares, con su token (no la clave global).
     'EVOLUTION_INSTANCE': pick('EVOLUTION_INSTANCE', 'mesada'),
     'EVOLUTION_INSTANCE_TOKEN': old.get('EVOLUTION_INSTANCE_TOKEN', ''),

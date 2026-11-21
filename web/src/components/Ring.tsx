@@ -20,7 +20,7 @@ export function WeekRing({ points, goal, cents, size = 196, label = 'esta semana
               key={i}
               x1={50 + 47.5 * Math.cos(a)} y1={50 + 47.5 * Math.sin(a)}
               x2={50 + 49.5 * Math.cos(a)} y2={50 + 49.5 * Math.sin(a)}
-              stroke={on ? (done ? '#1E9E6A' : '#F26B1D') : 'var(--line)'}
+              stroke={on ? (done ? '#1E9E6A' : '#FFB800') : 'var(--line)'}
               strokeWidth="0.9" strokeLinecap="round"
             />
           );
@@ -28,7 +28,7 @@ export function WeekRing({ points, goal, cents, size = 196, label = 'esta semana
         <circle cx="50" cy="50" r={r} fill="none" stroke="var(--chip)" strokeWidth="8" />
         <circle
           cx="50" cy="50" r={r} fill="none"
-          stroke={done ? '#1E9E6A' : '#F26B1D'} strokeWidth="8" strokeLinecap="round"
+          stroke={done ? '#1E9E6A' : '#FFB800'} strokeWidth="8" strokeLinecap="round"
           strokeDasharray={`${c * pct} ${c}`}
           style={{ transition: 'stroke-dasharray 0.8s cubic-bezier(.2,.9,.3,1)' }}
         />
@@ -45,7 +45,7 @@ export function WeekRing({ points, goal, cents, size = 196, label = 'esta semana
 
 export function Bar({ value, max, tone = 'tangerine' }: { value: number; max: number; tone?: 'tangerine' | 'leaf' | 'sky' }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
-  const colors = { tangerine: '#F26B1D', leaf: '#1E9E6A', sky: '#4F8DF7' };
+  const colors = { tangerine: '#FFB800', leaf: '#1E9E6A', sky: '#4F8DF7' };
   return (
     <div className="h-2.5 w-full overflow-hidden rounded-full bg-[var(--chip)]" role="progressbar" aria-valuenow={value} aria-valuemax={max}>
       <div className="h-full rounded-full transition-[width] duration-700" style={{ width: `${pct}%`, background: colors[tone] }} />

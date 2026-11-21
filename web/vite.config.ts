@@ -9,18 +9,18 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Mesada — tareas y paga en familia',
-        short_name: 'Mesada',
+        name: 'DiploP — tareas y mesada en familia',
+        short_name: 'DiploP',
         description: 'Tareas de casa, puntos, recompensas y mesada para toda la familia.',
         lang: 'es-ES',
         start_url: '/',
         scope: '/',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#F5F7FB',
-        theme_color: '#172A54',
+        background_color: '#1A58A3',
+        theme_color: '#1A58A3',
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -30,7 +30,7 @@ export default defineConfig({
       workbox: {
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,woff2}'],
         // La API nunca se cachea: los saldos siempre vienen del servidor.
         runtimeCaching: [{ urlPattern: /\/api\//, handler: 'NetworkOnly' }],
       },

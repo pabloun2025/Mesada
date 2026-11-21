@@ -23,7 +23,7 @@ export default function Approvals() {
         {list.length ? (
           <ul className="space-y-3">{list.map((p: any) => <ApprovalCard key={p.id} p={p} />)}</ul>
         ) : (
-          <div className="card"><Empty icon={<CircleCheckBig />} title="Nada por validar">Cuando marquen una tarea, aparecerá aquí.</Empty></div>
+          <div className="card"><Empty mascot icon={<CircleCheckBig />} title="Nada por validar">Cuando marquen una tarea, aparecerá aquí.</Empty></div>
         )}
       </section>
       {requested.length ? (

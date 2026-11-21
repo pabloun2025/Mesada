@@ -48,7 +48,7 @@ export function Avatar({ name, avatar, colorKey, size = 40, ring = false }: { na
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-tangerine text-white hover:bg-tangerine-deep shadow-[0_6px_16px_-8px_rgb(242_107_29/0.8)]',
+  primary: 'bg-sun text-ink hover:bg-sun-deep shadow-[0_6px_16px_-8px_rgb(227_162_0/0.9)]',
   secondary: 'bg-[var(--chip)] text-[var(--fg)] hover:brightness-95 dark:hover:brightness-125',
   ghost: 'text-[var(--fg-2)] hover:bg-[var(--chip)]',
   danger: 'bg-berry-soft text-berry hover:brightness-95 dark:bg-berry/20',
@@ -97,7 +97,7 @@ export function Spinner({ className = 'size-4' }: { className?: string }) {
 
 export function PointsPill({ points, tone = 'tangerine', sign = true }: { points: number; tone?: 'tangerine' | 'leaf' | 'muted'; sign?: boolean }) {
   const tones = {
-    tangerine: 'bg-tangerine-soft text-tangerine-deep dark:bg-tangerine/20 dark:text-[#ffb27f]',
+    tangerine: 'bg-sun-soft text-sun-ink dark:bg-sun/20 dark:text-[#ffd979]',
     leaf: 'bg-leaf-soft text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]',
     muted: 'bg-[var(--chip)] text-[var(--fg-3)]',
   };
@@ -111,7 +111,7 @@ export function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?
     sun: 'bg-sun-soft text-[#7a5600] dark:bg-sun/20 dark:text-[#ffd979]',
     berry: 'bg-berry-soft text-berry dark:bg-berry/20 dark:text-[#ff9dbf]',
     leaf: 'bg-leaf-soft text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]',
-    tangerine: 'bg-tangerine-soft text-tangerine-deep dark:bg-tangerine/20 dark:text-[#ffb27f]',
+    tangerine: 'bg-tangerine-soft text-tangerine-deep dark:bg-tangerine/20',
   };
   return <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${tones[tone]}`}>{children}</span>;
 }
@@ -227,10 +227,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 /* ---------- Estados ---------- */
 
-export function Empty({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode }) {
+/** Estado vacío. Con `mascot`, aparece el osito de DiploP en lugar del icono (momentos de «todo hecho» o bienvenida). */
+export function Empty({ icon, title, children, mascot }: { icon: ReactNode; title: string; children?: ReactNode; mascot?: boolean }) {
   return (
     <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-      <div className="mb-1 flex size-14 items-center justify-center rounded-2xl bg-[var(--chip)] text-2xl text-[var(--fg-3)]">{icon}</div>
+      {mascot ? (
+        <img src="/brand/mascot.png" alt="" width={88} height={88} className="mb-1 size-22 -rotate-3 drop-shadow-[0_10px_18px_rgb(20_42_92/0.25)]" />
+      ) : (
+        <div className="mb-1 flex size-14 items-center justify-center rounded-2xl bg-[var(--chip)] text-2xl text-[var(--fg-3)]">{icon}</div>
+      )}
       <p className="font-display text-lg font-bold">{title}</p>
       {children ? <div className="max-w-sm muted">{children}</div> : null}
     </div>

@@ -277,7 +277,7 @@ test.describe.serial('Familia completa', () => {
     const res = await adult.request.get('/manifest.webmanifest');
     expect(res.ok()).toBe(true);
     const m = await res.json();
-    expect(m).toMatchObject({ name: expect.stringContaining('Mesada'), display: 'standalone', lang: 'es-ES' });
+    expect(m).toMatchObject({ name: expect.stringContaining('DiploP'), display: 'standalone', lang: 'es-ES' });
     expect(m.icons.some((i: any) => i.sizes === '512x512')).toBe(true);
     expect((await adult.request.get('/sw.js')).ok()).toBe(true);
   });

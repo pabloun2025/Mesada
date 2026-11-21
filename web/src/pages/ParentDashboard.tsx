@@ -88,7 +88,7 @@ export default function ParentDashboard() {
             })}
           </div>
         ) : (
-          <div className="card"><Empty icon={<PartyPopper />} title="Añade a tus hijos">Ve a <Link to="/familia" className="font-bold text-sky">Familia</Link> para crear sus perfiles.</Empty></div>
+          <div className="card"><Empty mascot icon={<PartyPopper />} title="Añade a tus hijos">Ve a <Link to="/familia" className="font-bold text-sky">Familia</Link> para crear sus perfiles.</Empty></div>
         )}
       </section>
 
@@ -100,7 +100,7 @@ export default function ParentDashboard() {
               {data.pendingApprovals.slice(0, 3).map((p: any) => <ApprovalCard key={p.id} p={p} compact />)}
             </ul>
           ) : (
-            <div className="card"><Empty icon={<CircleCheckBig />} title="Todo validado">Cuando terminen una tarea, aparecerá aquí.</Empty></div>
+            <div className="card"><Empty mascot icon={<CircleCheckBig />} title="Todo validado">Cuando terminen una tarea, aparecerá aquí.</Empty></div>
           )}
           {data.pendingRedemptions ? (
             <Link to="/premios" className="card mt-3 flex items-center gap-3 p-4 font-bold">
