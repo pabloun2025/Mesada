@@ -1,7 +1,7 @@
 name: Desplegar en Oracle
 
 # Manual. Pasa CI, copia el código a /home/ubuntu/mesada y ejecuta deploy/deploy-oracle.sh.
-# Secretos del repositorio Mesada: ORACLE_SSH_KEY (obligatorio), SMTP_USER y SMTP_PASS (clave SMTP propia de Brevo).
+# Secretos del repositorio Mesada: ORACLE_SSH_KEY (obligatorio) y RESEND_API_KEY (clave propia de Mesada en Resend).
 on:
   workflow_dispatch:
 
@@ -24,13 +24,12 @@ jobs:
       - name: Preparar claves
         env:
           ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           set +x
           install -d -m 700 ~/.ssh
           printf '%s\n' "$ORACLE_SSH_KEY" > ~/.ssh/oracle && chmod 600 ~/.ssh/oracle
-          jq -n '{SMTP_USER: env.SMTP_USER, SMTP_PASS: env.SMTP_PASS} | with_entries(select(.value != ""))' > /tmp/mesada-bootstrap.json
+          jq -n '{RESEND_API_KEY: env.RESEND_API_KEY} | with_entries(select(.value != ""))' > /tmp/mesada-bootstrap.json
           chmod 600 /tmp/mesada-bootstrap.json
       - name: Copiar y desplegar
         run: |

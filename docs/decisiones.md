@@ -83,10 +83,10 @@ Formato: contexto → decisión → consecuencias. Las más recientes van al fin
 **Decisión:** instancia `mesada` vinculada a un teléfono de la familia. Mesada solo guarda el **token de su instancia**; la clave global se usa una vez en el servidor (`deploy/setup-whatsapp.sh`) y no se copia. No hay webhook (solo envío) y se aplican el tope diario y la pausa entre mensajes.
 **Consecuencias:** mínimo privilegio. Que Evolution v2.3.7 acepte el token de instancia en `sendText` **se verifica en la prueba controlada** antes de activar el envío real.
 
-### D20. Correo por SMTP genérico con clave SMTP propia
-**Contexto:** la clave API de Brevo da acceso a toda la cuenta institucional (contactos de campañas), y veryfacil.org ya envía con Resend (firmador).
-**Decisión:** proveedor SMTP genérico (`nodemailer`, la única dependencia nueva). En producción, el relé de Brevo con una **clave SMTP propia de Mesada** (solo envío, revocable por separado). Remitente en veryfacil.org, nunca de la Embajada. Tope mensual propio, porque TEINVITO no ve estos envíos en su contador.
-**Consecuencias:** cambiar a Resend u otro proveedor es cambiar variables de entorno.
+### D20. Correo por Resend, como firmador (actualizada el 21/11 por decisión del usuario)
+**Contexto:** veryfacil.org ya envía con Resend desde firmador. La clave API de Brevo da acceso a toda la cuenta institucional.
+**Decisión:** `ResendEmailProvider` (API HTTP, sin dependencias) con `Idempotency-Key`, una clave propia de Mesada limitada a envío en veryfacil.org y el remitente `mesada@veryfacil.org`. Se conserva un `SmtpEmailProvider` genérico (`nodemailer`) para cambiar de proveedor (Brevo u otro) con `EMAIL_PROVIDER=smtp`.
+**Consecuencias:** sin cambios de DNS ni en Brevo. Los cortes de red se pueden reintentar sin duplicar correos. Tope mensual propio, porque el freno de firmador no ve estos envíos.
 
 ### D21. Outbox transaccional y deduplicación en la base de datos
 **Decisión:** los avisos externos se escriben en `notification_outbox` dentro de la transacción de la acción, con `dedupe_key UNIQUE`. Un worker los envía después. Los resultados inciertos no se reintentan.

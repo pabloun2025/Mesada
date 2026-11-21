@@ -40,7 +40,7 @@ VM Oracle Cloud (ubuntu@51.170.51.109, 24 GB de RAM, Docker Compose, ningún pue
 | **Servidor PostgreSQL** | ⚖️ Decisión (ver §4) | Recomendado: contenedor propio ligero, que es el patrón del servidor (TEINVITO tampoco comparte el de consulares). Alternativa admitida: base y rol propios dentro de `teinvito-postgres` | Compartir implica ejecutar `CREATE ROLE/DATABASE` en el servidor de producción de TEINVITO y acoplar reinicios y versiones. Mesada solo necesita `DATABASE_URL`: ambas opciones funcionan sin cambiar código |
 | **Gestión de secretos** | ✅ Mecanismo | El mismo patrón: script de despliegue en el servidor que genera `.env.production` (600) y lee las claves compartidas del `.env.production` de consulares. Secreto `ORACLE_SSH_KEY` en el repositorio de Mesada | Nada en Git. Las claves compartidas no se copian a otro repositorio ni a un registro |
 | **WhatsApp (Evolution API)** | ✅ El servidor, **no la línea** | Instancia nueva `mesada`, vinculada a un **teléfono de la familia**, con su propio token de instancia | Ver §3. No se debe escribir a la familia desde la línea institucional de la Embajada ni de los consulados |
-| **Brevo** | ✅ La cuenta, con condiciones | Remitente propio en `veryfacil.org` (hay que autenticar el dominio) y **clave SMTP propia** (solo envío) creada en la misma cuenta. Tope mensual propio | Ver §3 |
+| **Correo** | ✅ **Resend, como firmador** (decisión del usuario del 21/11) | La misma cuenta de Resend y el dominio `veryfacil.org` ya verificado, con una **clave propia de Mesada** de «Sending access» limitada a veryfacil.org. Remitente `mesada@veryfacil.org`. Tope mensual propio | Sin cambios de DNS ni en Brevo. Ver §3 |
 | **Autenticación** | ❌ Usuarios y sesiones separados | Mesada mantiene su sistema (cookies propias en su dominio). Se reutilizan **patrones**: bloqueo por intentos, `COOKIE_SECURE`, `.env` en el servidor | Requisito de aislamiento. Turnstile y TOTP de TEINVITO están ligados a su dominio y a su clave |
 | **Copias de seguridad** | ✅ Patrón | Contenedor `backup` propio (como TEINVITO), 14 días en `./backups` | **No usar R2 de TEINVITO:** su documentación prohíbe otros cubos o herramientas en esa cuenta porque rompen su freno de cupo |
 | **Despliegue** | ✅ Patrón | Workflow manual `oracle-deploy.yml` en Mesada, copia del de TEINVITO, con comprobación de salud y verificación desde la red de consulares | Mismo flujo conocido; ninguna máquina nueva |
@@ -72,12 +72,20 @@ VM Oracle Cloud (ubuntu@51.170.51.109, 24 GB de RAM, Docker Compose, ningún pue
 - **Alternativa sin tocar DNS:** el módulo de notificaciones envía por **SMTP genérico**, así que también puede usar el relé SMTP de Resend (`smtp.resend.com`) con el dominio ya verificado. Cambiar de proveedor es cambiar variables de entorno.
 - **Permisos:** la clave API de Brevo da acceso a **toda la cuenta**, incluidos los contactos de las campañas de la Embajada. Por mínimo privilegio, Mesada usará una **clave SMTP** propia del relé (`smtp-relay.brevo.com:587`), que solo envía, se puede revocar por separado y no lee datos.
 
+### Resend (elegido para el correo)
+
+- **Cómo lo usa firmador:** API HTTP `POST https://api.resend.com/emails` con `RESEND_API_KEY` y `RESEND_FROM_EMAIL`, guardadas como secretos de Supabase. Tiene un freno propio en su base (`budgetedFetch`: 500 correos al día y 5.000 cada 30 días) que **no ve los envíos de Mesada**, igual que Mesada no ve los suyos.
+- **Mesada:** el mismo API, con `Idempotency-Key` (la clave única del outbox). Si se corta la conexión, el reintento no duplica el correo, porque Resend recuerda la clave 24 horas. Tope propio de 100 correos al mes y el correo solo para lo importante, para no consumir el cupo común.
+- **Permisos:** una clave de API **propia** con «Sending access» limitada al dominio veryfacil.org. Solo puede enviar, no lee nada de la cuenta y se revoca sin afectar a firmador. No se reutiliza la de firmador, que además vive en Supabase y no es accesible desde aquí.
+- **Plan de la cuenta:** no lo he podido comprobar. El conector de Resend de esta sesión no conecta y el proxy no permite `api.resend.com`. Con el plan gratuito (100 al día y 3.000 al mes) el uso conjunto previsto sigue muy por debajo, pero conviene mirarlo en el panel de Resend.
+- **Nota:** TEINVITO también tiene una clave de Resend para su rotación de correo. Si fuera la misma cuenta, el cupo se reparte entre los tres proyectos.
+
 ## 4. Decisiones que tiene que tomar el usuario
 
 1. **Uso de recursos institucionales.** El servidor, la cuenta de Brevo y el túnel están asociados a la Embajada y a los consulados, y el servidor guarda datos personales de ciudadanos. Mesada guardará datos de menores. Técnicamente están aislados (redes, bases, claves y usuarios separados), pero conviene confirmar que este uso compartido es aceptable para la institución.
 2. **PostgreSQL:** contenedor propio (recomendado) o base y rol propios dentro de `teinvito-postgres`.
 3. **Teléfono de WhatsApp** para la instancia `mesada`: tiene que ser uno familiar, no uno institucional.
-4. **Correo:** autenticar veryfacil.org en Brevo (registros DNS solo añadidos) y crear la clave SMTP de Mesada, como pediste. O, sin cambios de DNS, usar el SMTP de Resend con el dominio que ya está verificado para firmador.
+4. ~~Correo~~ **Decidido: Resend**, como en firmador. Falta crear en Resend una clave de API propia de Mesada («Sending access», dominio veryfacil.org) y guardarla como secreto `RESEND_API_KEY` del repositorio Mesada.
 5. **Cloudflare:** confirmar que la zona veryfacil.org está en la misma cuenta que el túnel de consulares y que hay un token con permiso sobre la zona y el túnel. Ver con el script en modo «comprobar», que no cambia nada.
 6. Añadir el secreto `ORACLE_SSH_KEY` al repositorio de Mesada. GitHub no permite copiar valores entre repositorios y yo no tengo acceso a ellos.
 

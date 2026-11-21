@@ -16,6 +16,8 @@ export interface OutgoingMessage {
   subject: string;
   body: string;
   link?: string | null;
+  /** Clave única del envío (la del outbox). Los proveedores que la admiten evitan duplicados al reintentar. */
+  idempotencyKey?: string;
 }
 
 export interface NotificationProvider {
@@ -76,6 +78,53 @@ export class SmtpEmailProvider implements NotificationProvider {
       if (code >= 400) return { ok: false, retryable: true, error: `SMTP ${code}` };
       if (e?.code === 'ECONNREFUSED' || e?.code === 'EDNS' || e?.code === 'EAUTH') return { ok: false, retryable: e.code !== 'EAUTH', error: `SMTP ${e.code}` };
       return { ok: false, retryable: false, uncertain: true, error: 'SMTP sin respuesta' };
+    }
+  }
+}
+
+/**
+ * Correo por la API de Resend (como firmador, en el mismo dominio veryfacil.org).
+ * Usa la cabecera Idempotency-Key: si se corta la conexión, reintentar no duplica el correo (Resend la recuerda 24 h).
+ * Clave recomendada: una propia de Mesada con permiso «Sending access» limitado a veryfacil.org.
+ */
+export class ResendEmailProvider implements NotificationProvider {
+  readonly channel = 'email' as const;
+  readonly real = true;
+  readonly name = 'resend';
+  constructor(private apiKey: string, private from: string, private fetcher: typeof fetch = fetch, private timeoutMs = 15_000) {}
+  async send(msg: OutgoingMessage): Promise<SendResult> {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
+    try {
+      const res = await this.fetcher('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.apiKey}`,
+          'content-type': 'application/json',
+          ...(msg.idempotencyKey ? { 'idempotency-key': msg.idempotencyKey.slice(0, 256) } : {}),
+        },
+        body: JSON.stringify({
+          from: this.from,
+          to: [msg.to],
+          subject: msg.subject,
+          text: msg.link ? `${msg.body}\n\n${msg.link}` : msg.body,
+          html: emailHtml(msg),
+        }),
+        signal: ctrl.signal,
+      });
+      const json = (await res.json().catch(() => null)) as { id?: string; message?: string } | null;
+      if (res.ok && json?.id) return { ok: true, externalId: json.id };
+      if (res.ok) return { ok: false, retryable: Boolean(msg.idempotencyKey), uncertain: !msg.idempotencyKey, error: 'Resend no devolvió identificador' };
+      if (res.status === 429 || res.status >= 500) return { ok: false, retryable: true, error: `Resend ${res.status}` };
+      // 401/403: clave o dominio; 422: datos (remitente no verificado, dirección); 409: misma clave con otro contenido.
+      return { ok: false, retryable: false, error: `Resend ${res.status}${json?.message ? `: ${json.message.slice(0, 160)}` : ''}` };
+    } catch {
+      // Con clave de idempotencia, un corte de red se puede reintentar sin duplicar.
+      return msg.idempotencyKey
+        ? { ok: false, retryable: true, error: 'Resend no respondió a tiempo' }
+        : { ok: false, retryable: false, uncertain: true, error: 'Resend no respondió a tiempo' };
+    } finally {
+      clearTimeout(timer);
     }
   }
 }
@@ -149,18 +198,23 @@ export function getProviders(): ProviderSet {
   if (override) return override;
   if (cached) return cached;
   const real = realSendEnabled();
+  const from = `"${env('MAIL_FROM_NAME') || 'Mesada'}" <${env('MAIL_FROM')}>`;
+  const emailKind = env('EMAIL_PROVIDER') || 'resend';
+  const resendReady = env('RESEND_API_KEY') && env('MAIL_FROM');
   const smtpReady = env('SMTP_HOST') && env('SMTP_USER') && env('SMTP_PASS') && env('MAIL_FROM');
   const waReady = env('EVOLUTION_API_URL') && env('EVOLUTION_INSTANCE') && env('EVOLUTION_INSTANCE_TOKEN');
   cached = {
     email:
-      real && smtpReady
-        ? new SmtpEmailProvider(env('EMAIL_PROVIDER_NAME') || 'smtp', `"${env('MAIL_FROM_NAME') || 'Mesada'}" <${env('MAIL_FROM')}>`, {
-            host: env('SMTP_HOST'),
-            port: Number(env('SMTP_PORT') || 587),
-            user: env('SMTP_USER'),
-            pass: env('SMTP_PASS'),
-          })
-        : new MockProvider('email'),
+      real && emailKind === 'resend' && resendReady
+        ? new ResendEmailProvider(env('RESEND_API_KEY'), from)
+        : real && emailKind === 'smtp' && smtpReady
+          ? new SmtpEmailProvider(env('EMAIL_PROVIDER_NAME') || 'smtp', from, {
+              host: env('SMTP_HOST'),
+              port: Number(env('SMTP_PORT') || 587),
+              user: env('SMTP_USER'),
+              pass: env('SMTP_PASS'),
+            })
+          : new MockProvider('email'),
     whatsapp:
       real && waReady
         ? new EvolutionWhatsAppProvider(env('EVOLUTION_API_URL'), env('EVOLUTION_INSTANCE'), env('EVOLUTION_INSTANCE_TOKEN'))

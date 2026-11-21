@@ -25,7 +25,7 @@ Estado: ✅ hecho y probado · 🟡 parcial · ⬜ pendiente
 
 | # | Tarea | Motivo |
 |---|---|---|
-| P1 | 🟡 **Activar correo y WhatsApp reales**: hecho y probado en simulado. Faltan las acciones del usuario en `infraestructura-compartida.md` §4 (dominio en Brevo y clave SMTP, teléfono familiar, token de Cloudflare, secreto SSH) y la prueba controlada | Requiere secretos y decisiones del usuario |
+| P1 | 🟡 **Activar correo y WhatsApp reales**: hecho y probado en simulado. Faltan las acciones del usuario en `infraestructura-compartida.md` §4 (clave de Resend propia, teléfono familiar, token de Cloudflare, secreto SSH) y la prueba controlada | Requiere secretos y decisiones del usuario |
 | P2 | ⬜ Web Push (VAPID) como canal adicional del módulo de notificaciones | Avisos del sistema sin WhatsApp |
 | P2b | ⬜ Ampliaciones de la especificación v1.0 del usuario: categorías, estado «cancelada», mesada fija o mixta (modalidades B y C), cierre quincenal, tasa por hijo, calendario mensual con reasignación | Especificación recibida el 21/11 (su apartado 11.4 llegó cortado) |
 | P3 | ⬜ **Confirmación propia** en lugar de `confirm()` del navegador al archivar tareas y recompensas, con opción de deshacer | Auditoría de interfaz (estética y coherencia) |

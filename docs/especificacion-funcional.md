@@ -91,7 +91,7 @@ Tres magnitudes separadas, cada una con su libro de movimientos de solo inserci�
 
 ## 8. Notificaciones (módulo común multicanal)
 
-- **Canales:** en la aplicación (campana, siempre), **correo** (SMTP genérico: relé de Brevo con clave propia, o Resend) y **WhatsApp** (Evolution API, con una instancia propia de Mesada en el servidor compartido). *Pendiente:* Web Push.
+- **Canales:** en la aplicación (campana, siempre), **correo** (Resend por API con idempotencia, como firmador; o cualquier relé SMTP) y **WhatsApp** (Evolution API, con una instancia propia de Mesada en el servidor compartido). *Pendiente:* Web Push.
 - **Eventos (12):** nueva tarea asignada, recordatorio diario, tarea a punto de vencer, tarea enviada para validar (adultos), aprobada (con puntos), devuelta para repasar, ajuste de puntos, recompensa pedida (adultos), recompensa decidida, cierre de mesada, pago registrado e insignia. Cada evento tiene canales por defecto, pensados para ahorrar el cupo de correo: lo frecuente va por WhatsApp y el correo se reserva para lo importante.
 - **Preferencias:** por persona, evento y canal. **Solo los adultos** las cambian: las suyas y las de los hijos, nunca las de otro adulto. Los hijos las ven en solo lectura. Datos de contacto (correo de los adultos, teléfono y consentimiento de WhatsApp) gestionados por un adulto.
 - **Reglas de protección:** WhatsApp solo con teléfono, consentimiento registrado y **13 años como mínimo** (condiciones de WhatsApp en la UE). Con solo el año de nacimiento se toma la edad mínima posible, y sin año no hay WhatsApp. El correo solo se usa para adultos.

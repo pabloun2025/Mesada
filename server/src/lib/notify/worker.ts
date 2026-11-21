@@ -87,7 +87,7 @@ export async function processOutbox(opts: { limit?: number; db?: Db } = {}) {
       if (wait > 0) await sleep(wait);
       lastWhatsapp = Date.now();
     }
-    const result = await provider.send({ to: row.to_address, subject: row.subject, body: row.body, link: row.link });
+    const result = await provider.send({ to: row.to_address, subject: row.subject, body: row.body, link: row.link, idempotencyKey: `mesada:${row.dedupe_key}` });
     if (result.ok) {
       await db.query(`UPDATE notification_outbox SET status = 'sent', provider = $2, external_id = $3, sent_at = now(), last_error = NULL WHERE id = $1`, [row.id, provider.name, result.externalId]);
     } else if (result.uncertain) {

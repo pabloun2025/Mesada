@@ -2,7 +2,7 @@
 # Despliegue de Mesada en la VM compartida. Lo ejecuta el workflow oracle-deploy.yml dentro de /home/ubuntu/mesada.
 # Reglas de convivencia con TEINVITO y consulares:
 #   - solo toca el proyecto «mesada-prod» (sin --remove-orphans, sin prune de volúmenes);
-#   - no lee ni escribe los .env de otros proyectos (Mesada usa su propio token de instancia y su clave SMTP);
+#   - no lee ni escribe los .env de otros proyectos (Mesada usa su propio token de instancia y su clave de Resend);
 #   - comprueba que la red compartida existe en lugar de crearla.
 set -euo pipefail
 APP_DIR=/home/ubuntu/mesada
@@ -43,13 +43,11 @@ values = {
     'NOTIFY_REAL_SEND': old.get('NOTIFY_REAL_SEND') or 'false',
     'NOTIFY_EMAIL_MONTHLY_CAP': pick('NOTIFY_EMAIL_MONTHLY_CAP', '100'),
     'NOTIFY_WHATSAPP_DAILY_CAP': pick('NOTIFY_WHATSAPP_DAILY_CAP', '40'),
-    # Correo: relé SMTP de Brevo con una clave SMTP propia de Mesada (solo envío).
-    'EMAIL_PROVIDER_NAME': pick('EMAIL_PROVIDER_NAME', 'brevo'),
-    'SMTP_HOST': pick('SMTP_HOST', 'smtp-relay.brevo.com'),
-    'SMTP_PORT': pick('SMTP_PORT', '587'),
-    'SMTP_USER': pick('SMTP_USER'),
-    'SMTP_PASS': pick('SMTP_PASS'),
-    'MAIL_FROM': pick('MAIL_FROM', 'avisos@veryfacil.org'),
+    # Correo: Resend (como firmador, dominio veryfacil.org ya verificado), con una clave propia de Mesada
+    # de «Sending access» limitada a veryfacil.org.
+    'EMAIL_PROVIDER': pick('EMAIL_PROVIDER', 'resend'),
+    'RESEND_API_KEY': pick('RESEND_API_KEY'),
+    'MAIL_FROM': pick('MAIL_FROM', 'mesada@veryfacil.org'),
     'MAIL_FROM_NAME': pick('MAIL_FROM_NAME', 'Mesada'),
     # WhatsApp: instancia propia en la Evolution de consulares, con su token (no la clave global).
     'EVOLUTION_INSTANCE': pick('EVOLUTION_INSTANCE', 'mesada'),
