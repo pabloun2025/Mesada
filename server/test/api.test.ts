@@ -37,7 +37,7 @@ async function myInstances(c: Client) {
 describe('autenticación y roles', () => {
   it('el setup solo funciona una vez', async () => {
     const c = new Client(app);
-    const r = await c.post('/api/setup', { familyName: 'Otra', displayName: 'X', username: 'intruso', password: 'contrasena-larga' });
+    const r = await c.post('/api/setup', { familyName: 'Otra', displayName: 'X', username: 'intruso', password: 'contrasena-larga', email: 'x@example.com' });
     expect(r.status).toBe(403);
   });
   it('rechaza credenciales incorrectas y peticiones sin cabecera CSRF', async () => {

@@ -41,7 +41,7 @@ export class Client {
 /** Crea una familia con 2 adultos y 2 hijos y devuelve clientes autenticados. */
 export async function createFamily(app: FastifyInstance, prefix = 'f') {
   const mama = new Client(app);
-  const s = await mama.post('/api/setup', { familyName: `Familia ${prefix}`, displayName: 'Mamá', username: `${prefix}mama`, password: 'contrasena-segura' });
+  const s = await mama.post('/api/setup', { familyName: `Familia ${prefix}`, displayName: 'Mamá', username: `${prefix}mama`, password: 'contrasena-segura', email: `${prefix}mama@example.com` });
   if (s.status !== 200) throw new Error(JSON.stringify(s.body));
   const mk = async (role: string, name: string, user: string, password: string) =>
     (await mama.post('/api/members', { role, displayName: name, username: user, password, birthYear: 2012, weeklyGoalPoints: 100 })).body.member;

@@ -4,6 +4,8 @@
 #   ./deploy/operar.sh preparar-whatsapp   → crea UNA VEZ la instancia «mesada» en la Evolution de consulares
 #   ./deploy/operar.sh activar-envios      → NOTIFY_REAL_SEND=true (correo y WhatsApp reales)
 #   ./deploy/operar.sh desactivar-envios   → vuelve al modo simulado
+#   ./deploy/operar.sh enlace-recuperacion USUARIO → SOLO A MANO por SSH: imprime un enlace de un solo uso (30 min)
+#       para que un adulto sin correo recupere el acceso. No está en el workflow para que el enlace no quede en registros.
 # Nunca imprime claves ni el QR (el repositorio es público y los registros de Actions también).
 # El QR se muestra dentro de la app, a los adultos de la familia administradora (Avisos → Línea de WhatsApp).
 set -euo pipefail
@@ -76,6 +78,18 @@ case "${1:-estado}" in
     setv NOTIFY_REAL_SEND false
     reload_app
     echo "Envíos reales desactivados (modo simulado)."
+    ;;
+  enlace-recuperacion)
+    [ -t 1 ] || { echo "Ejecútelo a mano en una terminal (no desde GitHub Actions)."; exit 1; }
+    user="${2:-}"; [[ "$user" =~ ^[A-Za-z0-9._-]{3,32}$ ]] || { echo "Uso: $0 enlace-recuperacion USUARIO"; exit 1; }
+    token=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')
+    hash=$(printf '%s' "$token" | sha256sum | cut -d' ' -f1)
+    n=$("${COMPOSE[@]}" exec -T db psql -U mesada -d mesada -v ON_ERROR_STOP=1 -tAc \
+      "WITH u AS (SELECT id FROM users WHERE lower(username) = lower('$user') AND role = 'adult' AND active)
+       INSERT INTO password_resets(user_id, token_hash, expires_at) SELECT id, '$hash', now() + interval '30 minutes' FROM u RETURNING 1" | wc -l)
+    [ "$n" -ge 1 ] || { echo "No hay ningún adulto activo con ese usuario."; exit 1; }
+    echo "Abre este enlace en los próximos 30 minutos (un solo uso):"
+    echo "$(getv APP_BASE_URL)/restablecer?token=$token"
     ;;
   *) echo "Acción desconocida: $1"; exit 1 ;;
 esac
