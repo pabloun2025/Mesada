@@ -40,7 +40,7 @@ values = {
     'ALLOW_REGISTRATION': pick('ALLOW_REGISTRATION', 'false'),
     'LOG_LEVEL': 'info',
     # Se conserva lo que haya en el servidor: se activa una vez a mano y los despliegues no lo apagan.
-    'NOTIFY_REAL_SEND': old.get('NOTIFY_REAL_SEND') or 'false',
+    'NOTIFY_REAL_SEND': old.get('NOTIFY_REAL_SEND') or 'true',
     'NOTIFY_EMAIL_MONTHLY_CAP': pick('NOTIFY_EMAIL_MONTHLY_CAP', '100'),
     'NOTIFY_WHATSAPP_DAILY_CAP': pick('NOTIFY_WHATSAPP_DAILY_CAP', '40'),
     # Correo: Resend (como firmador, dominio veryfacil.org ya verificado), con una clave propia de Mesada

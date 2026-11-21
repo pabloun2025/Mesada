@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Mail, MessageCircle, MoonStar, Send } from 'lucide-react';
-import { api, put } from '../lib/api';
+import { CheckCircle2, Mail, MessageCircle, MoonStar, QrCode, Send, Smartphone } from 'lucide-react';
+import { api, post, put } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
@@ -139,6 +139,92 @@ function MemberPrefs({ m, events }: { m: Member; events: Settings['events'] }) {
   );
 }
 
+type LineState = 'open' | 'connecting' | 'close' | 'unknown';
+
+/** Vinculación del móvil de la familia con la instancia de Mesada. El QR caduca: se renueva solo cada 25 s. */
+function WhatsAppLine() {
+  const status = useQuery({
+    queryKey: ['wa-line'],
+    queryFn: () => api<{ line: { configured: boolean; state: LineState; error: string | null }; real: boolean }>('/notify/whatsapp'),
+    retry: false,
+    refetchInterval: (q) => (q.state.data?.line.state === 'open' ? 60_000 : 5_000),
+  });
+  const [mode, setMode] = useState<'qr' | 'code' | null>(null);
+  const [number, setNumber] = useState('');
+  const [link, setLink] = useState<{ qr: string | null; pairingCode: string | null } | null>(null);
+  const [error, setError] = useState('');
+  const request = useMutation({
+    mutationFn: (n?: string) => post<{ qr: string | null; pairingCode: string | null; state: LineState }>('/notify/whatsapp/link', n ? { number: n } : {}),
+    onSuccess: (r) => { setLink(r); setError(''); },
+    onError: (e: Error) => setError(e.message),
+  });
+  const state = status.data?.line.state;
+  // Renueva el QR mientras se está vinculando.
+  useEffect(() => {
+    if (mode !== 'qr' || state === 'open') return;
+    request.mutate(undefined);
+    const t = setInterval(() => request.mutate(undefined), 25_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, state === 'open']);
+  if (status.isError) return null; // otra familia: no gestiona la línea
+  if (!status.data) return null;
+  const { line, real } = status.data;
+  const img = link?.qr ? (link.qr.startsWith('data:') ? link.qr : `data:image/png;base64,${link.qr}`) : null;
+
+  return (
+    <section className="panel mb-6 p-5">
+      <SectionTitle>Línea de WhatsApp</SectionTitle>
+      {!line.configured ? (
+        <p className="muted">Todavía no está preparada en el servidor.</p>
+      ) : state === 'open' ? (
+        <div className="flex items-center gap-3">
+          <CheckCircle2 className="text-leaf" size={28} aria-hidden />
+          <div>
+            <p className="font-bold">Móvil vinculado</p>
+            <p className="text-sm muted">{real ? 'Los avisos de WhatsApp salen desde este móvil.' : 'Vinculado, pero los envíos reales están desactivados en el servidor.'}</p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="muted">Vincula el móvil de la familia. Los avisos saldrán desde su WhatsApp como si los escribiera él. Evita un número de trabajo.</p>
+          {line.error ? <p role="alert" className="text-sm font-bold text-berry">{line.error}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button variant={mode === 'qr' ? 'primary' : 'secondary'} onClick={() => { setMode('qr'); setLink(null); }}><QrCode size={18} /> Con código QR</Button>
+            <Button variant={mode === 'code' ? 'primary' : 'secondary'} onClick={() => { setMode('code'); setLink(null); }}><Smartphone size={18} /> Con mi número</Button>
+          </div>
+          {mode === 'qr' ? (
+            <div className="flex flex-col items-center gap-3 rounded-2xl bg-[var(--chip)] p-5 text-center sm:flex-row sm:text-left">
+              {img ? <img src={img} alt="Código QR para vincular WhatsApp" width={220} height={220} className="rounded-xl bg-white p-2" /> : <div className="flex size-[220px] items-center justify-center rounded-xl bg-white text-ink">{request.isPending ? 'Generando…' : 'Sin QR'}</div>}
+              <ol className="list-decimal space-y-1 pl-5 text-sm">
+                <li>Abre WhatsApp en el móvil de la familia.</li>
+                <li>Ve a <strong>Ajustes → Dispositivos vinculados</strong>.</li>
+                <li>Pulsa <strong>Vincular un dispositivo</strong> y escanea este código.</li>
+                <li>Esta tarjeta cambiará sola a «Móvil vinculado».</li>
+              </ol>
+            </div>
+          ) : null}
+          {mode === 'code' ? (
+            <div className="space-y-3 rounded-2xl bg-[var(--chip)] p-5">
+              <div className="flex flex-wrap items-end gap-2">
+                <Field label="Número del móvil">{(id) => <input id={id} className="field w-56" type="tel" inputMode="tel" autoComplete="tel" placeholder="+34 600 000 000…" value={number} onChange={(e) => setNumber(e.target.value)} />}</Field>
+                <Button loading={request.isPending} onClick={() => request.mutate(number)}>Obtener código</Button>
+              </div>
+              {link?.pairingCode ? (
+                <div>
+                  <p className="num text-3xl font-extrabold tracking-[0.2em]">{link.pairingCode}</p>
+                  <p className="mt-1 text-sm">En WhatsApp: <strong>Dispositivos vinculados → Vincular un dispositivo → Vincular con el número de teléfono</strong>, y escribe este código.</p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Notifications() {
   const { user } = useSession();
   const { data, isLoading } = useQuery({ queryKey: ['notify-settings'], queryFn: () => api<Settings>('/notify/settings') });
@@ -164,6 +250,8 @@ export default function Notifications() {
           {!data.channels.whatsapp.real && !data.channels.email.real ? 'Correo y WhatsApp están en modo simulado' : !data.channels.whatsapp.real ? 'WhatsApp está en modo simulado' : 'El correo está en modo simulado'}: los avisos se registran pero no salen hasta que se activen en el servidor.
         </p>
       ) : null}
+
+      {user.role === 'adult' ? <WhatsAppLine /> : null}
 
       {user.role === 'adult' ? (
         <section className="panel mb-6 p-5">

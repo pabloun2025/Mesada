@@ -9,6 +9,7 @@ import { CHANNELS, EVENTS, isEventKey } from '../lib/notify/events.js';
 import { absoluteLink, channelBlockReason, sendSystemEmail } from '../lib/notify/dispatch.js';
 import { channelStatus } from '../lib/notify/providers.js';
 import { usage } from '../lib/notify/worker.js';
+import { lineConnect, lineStatus } from '../lib/notify/whatsapp-line.js';
 import { config } from '../lib/config.js';
 import { adultPassword, publicUser, usernameSchema } from './auth.js';
 
@@ -139,6 +140,28 @@ export default async function notificationRoutes(app: FastifyInstance) {
       [u.familyId],
     );
     return { entries: rows };
+  });
+
+  // --- Línea de WhatsApp de la instalación: solo adultos de la familia administradora (la primera creada) ---
+  async function assertLineAdmin(u: AuthUser) {
+    const first = await one<{ id: string }>(getPool(), 'SELECT id FROM families ORDER BY created_at LIMIT 1');
+    if (first?.id !== u.familyId) throw forbidden('La línea de WhatsApp la gestiona la familia administradora de esta instalación');
+  }
+
+  app.get('/api/notify/whatsapp', async (req) => {
+    const u = requireAdult(req);
+    await assertLineAdmin(u);
+    return { line: await lineStatus(), real: channelStatus().whatsapp.real };
+  });
+
+  app.post('/api/notify/whatsapp/link', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req) => {
+    const u = requireAdult(req);
+    await assertLineAdmin(u);
+    const b = z.object({ number: z.union([z.literal(''), phone]).optional() }).parse(req.body ?? {});
+    const r = await lineConnect(b.number || undefined);
+    if (!r.ok) throw badRequest(r.error, 'whatsapp_unavailable');
+    if (r.qr || r.pairingCode) await audit(getPool(), u.familyId, u.id, 'whatsapp.link_requested', 'whatsapp', null, { mode: r.pairingCode ? 'codigo' : 'qr' });
+    return r;
   });
 
   // --- Recuperación de contraseña (adultos con correo). Respuesta siempre igual, para no revelar cuentas. ---

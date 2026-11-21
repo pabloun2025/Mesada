@@ -1,0 +1,36 @@
+name: Operar
+
+# Operaciones sin secretos en la salida: estado, preparar WhatsApp, activar o desactivar los envíos reales.
+on:
+  workflow_dispatch:
+    inputs:
+      accion:
+        required: true
+        type: choice
+        options: [estado, preparar-whatsapp, activar-envios, desactivar-envios]
+
+permissions:
+  contents: read
+
+jobs:
+  operar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency: oracle-mesada
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ejecutar en el servidor
+        env:
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+        run: |
+          set +x
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$ORACLE_SSH_KEY" > ~/.ssh/oracle && chmod 600 ~/.ssh/oracle
+          SSH=(ssh -i ~/.ssh/oracle -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new ubuntu@51.170.51.109)
+          SCP=(scp -i ~/.ssh/oracle -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new)
+          # Copia la versión actual del script (el resto del despliegue no cambia).
+          "${SCP[@]}" deploy/operar.sh ubuntu@51.170.51.109:/home/ubuntu/mesada/deploy/operar.sh
+          "${SSH[@]}" "chmod +x /home/ubuntu/mesada/deploy/operar.sh && /home/ubuntu/mesada/deploy/operar.sh '${{ inputs.accion }}'"
+      - name: Limpiar
+        if: always()
+        run: rm -f ~/.ssh/oracle

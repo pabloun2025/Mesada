@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Operaciones de Mesada en el servidor compartido. Lo lanza .github/workflows/operar.yml (o a mano en /home/ubuntu/mesada).
+#   ./deploy/operar.sh estado              → estado sin secretos (sí/no de cada clave, conexión de WhatsApp)
+#   ./deploy/operar.sh preparar-whatsapp   → crea UNA VEZ la instancia «mesada» en la Evolution de consulares
+#   ./deploy/operar.sh activar-envios      → NOTIFY_REAL_SEND=true (correo y WhatsApp reales)
+#   ./deploy/operar.sh desactivar-envios   → vuelve al modo simulado
+# Nunca imprime claves ni el QR (el repositorio es público y los registros de Actions también).
+# El QR se muestra dentro de la app, a los adultos de la familia administradora (Avisos → Línea de WhatsApp).
+set -euo pipefail
+cd /home/ubuntu/mesada
+ENV_FILE=.env.production
+COMPOSE=(docker compose --env-file "$ENV_FILE" -f docker-compose.oracle.yml)
+getv() { sed -nE "s/^$1=['\"]?([^'\"]*)['\"]?$/\1/p" "$ENV_FILE" | head -1; }
+setv() {
+  python3 - "$ENV_FILE" "$1" "$2" <<'PY'
+import sys; from pathlib import Path
+p, k, v = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+lines = [l for l in p.read_text().splitlines() if not l.startswith(k + '=')]
+lines.append(f"{k}='{v}'"); p.write_text('\n'.join(lines) + '\n'); p.chmod(0o600)
+PY
+}
+yesno() { [ -n "$1" ] && echo sí || echo no; }
+reload_app() { "${COMPOSE[@]}" up -d --no-deps --force-recreate app >/dev/null; }
+# Llamada a Evolution desde un contenedor efímero en la red compartida. La clave va por entorno (-e K), no en la línea de órdenes.
+evo() {
+  local key="$1"; shift
+  K="$key" docker run --rm --network citas-prod_interna -e K postgres:16.9-alpine \
+    sh -c "wget -qO- -T 15 --header \"apikey: \$K\" --header 'content-type: application/json' $*" 2>/dev/null || true
+}
+
+case "${1:-estado}" in
+  estado)
+    echo "Envíos reales (NOTIFY_REAL_SEND): $(getv NOTIFY_REAL_SEND)"
+    echo "Correo: proveedor=$(getv EMAIL_PROVIDER) · clave de Resend: $(yesno "$(getv RESEND_API_KEY)") · remitente=$(getv MAIL_FROM)"
+    tok=$(getv EVOLUTION_INSTANCE_TOKEN)
+    echo "WhatsApp: instancia=$(getv EVOLUTION_INSTANCE) · token: $(yesno "$tok")"
+    if [ -n "$tok" ]; then
+      st=$(evo "$tok" "http://evolution-api:8080/instance/connectionState/$(getv EVOLUTION_INSTANCE)" | sed -nE 's/.*"state":"([a-z]+)".*/\1/p')
+      echo "WhatsApp conexión: ${st:-sin respuesta (¿el token de instancia no vale para esta ruta?)}"
+    fi
+    "${COMPOSE[@]}" ps --format '{{.Service}}: {{.Status}}'
+    ;;
+  preparar-whatsapp)
+    instance=$(getv EVOLUTION_INSTANCE); instance=${instance:-mesada}
+    global=$(sed -nE "s/^EVOLUTION_API_KEY=['\"]?([^'\"]*)['\"]?$/\1/p" /home/ubuntu/consulares/.env.production | head -1)
+    [ -n "$global" ] || { echo "No se encontró la clave de Evolution de consulares."; exit 1; }
+    tok=$(getv EVOLUTION_INSTANCE_TOKEN); [ -n "$tok" ] || tok=$(openssl rand -hex 24)
+    if evo "$global" "'http://evolution-api:8080/instance/fetchInstances?instanceName=$instance'" | grep -q "\"$instance\""; then
+      echo "La instancia «$instance» ya existía: no se modifica."
+    else
+      body="{\"instanceName\":\"$instance\",\"token\":\"$tok\",\"integration\":\"WHATSAPP-BAILEYS\",\"qrcode\":false,\"groupsIgnore\":true,\"alwaysOnline\":false,\"readMessages\":false,\"readStatus\":false,\"syncFullHistory\":false}"
+      out=$(evo "$global" "--post-data '$body' http://evolution-api:8080/instance/create")
+      echo "$out" | grep -q "\"$instance\"" || { echo "Evolution no confirmó la creación."; exit 1; }
+      echo "Instancia «$instance» creada (solo envío, sin webhook ni historial)."
+    fi
+    setv EVOLUTION_INSTANCE "$instance"
+    setv EVOLUTION_INSTANCE_TOKEN "$tok"
+    reload_app
+    echo "Listo: vincula el móvil en la app → Avisos → Línea de WhatsApp."
+    ;;
+  activar-envios)
+    setv NOTIFY_REAL_SEND true
+    reload_app
+    echo "Envíos reales ACTIVADOS."
+    [ -n "$(getv RESEND_API_KEY)" ] || echo "AVISO: no hay clave de Resend; el correo seguirá simulado."
+    [ -n "$(getv EVOLUTION_INSTANCE_TOKEN)" ] || echo "AVISO: falta preparar WhatsApp; seguirá simulado."
+    ;;
+  desactivar-envios)
+    setv NOTIFY_REAL_SEND false
+    reload_app
+    echo "Envíos reales desactivados (modo simulado)."
+    ;;
+  *) echo "Acción desconocida: $1"; exit 1 ;;
+esac
