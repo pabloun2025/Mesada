@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Mail, Pencil, UserPlus } from 'lucide-react';
-import { api, patch, post } from '../lib/api';
+import { api, patch, post, put } from '../lib/api';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import type { User } from '../lib/types';
@@ -42,21 +42,35 @@ function MemberEditor({ member, onClose }: { member: User | null; onClose: () =>
     birthYear: member?.birth_year ?? null as number | null,
     weeklyGoalPoints: member?.weekly_goal_points ?? 150,
     active: member?.active ?? true,
+    phone: member?.phone ?? '',
+    whatsapp: !!member?.whatsapp_consent_at,
   });
   const [error, setError] = useState('');
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const save = useMutation({
-    mutationFn: () => {
-      if (isNew) return post('/members', m);
-      const body: any = { displayName: m.displayName, avatar: m.avatar, color: m.color, birthYear: m.birthYear, weeklyGoalPoints: m.weeklyGoalPoints, active: m.active };
-      if (m.password) body.password = m.password;
-      return patch(`/members/${member!.id}`, body);
+    mutationFn: async () => {
+      let id = member?.id;
+      if (isNew) {
+        const { phone: _p, whatsapp: _w, ...rest } = m;
+        id = (await post<{ member: User }>('/members', rest)).member.id;
+      } else {
+        const body: any = { displayName: m.displayName, avatar: m.avatar, color: m.color, birthYear: m.birthYear, weeklyGoalPoints: m.weeklyGoalPoints, active: m.active };
+        if (m.password) body.password = m.password;
+        await patch(`/members/${id}`, body);
+      }
+      // El WhatsApp de los hijos lo ponen los padres; cada adulto pone el suyo en «Mi perfil».
+      const phone = m.phone.trim();
+      if (m.role === 'child' && (phone || member?.phone)) {
+        await put(`/notify/contact/${id}`, { phone: phone || null, whatsappConsent: m.whatsapp && !!phone });
+      }
     },
     onSuccess: () => { toast(isNew ? `${m.displayName} se ha unido a la familia` : 'Perfil guardado'); invalidate(); onClose(); },
     onError: (e: Error) => setError(e.message),
   });
   const child = m.role === 'child';
+  const { user: me } = useSession();
+  const childAge = m.birthYear ? new Date().getFullYear() - m.birthYear : null;
   return (
     <Sheet open onClose={onClose} title={isNew ? 'Añadir a la familia' : `Editar a ${member.display_name}`} footer={<Button className="w-full" loading={save.isPending} onClick={() => save.mutate()}>{isNew ? 'Añadir' : 'Guardar'}</Button>}>
       <div className="space-y-4">
@@ -74,6 +88,16 @@ function MemberEditor({ member, onClose }: { member: User | null; onClose: () =>
             <Field label="Año de nacimiento">{(id) => <input id={id} className="field" type="number" value={m.birthYear ?? ''} onChange={(e) => setM({ ...m, birthYear: e.target.value ? Number(e.target.value) : null })} />}</Field>
             <Field label="Objetivo semanal (pts)">{(id) => <input id={id} className="field" type="number" min={0} value={m.weeklyGoalPoints} onChange={(e) => setM({ ...m, weeklyGoalPoints: Number(e.target.value) })} />}</Field>
           </div>
+        ) : null}
+        {child ? (
+          <div className="space-y-2 rounded-2xl border border-[var(--line)] p-3.5">
+            <Field label="WhatsApp (opcional)" hint={childAge !== null && childAge < 13 ? 'Con menos de 13 años no se le envía WhatsApp; los avisos le llegan dentro de la app.' : 'Le avisaremos de tareas nuevas, rechazos y premios.'}>
+              {(id) => <input id={id} className="field" type="tel" inputMode="tel" autoComplete="off" placeholder="600 11 22 33" value={m.phone} onChange={(e) => setM({ ...m, phone: e.target.value })} />}
+            </Field>
+            <Toggle checked={m.whatsapp} onChange={(v) => setM({ ...m, whatsapp: v })} label="Recibir avisos por WhatsApp" description="Como madre, padre o tutor das tu permiso." />
+          </div>
+        ) : !isNew ? (
+          <p className="text-sm muted">{member.id === me.id ? 'Tu WhatsApp se cambia en Mi perfil.' : `${member.display_name} pone su WhatsApp en su propio perfil.`}{member.phone ? ` Ahora: ${member.phone}.` : ' Aún no tiene.'}</p>
         ) : null}
         {!isNew ? <Toggle checked={m.active} onChange={(v) => setM({ ...m, active: v })} label="Cuenta activa" description="Si la desactivas, no podrá entrar y se quitará de las tareas." /> : null}
         {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
@@ -126,7 +150,7 @@ export default function Family() {
                 <Avatar name={m.display_name} avatar={m.avatar} colorKey={m.color} size={46} />
                 <div className="min-w-0 flex-1">
                   <p className="font-bold">{m.display_name} {m.id === user.id ? <Badge>Tú</Badge> : null} {!m.active ? <Badge tone="berry">Desactivada</Badge> : null}</p>
-                  <p className="text-sm muted">@{m.username}{m.role === 'child' && m.birth_year ? ` · ${new Date().getFullYear() - m.birth_year} años` : ''}{m.role === 'child' ? ` · objetivo ${m.weekly_goal_points} pts/semana` : ''}</p>
+                  <p className="text-sm muted">@{m.username}{m.role === 'child' && m.birth_year ? ` · ${new Date().getFullYear() - m.birth_year} años` : ''}{m.role === 'child' ? ` · objetivo ${m.weekly_goal_points} pts/semana` : ''}{m.phone && m.whatsapp_consent_at ? ' · WhatsApp' : ''}</p>
                 </div>
                 <IconButton label={`Editar a ${m.display_name}`} onClick={() => setEditing({ m })}><Pencil size={18} /></IconButton>
               </li>

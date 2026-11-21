@@ -8,6 +8,7 @@ import {
 import { badRequest, forbidden, HttpError, unauthorized } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { getFamily } from '../lib/family.js';
+import { getSetting } from '../lib/settings.js';
 
 export const usernameSchema = z.string().trim().min(3).max(32).regex(/^[a-zA-Z0-9._-]+$/, 'solo letras, números, punto, guion y guion bajo');
 export const adultPassword = z.string().min(8, 'mínimo 8 caracteres').max(200);
@@ -39,7 +40,7 @@ export function resetLoginFailures() {
 export async function publicUser(userId: string) {
   return one(
     getPool(),
-    `SELECT id, family_id, role, display_name, username, avatar, color, birth_year, weekly_goal_points, active, email FROM users WHERE id = $1`,
+    `SELECT id, family_id, role, display_name, username, avatar, color, birth_year, weekly_goal_points, active, email, phone, whatsapp_consent_at, is_superadmin FROM users WHERE id = $1`,
     [userId],
   );
 }
@@ -47,7 +48,7 @@ export async function publicUser(userId: string) {
 export default async function authRoutes(app: FastifyInstance) {
   app.get('/api/setup/status', async () => {
     const r = await one(getPool(), 'SELECT count(*)::int AS n FROM families');
-    return { needsSetup: r.n === 0, registrationOpen: r.n === 0 || config.allowRegistration };
+    return { needsSetup: r.n === 0, registrationOpen: r.n === 0 || (await getSetting('registration_open')) };
   });
 
   app.post('/api/setup', { config: { rateLimit: { max: config.authRateLimit, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -64,15 +65,16 @@ export default async function authRoutes(app: FastifyInstance) {
       // Bloqueo para que dos peticiones simultáneas no creen dos familias "iniciales".
       await db.query('LOCK TABLE families IN EXCLUSIVE MODE');
       const n = (await one(db, 'SELECT count(*)::int AS n FROM families')).n;
-      if (n > 0 && !config.allowRegistration) throw forbidden('El registro de nuevas familias está cerrado');
+      if (n > 0 && !(await getSetting('registration_open', db))) throw forbidden('El registro de nuevas familias está cerrado');
       if (await one(db, 'SELECT 1 FROM users WHERE lower(username) = lower($1)', [body.username])) {
         throw badRequest('Ese nombre de usuario ya existe', 'username_taken');
       }
       const fam = await one(db, 'INSERT INTO families(name) VALUES ($1) RETURNING id', [body.familyName]);
       const u = await one(
         db,
-        `INSERT INTO users(family_id, role, display_name, username, password_hash, avatar, color, email) VALUES ($1,'adult',$2,$3,$4,'owl','indigo',$5) RETURNING id`,
-        [fam.id, body.displayName, body.username, await hashPassword(body.password), body.email],
+        `INSERT INTO users(family_id, role, display_name, username, password_hash, avatar, color, email, is_superadmin) VALUES ($1,'adult',$2,$3,$4,'owl','indigo',$5,$6) RETURNING id`,
+        // Quien crea la primera familia administra la instalación.
+        [fam.id, body.displayName, body.username, await hashPassword(body.password), body.email, n === 0],
       );
       await audit(db, fam.id, u.id, 'family.create', 'family', fam.id, {});
       const s = await createSession(db, u.id, req.headers['user-agent']);
@@ -87,7 +89,11 @@ export default async function authRoutes(app: FastifyInstance) {
     if (isLocked(body.username)) {
       throw new HttpError(429, 'Demasiados intentos fallidos. Espera 15 minutos o pide a un adulto que cambie el PIN.', 'locked');
     }
-    const u = await one(getPool(), 'SELECT id, password_hash, active FROM users WHERE lower(username) = lower($1)', [body.username]);
+    const u = await one(
+      getPool(),
+      'SELECT u.id, u.password_hash, u.active, f.blocked_at FROM users u JOIN families f ON f.id = u.family_id WHERE lower(u.username) = lower($1)',
+      [body.username],
+    );
     if (!u) {
       await dummyVerify(body.password);
       registerFailure(body.username);
@@ -98,6 +104,8 @@ export default async function authRoutes(app: FastifyInstance) {
       throw unauthorized('Usuario o contraseña incorrectos');
     }
     failures.delete(body.username.toLowerCase());
+    if (u.blocked_at) throw forbidden('Esta familia está bloqueada. Contacta con quien administra DiploP.');
+    await getPool().query('UPDATE users SET last_login_at = now() WHERE id = $1', [u.id]);
     const s = await createSession(getPool(), u.id, req.headers['user-agent']);
     setSessionCookie(reply, s.token, s.expires);
     return { user: await publicUser(u.id) };

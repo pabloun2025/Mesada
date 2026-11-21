@@ -6,6 +6,9 @@
 #   ./deploy/operar.sh desactivar-envios   → vuelve al modo simulado
 #   ./deploy/operar.sh enlace-recuperacion USUARIO → SOLO A MANO por SSH: imprime un enlace de un solo uso (30 min)
 #       para que un adulto sin correo recupere el acceso. No está en el workflow para que el enlace no quede en registros.
+#   ./deploy/operar.sh admin-quitar-2fa USUARIO → SOLO A MANO por SSH: borra la verificación en dos pasos de un
+#       administrador que perdió el móvil y los códigos. La vuelve a activar al entrar en Administración.
+#   ./deploy/operar.sh admin-dar USUARIO         → SOLO A MANO por SSH: da acceso a la administración a un adulto.
 # Nunca imprime claves ni el QR (el repositorio es público y los registros de Actions también).
 # El QR se muestra dentro de la app, a los adultos de la familia administradora (Avisos → Línea de WhatsApp).
 set -euo pipefail
@@ -90,6 +93,21 @@ case "${1:-estado}" in
     [ "$n" -ge 1 ] || { echo "No hay ningún adulto activo con ese usuario."; exit 1; }
     echo "Abre este enlace en los próximos 30 minutos (un solo uso):"
     echo "$(getv APP_BASE_URL)/restablecer?token=$token"
+    ;;
+  admin-quitar-2fa|admin-dar)
+    [ -t 1 ] || { echo "Ejecútelo a mano en una terminal (no desde GitHub Actions)."; exit 1; }
+    user="${2:-}"; [[ "$user" =~ ^[A-Za-z0-9._-]{3,32}$ ]] || { echo "Uso: $0 $1 USUARIO"; exit 1; }
+    if [ "$1" = admin-dar ]; then
+      sql="UPDATE users SET is_superadmin = true WHERE lower(username) = lower('$user') AND role = 'adult' AND active RETURNING 1"
+    else
+      sql="WITH u AS (UPDATE users SET totp_secret = NULL, totp_pending = NULL, totp_enabled_at = NULL, totp_last_counter = NULL
+                      WHERE lower(username) = lower('$user') AND is_superadmin RETURNING id),
+                d AS (DELETE FROM admin_recovery_codes WHERE user_id IN (SELECT id FROM u)),
+                s AS (UPDATE sessions SET admin_verified_at = NULL WHERE user_id IN (SELECT id FROM u))
+           INSERT INTO admin_audit(actor_id, action, user_id, data) SELECT NULL, 'admin.2fa_reset_ssh', id, '{}' FROM u RETURNING 1"
+    fi
+    n=$("${COMPOSE[@]}" exec -T db psql -U mesada -d mesada -v ON_ERROR_STOP=1 -tAc "$sql" | grep -c 1 || true)
+    [ "$n" -ge 1 ] && echo "Hecho." || { echo "No hay ningún administrador/adulto activo con ese usuario."; exit 1; }
     ;;
   *) echo "Acción desconocida: $1"; exit 1 ;;
 esac

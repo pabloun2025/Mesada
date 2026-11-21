@@ -24,6 +24,7 @@ const ChildProgress = lazy(() => import('./pages/ChildProgress'));
 const ChildMoney = lazy(() => import('./pages/ChildMoney'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Notifications = lazy(() => import('./pages/Notifications'));
+const Admin = lazy(() => import('./pages/Admin'));
 
 export function App() {
   const me = useMe();
@@ -64,6 +65,7 @@ export function App() {
               <Route path="ajustes" element={<Settings />} />
               <Route path="avisos" element={<Notifications />} />
               <Route path="perfil" element={<Profile />} />
+              {me.data.user.is_superadmin ? <Route path="administracion" element={<Admin />} /> : null}
             </>
           ) : (
             <>

@@ -90,22 +90,24 @@ export default async function notificationRoutes(app: FastifyInstance) {
     await assertCanManage(u, userId);
     const b = z
       .object({
-        email: z.union([z.literal(''), z.string().trim().toLowerCase().email('correo no válido').max(200)]).nullable(),
+        // Sin `email`, el correo no se toca (el perfil solo cambia el WhatsApp).
+        email: z.union([z.literal(''), z.string().trim().toLowerCase().email('correo no válido').max(200)]).nullable().optional(),
         phone: z.union([z.literal(''), phone]).nullable(),
         whatsappConsent: z.boolean(),
       })
       .parse(req.body);
+    const keepEmail = b.email === undefined;
     const email = b.email || null;
     const tel = b.phone || null;
     const dup = email ? await one(getPool(), 'SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [email, userId]) : null;
     if (dup) throw badRequest('Ese correo ya lo usa otra cuenta');
     await getPool().query(
-      `UPDATE users SET email = $2, phone = $3,
+      `UPDATE users SET email = CASE WHEN $5 THEN email ELSE $2 END, phone = $3,
          whatsapp_consent_at = CASE WHEN $4 AND $3::text IS NOT NULL THEN COALESCE(whatsapp_consent_at, now()) ELSE NULL END
        WHERE id = $1`,
-      [userId, email, tel, b.whatsappConsent],
+      [userId, email, tel, b.whatsappConsent, keepEmail],
     );
-    await audit(getPool(), u.familyId, u.id, 'notify.contact_update', 'user', userId, { email: !!email, phone: !!tel, whatsappConsent: b.whatsappConsent });
+    await audit(getPool(), u.familyId, u.id, 'notify.contact_update', 'user', userId, { email: keepEmail ? 'sin cambios' : !!email, phone: !!tel, whatsappConsent: b.whatsappConsent });
     return { ok: true };
   });
 

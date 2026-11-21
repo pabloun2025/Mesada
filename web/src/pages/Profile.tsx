@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { patch, post, put } from '../lib/api';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
-import { Button, Field, PageHeader, useToast } from '../components/ui';
+import { Button, Field, PageHeader, Toggle, useToast } from '../components/ui';
 import { AvatarPicker } from './Family';
 
 export default function Profile() {
@@ -24,6 +24,12 @@ export default function Profile() {
     onSuccess: () => { toast('Correo guardado'); invalidate(); },
     onError: (e: Error) => toast(e.message, 'error'),
   });
+  const [wa, setWa] = useState({ phone: user.phone ?? '', consent: !!user.whatsapp_consent_at });
+  const saveWa = useMutation({
+    mutationFn: () => put(`/notify/contact/${user.id}`, { phone: wa.phone.trim() || null, whatsappConsent: wa.consent && !!wa.phone.trim() }),
+    onSuccess: () => { toast('WhatsApp guardado'); invalidate(); },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
   const child = user.role === 'child';
   return (
     <div className="max-w-xl">
@@ -40,6 +46,18 @@ export default function Profile() {
           <Field label="Correo">{(id) => <input id={id} className="field" type="email" autoComplete="email" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
           <Button variant="secondary" loading={saveEmail.isPending} onClick={() => saveEmail.mutate()}>Guardar correo</Button>
         </section>
+      ) : null}
+      {!child ? (
+        <section className="panel mb-6 space-y-4 p-5">
+          <h2 className="text-lg font-bold">Tu WhatsApp</h2>
+          <p className="muted">Aquí te llegan las tareas para validar y las peticiones de premios.</p>
+          {!user.phone ? <p className="rounded-xl bg-sun-soft px-3 py-2 text-sm font-bold text-[#7a5600] dark:bg-sun/15 dark:text-[#ffd979]">Sin teléfono no recibirás avisos por WhatsApp.</p> : null}
+          <Field label="Teléfono móvil" hint="Con prefijo si no es de España, por ejemplo +52 55 1234 5678.">{(id) => <input id={id} className="field" type="tel" inputMode="tel" autoComplete="tel" placeholder="600 11 22 33" value={wa.phone} onChange={(e) => setWa({ ...wa, phone: e.target.value })} />}</Field>
+          <Toggle checked={wa.consent} onChange={(v) => setWa({ ...wa, consent: v })} label="Recibir avisos por WhatsApp" description="Puedes desactivarlo cuando quieras." />
+          <Button variant="secondary" loading={saveWa.isPending} onClick={() => saveWa.mutate()}>Guardar WhatsApp</Button>
+        </section>
+      ) : user.phone ? (
+        <p className="panel mb-6 p-5 muted">Tus avisos llegan al WhatsApp que pusieron tus padres. Si cambias de número, díselo a ellos.</p>
       ) : null}
       <section className="panel space-y-4 p-5">
         <h2 className="text-lg font-bold">{child ? 'Cambiar PIN' : 'Cambiar contraseña'}</h2>

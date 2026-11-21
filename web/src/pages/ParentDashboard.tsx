@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CircleCheckBig, Flame, Gift, Hourglass, PartyPopper, TriangleAlert } from 'lucide-react';
+import { CircleCheckBig, MessageCircle, Flame, Gift, Hourglass, PartyPopper, TriangleAlert } from 'lucide-react';
 import { api } from '../lib/api';
+import { useSession } from '../lib/session';
 import { euros, relative, weekdayLong } from '../lib/format';
 import { describeAction } from '../lib/activity';
 import type { Instance } from '../lib/types';
@@ -11,6 +12,7 @@ import { ApprovalCard } from '../components/ApprovalCard';
 import { TaskRow } from '../components/TaskRow';
 
 export default function ParentDashboard() {
+  const { user } = useSession();
   const { data, isLoading } = useQuery({ queryKey: ['dashboard'], queryFn: () => api('/dashboard') });
   const today = useQuery({
     queryKey: ['instances', 'today-all'],
@@ -22,6 +24,13 @@ export default function ParentDashboard() {
   return (
     <div>
       <PageHeader title="Panel familiar" subtitle={<span className="inline-block first-letter:uppercase">{weekdayLong(data.today)}</span>} />
+
+      {!user.phone || !user.whatsapp_consent_at ? (
+        <Link to="/perfil" className="card mb-5 flex items-center gap-3 border-sun/60 bg-sun-soft/70 p-3.5 dark:bg-sun/10">
+          <MessageCircle size={22} className="shrink-0 text-sun-ink dark:text-sun" aria-hidden />
+          <span className="text-sm"><strong>Recibe por WhatsApp lo que hay que validar.</strong> Añade tu número en Mi perfil.</span>
+        </Link>
+      ) : null}
 
       {/* Resumen: tres cifras que importan */}
       <section className="mb-6 grid grid-cols-3 gap-2.5 sm:gap-4">

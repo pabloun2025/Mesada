@@ -65,6 +65,10 @@ export interface AuthUser {
   role: 'adult' | 'child';
   displayName: string;
   username: string;
+  sessionId?: string;
+  isSuperadmin?: boolean;
+  /** Cuándo pasó esta sesión la verificación en dos pasos de administración. */
+  adminVerifiedAt?: Date | null;
 }
 
 declare module 'fastify' {
@@ -78,13 +82,16 @@ export async function loadUser(req: FastifyRequest): Promise<AuthUser | undefine
   if (!token) return undefined;
   const row = await one(
     getPool(),
-    `SELECT u.id, u.family_id, u.role, u.display_name, u.username
-       FROM sessions s JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = $1 AND s.expires_at > now() AND u.active`,
+    `SELECT u.id, u.family_id, u.role, u.display_name, u.username, u.is_superadmin, s.id AS session_id, s.admin_verified_at
+       FROM sessions s JOIN users u ON u.id = s.user_id JOIN families f ON f.id = u.family_id
+      WHERE s.token_hash = $1 AND s.expires_at > now() AND u.active AND f.blocked_at IS NULL`,
     [sha256(token)],
   );
   if (!row) return undefined;
-  return { id: row.id, familyId: row.family_id, role: row.role, displayName: row.display_name, username: row.username };
+  return {
+    id: row.id, familyId: row.family_id, role: row.role, displayName: row.display_name, username: row.username,
+    sessionId: row.session_id, isSuperadmin: row.is_superadmin, adminVerifiedAt: row.admin_verified_at,
+  };
 }
 
 export function requireUser(req: FastifyRequest): AuthUser {

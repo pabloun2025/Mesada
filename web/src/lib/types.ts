@@ -12,6 +12,9 @@ export interface User {
   weekly_goal_points: number;
   active: boolean;
   email?: string | null;
+  phone?: string | null;
+  whatsapp_consent_at?: string | null;
+  is_superadmin?: boolean;
 }
 
 export interface Family {

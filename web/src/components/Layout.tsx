@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Bell, BellRing, CalendarCheck, ChartColumn, CircleCheckBig, Gift, House, ListChecks, LogOut, Menu, Moon, PiggyBank, Settings, Sun, Trophy, User, Users, History,
+  Bell, BellRing, CalendarCheck, ChartColumn, CircleCheckBig, Gift, House, ListChecks, LogOut, Menu, Moon, PiggyBank, Settings, ShieldCheck, Sun, Trophy, User, Users, History,
 } from 'lucide-react';
 import { api, post } from '../lib/api';
 import { useLogout, useSession } from '../lib/session';
@@ -123,6 +123,7 @@ export function Layout() {
         { to: '/avisos', label: 'Avisos', icon: <BellRing size={20} /> },
         { to: '/ajustes', label: 'Ajustes', icon: <Settings size={20} /> },
         { to: '/perfil', label: 'Mi perfil', icon: <User size={20} /> },
+        ...(user.is_superadmin ? [{ to: '/administracion', label: 'Administración', icon: <ShieldCheck size={20} /> }] : []),
       ]
     : [
         { to: '/perfil', label: 'Mi perfil', icon: <User size={20} /> },

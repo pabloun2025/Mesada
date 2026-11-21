@@ -210,6 +210,22 @@ describe('permisos de preferencias', () => {
     await F.mama.put(`/api/notify/contact/${F.ids.lucia}`, { email: null, phone: '600 11 22 33', whatsappConsent: true });
     expect((await getPool().query('SELECT phone FROM users WHERE id = $1', [F.ids.lucia])).rows[0].phone).toBe('+34600112233');
   });
+  it('el WhatsApp del perfil recibe el aviso de validar sin tocar el correo', async () => {
+    const r = await F.mama.put(`/api/notify/contact/${F.ids.mama}`, { phone: '611 22 33 44', whatsappConsent: true });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const u = (await getPool().query('SELECT email, phone FROM users WHERE id = $1', [F.ids.mama])).rows[0];
+    expect(u).toEqual({ email: 'mama@example.com', phone: '+34611223344' });
+    await taskFor(F.ids.lucia);
+    const [inst] = (await F.luciaC.get('/api/instances')).body.instances;
+    await F.luciaC.post(`/api/instances/${inst.id}/complete`, {});
+    await processOutbox();
+    const toMama = whatsapp.sent.filter((m: any) => m.to === '+34611223344');
+    expect(toMama.length).toBe(1);
+    // Los teléfonos de los adultos no se muestran a los hijos.
+    const fam = (await F.luciaC.get('/api/family')).body;
+    expect(JSON.stringify(fam)).not.toContain('+34611223344');
+    expect(JSON.stringify((await F.mama.get('/api/family')).body)).toContain('+34611223344');
+  });
 });
 
 describe('recuperación de contraseña e invitaciones por correo', () => {

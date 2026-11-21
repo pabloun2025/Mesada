@@ -22,12 +22,15 @@ export default async function familyRoutes(app: FastifyInstance) {
     const fam = await getFamily(getPool(), u.familyId);
     const members = await many(
       getPool(),
-      `SELECT id, role, display_name, username, avatar, color, birth_year, weekly_goal_points, active
+      `SELECT id, role, display_name, username, avatar, color, birth_year, weekly_goal_points, active, phone, whatsapp_consent_at
          FROM users WHERE family_id = $1 ${u.role === 'child' ? 'AND active' : ''} ORDER BY role, created_at`,
       [u.familyId],
     );
-    // Los hijos no necesitan ver los nombres de usuario de los demás.
-    return { family: fam, members: u.role === 'adult' ? members : members.map(({ username, ...m }) => (m.id === u.id ? { ...m, username } : m)) };
+    // Los hijos no necesitan ver los usuarios ni los teléfonos de los demás.
+    return {
+      family: fam,
+      members: u.role === 'adult' ? members : members.map(({ username, phone, whatsapp_consent_at, ...m }) => (m.id === u.id ? { ...m, username } : m)),
+    };
   });
 
   app.patch('/api/family', async (req) => {
