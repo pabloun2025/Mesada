@@ -138,3 +138,10 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - El código de la app de autenticación se pide una sola vez en cada dispositivo (móvil u ordenador).
 - Ese dispositivo queda recordado 90 días: en el día a día se entra en Administración sin código.
 - En un dispositivo nuevo, o pasados los 90 días, se vuelve a pedir el código.
+
+## I10. Periodicidad «Cuando haga falta» (21/11)
+**Estado: decidida, sin programar.**
+- Para tareas sin día ni hora fijos, como sacar la basura o descargar el lavaplatos.
+- Siempre disponible; se puede hacer una vez al día.
+- Si nadie la hace ese día, no pasa nada: no cuenta como fallo, ni en la racha ni en el % cumplido.
+- Con varios hijos es compartida: la marca el primero que la hace y se lleva los puntos.
