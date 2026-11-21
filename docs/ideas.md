@@ -106,7 +106,11 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - El hijo va metiendo dinero de su saldo en la meta.
 - Interés semanal: 1 % de lo ahorrado, redondeado al euro de arriba, como mínimo 1 €.
 - Puede sacar el dinero antes de la meta: recupera lo que puso, pero pierde el interés ganado.
-- Al llegar a la meta, el dinero pasa a su saldo y deja de ganar interés. Luego lo retira como un retiro normal.
+- Al llegar a la meta, el dinero no pasa a efectivo: se usa para lo de la meta (p. ej., un vinilo).
+  - El hijo pulsa «Canjear meta»; el padre paga en la tienda, con el hijo, con ese dinero, y marca «Comprado».
+  - Si sobra, vuelve a su cuenta de dinero. Si falta, el padre lo anota y se descuenta del saldo.
+  - Sigue ganando interés hasta que se canjea.
+  - Pasarlo a su saldo en efectivo solo con permiso de un adulto, y pierde el interés.
 
 ### Respuestas extra I6–I7 (21/11)
 - Interés del préstamo sin puntos: los puntos quedan en negativo y lo próximo que gane paga primero esa deuda.
