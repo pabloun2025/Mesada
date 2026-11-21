@@ -38,6 +38,13 @@ case "${1:-estado}" in
       st=$(evo "$tok" "http://evolution-api:8080/instance/connectionState/$(getv EVOLUTION_INSTANCE)" | sed -nE 's/.*"state":"([a-z]+)".*/\1/p')
       echo "WhatsApp conexión: ${st:-sin respuesta (¿el token de instancia no vale para esta ruta?)}"
     fi
+    # Diagnóstico sin datos personales: ni direcciones ni nombres.
+    echo "--- Cuentas de adulto con correo (necesario para recuperar la contraseña) ---"
+    "${COMPOSE[@]}" exec -T db psql -U mesada -d mesada -tAc "SELECT 'con correo: ' || count(*) FILTER (WHERE email IS NOT NULL) || ' · sin correo: ' || count(*) FILTER (WHERE email IS NULL) FROM users WHERE role = 'adult' AND active" || true
+    echo "--- Peticiones de recuperación (24 h) ---"
+    "${COMPOSE[@]}" exec -T db psql -U mesada -d mesada -tAc "SELECT count(*) FROM password_resets WHERE created_at > now() - interval '24 hours'" || true
+    echo "--- Últimos 10 envíos externos (evento · canal · estado · error) ---"
+    "${COMPOSE[@]}" exec -T db psql -U mesada -d mesada -tAc "SELECT to_char(created_at AT TIME ZONE 'Europe/Madrid','DD/MM HH24:MI') || ' · ' || event || ' · ' || channel || ' · ' || status || ' · ' || coalesce(provider,'-') || ' · ' || coalesce(left(last_error,120),'') FROM notification_outbox ORDER BY created_at DESC LIMIT 10" || true
     "${COMPOSE[@]}" ps --format '{{.Service}}: {{.Status}}'
     ;;
   preparar-whatsapp)
