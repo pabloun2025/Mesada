@@ -6,6 +6,7 @@
 #   ./deploy/operar.sh copia-r2 listar|ultima|descargar NOMBRE.gpg → copias externas cifradas (docs/despliegue.md §0.b)
 #   ./deploy/operar.sh disco               → qué ocupa el disco (solo tamaños: Docker, carpetas de proyectos, copias, registros)
 #   ./deploy/operar.sh limpiar-docker      → borra caché de construcción e imágenes sin usar (no toca contenedores, volúmenes ni datos)
+#   ./deploy/operar.sh ampliar-disco       → tras agrandar el volumen en la consola de Oracle: usa el espacio nuevo (sin parar nada)
 #   ./deploy/operar.sh activar-envios      → NOTIFY_REAL_SEND=true (correo y WhatsApp reales)
 #   ./deploy/operar.sh desactivar-envios   → vuelve al modo simulado
 #   ./deploy/operar.sh enlace-recuperacion USUARIO → SOLO A MANO por SSH: imprime un enlace de un solo uso (30 min)
@@ -102,6 +103,22 @@ case "${1:-estado}" in
     despues=$(df -k / | awk 'NR==2{print $4}')
     echo "Liberado: $(( (despues - antes) / 1024 )) MB"
     df -h / | tail -1 | awk '{print "Ahora: usado " $3 " (" $5 ") · libre " $4}'
+    ;;
+  ampliar-disco)
+    # Tras subir el tamaño del volumen de arranque en la consola de Oracle. Idempotente: si no hay espacio nuevo, no cambia nada.
+    src=$(findmnt -no SOURCE /); fstype=$(findmnt -no FSTYPE /)
+    disk="/dev/$(lsblk -no PKNAME "$src")"; part=$(echo "$src" | grep -oE '[0-9]+$')
+    echo "Antes:"; df -h / | tail -1 | awk '{print "  total " $2 " · usado " $3 " (" $5 ") · libre " $4}'
+    # Que el sistema vea el tamaño nuevo del volumen (lo que Oracle llama «rescan»).
+    sudo -n sh -c "echo 1 > /sys/class/block/$(basename "$disk")/device/rescan" 2>/dev/null || true
+    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT "$disk"
+    sudo -n growpart "$disk" "$part" || echo "(growpart: no hay espacio nuevo en el volumen o la partición ya ocupa todo)"
+    case "$fstype" in
+      ext4) sudo -n resize2fs "$src" ;;
+      xfs) sudo -n xfs_growfs / ;;
+      *) echo "Sistema de archivos $fstype: amplíalo a mano"; exit 1 ;;
+    esac
+    echo "Después:"; df -h / | tail -1 | awk '{print "  total " $2 " · usado " $3 " (" $5 ") · libre " $4}'
     ;;
   copia-r2-probar)
     "${COMPOSE[@]}" exec -T backup sh /r2.sh probar

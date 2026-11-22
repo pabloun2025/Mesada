@@ -7,7 +7,7 @@ on:
       accion:
         required: true
         type: choice
-        options: [estado, disco, limpiar-docker, preparar-whatsapp, activar-envios, desactivar-envios, copia-r2-probar]
+        options: [estado, disco, limpiar-docker, ampliar-disco, preparar-whatsapp, activar-envios, desactivar-envios, copia-r2-probar]
 
 permissions:
   contents: read

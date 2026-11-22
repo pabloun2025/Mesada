@@ -211,7 +211,7 @@ El plan gratuito incluye 200 GB de almacenamiento en bloque en total (disco de a
 
 1. Haz una copia antes: Actions › **Operar** › `estado` debe mostrar una copia reciente. Mejor aún, crea en la consola un *backup* del volumen de arranque: Storage › Boot volumes › tu volumen › *Create manual backup*.
 2. Consola de Oracle › **Compute › Instances** › tu instancia › **Boot volume** › el volumen › **Edit**. Pon el tamaño nuevo, por ejemplo 100 GB, y guarda. No hace falta parar la VM.
-3. Oracle muestra unos comandos de *rescan*. Ejecútalos por SSH en la VM. Suelen ser estos:
+3. Lo más fácil: Actions › **Operar** › `ampliar-disco`. Hace el *rescan*, agranda la partición y el sistema de archivos sin parar nada, y muestra el antes y el después. Si lo prefieres a mano, Oracle muestra unos comandos de *rescan*. Ejecútalos por SSH en la VM. Suelen ser estos:
    ```bash
    sudo dd iflag=direct if=/dev/oracleoci/oraclevda of=/dev/null count=1
    echo "1" | sudo tee /sys/class/block/$(readlink /dev/oracleoci/oraclevda | cut -d/ -f2)/device/rescan
