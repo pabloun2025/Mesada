@@ -1,0 +1,120 @@
+import { useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Archive, Pencil, Plus } from 'lucide-react';
+import { api, del, post, put } from '../lib/api';
+import { useInvalidateAll } from '../lib/hooks';
+import { minutesHM } from '../lib/deadline';
+import type { ScreenPlanRow, ScreenReason } from '../lib/types';
+import { Avatar, Button, Field, IconButton, Segmented, Sheet, Toggle, useToast } from './ui';
+import { reasonEffect } from './ScreenAdjustSheet';
+
+function PlanRow({ row }: { row: ScreenPlanRow }) {
+  const [minutes, setMinutes] = useState(String(row.minutes_per_week));
+  const [enabled, setEnabled] = useState(row.enabled);
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const n = Number(minutes);
+  const valid = Number.isInteger(n) && n >= 0 && n <= 10080;
+  const save = useMutation({
+    mutationFn: () => put(`/screen/plans/${row.user_id}`, { minutesPerWeek: n, enabled }),
+    onSuccess: () => { toast(`Plan de ${row.display_name} guardado`); invalidate(); },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  return (
+    <li className="space-y-1 rounded-2xl border border-[var(--line)] p-3.5">
+      <div className="flex items-center gap-3">
+        <Avatar name={row.display_name} avatar={row.avatar} colorKey={row.color} size={36} />
+        <h3 className="min-w-0 flex-1 truncate font-bold">{row.display_name}</h3>
+      </div>
+      <Toggle checked={enabled} onChange={setEnabled} label="Plan semanal activo" description={enabled ? 'Se carga cada lunes a las 00:00.' : 'Apagado: no recibe minutos del plan.'} />
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="Minutos por semana" hint={valid ? `= ${minutesHM(n)} cada semana` : 'Entre 0 y 10 080'}>
+          {(id) => <input id={id} className="field num w-32 font-bold" inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value.replace(/\D/g, ''))} />}
+        </Field>
+        <Button variant="secondary" loading={save.isPending} disabled={!valid} onClick={() => save.mutate()} aria-label={`Guardar el plan de ${row.display_name}`}>Guardar</Button>
+      </div>
+    </li>
+  );
+}
+
+/** Minutos de pantalla que recibe cada hijo cada lunes. Lo que no use caduca el lunes siguiente. */
+export function PlanSettings() {
+  const q = useQuery({ queryKey: ['screen-plans'], queryFn: () => api<{ plans: ScreenPlanRow[] }>('/screen/plans') });
+  return (
+    <section className="panel space-y-4 p-5" aria-labelledby="screen-plan">
+      <div>
+        <h2 id="screen-plan" className="text-lg font-bold">Plan semanal de pantalla</h2>
+        <p className="text-sm muted">Cada lunes a las 00:00 cada hijo recibe sus minutos. Lo que no use caduca el lunes siguiente, así que vale todo el fin de semana. Los minutos que gana con tareas caducan entre 30 y 36 días después.</p>
+      </div>
+      {q.data?.plans.length ? <ul className="space-y-3">{q.data.plans.map((r) => <PlanRow key={`${r.user_id}-${r.minutes_per_week}-${r.enabled}`} row={r} />)}</ul> : <p className="muted">Todavía no hay hijos.</p>}
+    </section>
+  );
+}
+
+function ReasonEditor({ initial, onClose }: { initial: Partial<ScreenReason>; onClose: () => void }) {
+  const [title, setTitle] = useState(initial.title ?? '');
+  const [effect, setEffect] = useState<'minutes' | 'pause'>(initial.effect ?? 'minutes');
+  const [minutes, setMinutes] = useState(String(initial.minutes ?? 15));
+  const [days, setDays] = useState(String(initial.pause_days ?? 1));
+  const [error, setError] = useState('');
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const save = useMutation({
+    mutationFn: () => {
+      const body = { title, effect, minutes: effect === 'minutes' ? Number(minutes) : null, pauseDays: effect === 'pause' ? Number(days) : null };
+      return initial.id ? put(`/screen/reasons/${initial.id}`, body) : post('/screen/reasons', body);
+    },
+    onSuccess: () => { toast('Motivo guardado'); invalidate(); onClose(); },
+    onError: (e: Error) => setError(e.message),
+  });
+  return (
+    <Sheet open onClose={onClose} title={initial.id ? 'Editar motivo' : 'Nuevo motivo'}
+      footer={<div className="space-y-2">{error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}<Button className="w-full" loading={save.isPending} disabled={!title.trim()} onClick={() => save.mutate()}>Guardar motivo</Button></div>}>
+      <div className="space-y-5">
+        <Field label="¿Qué quieres conseguir?" hint="Escríbelo en positivo: «Llegar a tiempo al cole», «Habitación en orden»…">
+          {(id) => <input id={id} className="field" value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} />}
+        </Field>
+        <div>
+          <p className="mb-2 text-sm font-bold text-[var(--fg-2)]">Efecto habitual</p>
+          <Segmented label="Efecto habitual" value={effect} onChange={setEffect} options={[{ value: 'minutes', label: 'Quitar minutos' }, { value: 'pause', label: 'Pausa' }]} />
+        </div>
+        {effect === 'minutes' ? (
+          <Field label="Minutos">{(id) => <input id={id} className="field num w-28 font-bold" inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value.replace(/\D/g, ''))} />}</Field>
+        ) : (
+          <Field label="Días de pausa">{(id) => <input id={id} className="field num w-28 font-bold" inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ''))} />}</Field>
+        )}
+        <p className="text-sm muted">Al aplicarlo podrás cambiar la cantidad.</p>
+      </div>
+    </Sheet>
+  );
+}
+
+/** Catálogo de motivos de los «Ajustes de pantalla». Se pueden crear, editar y archivar. */
+export function ReasonsSettings() {
+  const q = useQuery({ queryKey: ['screen-reasons'], queryFn: () => api<{ reasons: ScreenReason[] }>('/screen/reasons') });
+  const [editing, setEditing] = useState<Partial<ScreenReason> | null>(null);
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const archive = useMutation({ mutationFn: (id: string) => del(`/screen/reasons/${id}`), onSuccess: () => { toast('Motivo archivado'); invalidate(); }, onError: (e: Error) => toast(e.message, 'error') });
+  return (
+    <section className="panel space-y-3 p-5" aria-labelledby="screen-reasons">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 id="screen-reasons" className="text-lg font-bold">Ajustes de pantalla</h2>
+          <p className="text-sm muted">Motivos para ajustar la pantalla de un hijo, escritos en positivo. Cada uno trae su efecto habitual (quitar minutos o una pausa de unos días), que cambias al aplicarlo.</p>
+        </div>
+        <Button size="sm" variant="secondary" onClick={() => setEditing({})}><Plus size={16} /> Nuevo</Button>
+      </div>
+      <ul className="divide-y divide-[var(--line)]">
+        {(q.data?.reasons ?? []).map((r) => (
+          <li key={r.id} className="flex items-center gap-2 py-1.5">
+            <span className="min-w-0 flex-1"><span className="block font-bold">{r.title}</span><span className="num block text-sm muted">{reasonEffect(r)}</span></span>
+            <IconButton label={`Editar «${r.title}»`} onClick={() => setEditing(r)}><Pencil size={17} /></IconButton>
+            <IconButton label={`Archivar «${r.title}»`} onClick={() => archive.mutate(r.id)}><Archive size={17} /></IconButton>
+          </li>
+        ))}
+      </ul>
+      {editing ? <ReasonEditor initial={editing} onClose={() => setEditing(null)} /> : null}
+    </section>
+  );
+}

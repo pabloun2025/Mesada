@@ -6,7 +6,7 @@ import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 import { euros, relative, weekdayLong } from '../lib/format';
 import { minutesLabel } from '../lib/deadline';
-import { describeAction } from '../lib/activity';
+import { describeEntry } from '../lib/activity';
 import type { Instance, User, Wallet } from '../lib/types';
 import { Avatar, Button, Empty, Loading, PageHeader, SectionTitle, color } from '../components/ui';
 import { Bar, WeekRing } from '../components/Ring';
@@ -163,7 +163,7 @@ export default function ParentDashboard() {
             {data.activity.slice(0, 8).map((a: any) => (
               <li key={a.id} className="flex items-start gap-3 p-3.5">
                 <Avatar name={a.actor_name ?? '·'} avatar={a.actor_avatar} colorKey={a.actor_color} size={30} />
-                <p className="min-w-0 flex-1 text-sm"><span className="font-bold">{a.actor_name ?? 'Sistema'}</span> {describeAction(a)}</p>
+                <p className="min-w-0 flex-1 text-sm"><span className="font-bold">{a.actor_name ?? 'Sistema'}</span> {describeEntry(a)}</p>
                 <span className="shrink-0 text-xs muted">{relative(a.created_at)}</span>
               </li>
             ))}

@@ -299,7 +299,9 @@ describe('puntos, mesada, recompensas y pagos', () => {
     expect((await F.mama.get(`/api/wallet/${F.ids.hugo}`)).body.wallet.points_available).toBe(10);
     const act = (await F.mama.get('/api/activity')).body.entries;
     expect(act.filter((a: any) => a.action === 'points.adjust')).toHaveLength(1);
-    expect((await F.luciaC.get('/api/activity')).status).toBe(403);
+    // Un hijo ve solo lo que ha hecho él: nada de los ajustes que hace un adulto.
+    const own = (await F.luciaC.get('/api/activity')).body.entries;
+    expect(own.some((a: any) => a.action === 'points.adjust')).toBe(false);
   });
 
   it('los libros de puntos y dinero son inmutables en la base de datos', async () => {

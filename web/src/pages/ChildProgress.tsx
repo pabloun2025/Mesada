@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Flame, Trophy } from 'lucide-react';
 import { api } from '../lib/api';
-import { fmtDate } from '../lib/format';
+import { fmtDate, relative } from '../lib/format';
+import { describeAction } from '../lib/activity';
 import { useSession } from '../lib/session';
 import type { Progress } from '../lib/types';
 import { Avatar, Loading, PageHeader, SectionTitle } from '../components/ui';
@@ -11,6 +12,8 @@ import { StatsChart } from '../components/StatsChart';
 export default function ChildProgress() {
   const { user, family } = useSession();
   const { data: p, isLoading } = useQuery({ queryKey: ['progress', user.id], queryFn: () => api<Progress>(`/progress/${user.id}`) });
+  // Solo lo que ha hecho él: nunca lo que los adultos hacen sobre sus hermanos.
+  const mine = useQuery({ queryKey: ['activity', 'mine'], queryFn: () => api<{ entries: any[] }>('/activity') });
   const board = useQuery({ queryKey: ['leaderboard'], queryFn: () => api('/leaderboard'), enabled: family.leaderboard_enabled });
   if (isLoading || !p) return <Loading />;
   const earned = p.badges.filter((b) => b.awardedAt).length;
@@ -62,6 +65,20 @@ export default function ChildProgress() {
         <SectionTitle>Tus últimas semanas</SectionTitle>
         <div className="card p-4"><StatsChart userId={user.id} /></div>
       </section>
+
+      {mine.data?.entries.length ? (
+        <section className="mt-8">
+          <SectionTitle>Mi actividad</SectionTitle>
+          <ol className="card divide-y divide-[var(--line)]">
+            {mine.data.entries.slice(0, 12).map((a) => (
+              <li key={a.id} className="flex items-start gap-3 p-3.5 text-sm">
+                <p className="min-w-0 flex-1"><span className="font-bold">Tú</span> {describeAction(a)}</p>
+                <span className="shrink-0 text-xs muted">{relative(a.created_at)}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
 
       {family.leaderboard_enabled && board.data?.entries?.length > 1 ? (
         <section className="mt-8">

@@ -47,6 +47,8 @@ export type ReviewOutcome = 'approved' | 'partial' | 'returned' | 'declined' | '
 
 export interface Instance {
   id: string;
+  /** El hijo puede desmarcarla (la marcó él, nadie la ha validado y, si no pedía validación, sigue siendo el mismo día). */
+  can_unmark?: boolean;
   task_id: string;
   assignee_id: string | null;
   due_date: string;
@@ -345,6 +347,7 @@ export interface StatementEntry {
 /** Trabajo extra en el tablón (I11). `assignee_id` null = libre; si no, lo tiene `holder_name`. */
 export interface ExtraBoardItem {
   id: string;
+  can_unmark?: boolean;
   task_id: string;
   status: InstanceStatus;
   points: number;
@@ -381,3 +384,37 @@ export interface ExtraCatalogItem {
   open_instance_id: string | null;
   bonus: Bonus | null;
 }
+
+/** Desglose del saldo de pantalla (plan de la semana y ganados) y pausa vigente. */
+export interface ScreenBuckets {
+  plan: { minutes: number; expires_at: string | null };
+  earned: { minutes: number; first_expires_at: string | null };
+}
+export interface ScreenPause { id: string; starts_on: string; ends_on: string; reason: string; label: string }
+export interface ScreenEntry {
+  id: string;
+  delta: number;
+  kind: string;
+  category: ScreenCategory | null;
+  note: string;
+  created_at: string;
+  created_by_name: string | null;
+  log_status?: 'pending' | 'confirmed' | 'voided' | null;
+  log_overflow?: number | null;
+  is_adjustment: boolean;
+  reason: string | null;
+  adjustment_note: string | null;
+  recovery_title: string | null;
+  adjustment_status: string | null;
+}
+export interface ScreenPauseRow { id: string; reason_title: string; note: string; pause_days: number; pause_starts_on: string; pause_ends_on: string; status: string; created_at: string; recovery_title: string | null }
+export interface ScreenView {
+  balance: number;
+  buckets: ScreenBuckets;
+  pause: ScreenPause | null;
+  plan: { minutes_per_week: number; enabled: boolean };
+  entries: ScreenEntry[];
+  pauses: ScreenPauseRow[];
+}
+export interface ScreenReason { id: string; title: string; effect: 'minutes' | 'pause'; minutes: number | null; pause_days: number | null; archived: boolean }
+export interface ScreenPlanRow { user_id: string; display_name: string; avatar: string | null; color: string | null; minutes_per_week: number; enabled: boolean }

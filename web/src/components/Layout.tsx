@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell, BellRing, CalendarCheck, ChartColumn, CircleCheckBig, Gift, Hammer, House, ListChecks, LogOut, Menu, Moon, PiggyBank, Settings, ShieldCheck, Sun, Trophy, User, Users, History,
@@ -9,6 +9,7 @@ import { useLogout, useSession } from '../lib/session';
 import { relative } from '../lib/format';
 import { Avatar, Empty, IconButton, Sheet } from './ui';
 import { RevealModal } from './RevealModal';
+import { ErrorBoundary } from './ErrorBoundary';
 
 type NavItem = { to: string; label: string; icon: ReactNode; badge?: number; end?: boolean };
 
@@ -112,6 +113,7 @@ export function Layout() {
   const { user, family } = useSession();
   const logout = useLogout();
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
   const [more, setMore] = useState(false);
   const isAdult = user.role === 'adult';
@@ -210,7 +212,7 @@ export function Layout() {
 
         <main id="contenido" tabIndex={-1} className="mx-auto w-full max-w-5xl flex-1 px-[max(1rem,env(safe-area-inset-left))] pt-5 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:px-8 lg:pb-12">
           <ConnectionBanner />
-          <Outlet />
+          <ErrorBoundary resetKey={location.pathname}><Outlet /></ErrorBoundary>
         </main>
 
         {/* Barra inferior (móvil) */}

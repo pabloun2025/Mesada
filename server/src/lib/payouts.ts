@@ -6,7 +6,8 @@ import { addScreen, CATEGORY_PHRASE, screenBalance, type ScreenCategory } from '
 import { recordPaymentTx } from './money.js';
 import { audit } from './audit.js';
 import { notify, notifyAdults } from './notify/dispatch.js';
-import { getFamily } from './family.js';
+import { familyToday, getFamily } from './family.js';
+import { assertNotPaused } from './screen-adjust.js';
 import { assertCanWithdraw } from './bank.js';
 
 const fmtEur = (c: number) => `${(c / 100).toFixed(2).replace('.', ',')} €`;
@@ -37,6 +38,8 @@ export async function createPayoutRequest(child: AuthUser, p: NewRequest) {
       const bal = await moneyBalance(db, child.id);
       if (p.amountCents! > bal) throw conflict(`Solo tienes ${fmtEur(bal)} por cobrar`, 'insufficient_balance');
     } else {
+      // En pausa de pantalla no se pueden pedir minutos (I16).
+      await assertNotPaused(db, child.id, familyToday(await getFamily(db, child.familyId)));
       const bal = await screenBalance(db, child.id);
       if (p.minutes! > bal) throw conflict(`Solo te quedan ${bal} min de pantalla`, 'insufficient_balance');
     }
@@ -97,7 +100,7 @@ export async function approvePayoutRequest(adult: AuthUser, id: string, o: { met
         [id, grant, method, pay.id, note, adult.id],
       );
       const reduced = grant < r.amount_cents;
-      await audit(db, adult.familyId, adult.id, 'payout.approve', 'payout_request', id, { kind: 'money', cents: grant, requested: r.amount_cents, method });
+      await audit(db, adult.familyId, adult.id, 'payout.approve', 'payout_request', id, { kind: 'money', cents: grant, requested: r.amount_cents, method, for: r.user_id });
       await notify(db, {
         userId: r.user_id, event: 'payout_decided',
         title: `${adult.displayName} te ha pagado ${fmtEur(grant)}${METHOD_PHRASE[method] ?? ''}.`,
@@ -106,6 +109,7 @@ export async function approvePayoutRequest(adult: AuthUser, id: string, o: { met
       });
       return { request: upd, duplicate: false, reduced, granted: grant };
     }
+    await assertNotPaused(db, r.user_id, familyToday(await getFamily(db, adult.familyId)));
     const bal = await screenBalance(db, r.user_id);
     const grant = Math.min(r.minutes, bal);
     if (grant <= 0) throw conflict('Ya no le quedan minutos de pantalla', 'insufficient_balance');
@@ -116,7 +120,7 @@ export async function approvePayoutRequest(adult: AuthUser, id: string, o: { met
       [id, -s.applied, note, adult.id],
     );
     const reduced = -s.applied < r.minutes;
-    await audit(db, adult.familyId, adult.id, 'payout.approve', 'payout_request', id, { kind: 'screen', minutes: -s.applied, requested: r.minutes, category: r.category });
+    await audit(db, adult.familyId, adult.id, 'payout.approve', 'payout_request', id, { kind: 'screen', minutes: -s.applied, requested: r.minutes, category: r.category, for: r.user_id });
     await notify(db, {
       userId: r.user_id, event: 'payout_decided',
       title: `${adult.displayName} te ha dado ${-s.applied} min ${CATEGORY_PHRASE[r.category as ScreenCategory]}.`,
@@ -133,7 +137,7 @@ export async function rejectPayoutRequest(adult: AuthUser, id: string, note = ''
     if (r.status === 'rejected') return { request: r, duplicate: true };
     if (r.status !== 'pending') throw conflict('Esta petición ya está resuelta', 'already_decided');
     const upd = await one(db, `UPDATE payout_requests SET status = 'rejected', decision_note = $2, decided_by = $3, decided_at = now() WHERE id = $1 RETURNING *`, [id, note.trim(), adult.id]);
-    await audit(db, adult.familyId, adult.id, 'payout.reject', 'payout_request', id, { kind: r.kind, note });
+    await audit(db, adult.familyId, adult.id, 'payout.reject', 'payout_request', id, { kind: r.kind, note, for: r.user_id });
     const what = r.kind === 'money' ? fmtEur(r.amount_cents) : `${r.minutes} min ${CATEGORY_PHRASE[r.category as ScreenCategory]}`;
     await notify(db, { userId: r.user_id, event: 'payout_decided', title: `${adult.displayName} no ha aceptado tu petición de ${what}`, body: note.trim(), link: '/mesada', dedupeKey: `payout-rejected:${id}` });
     return { request: upd, duplicate: false };

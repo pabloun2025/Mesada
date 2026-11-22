@@ -593,6 +593,9 @@ test.describe.serial('Familia completa', () => {
     const rc = kid.getByRole('dialog', { name: 'Recibo: Canje hecho' });
     await expect(rc).toContainText('+2,50 €');
     await expect(rc).toContainText(/CJ-[0-9A-Z]{5}/);
+    await rc.locator('svg').first().waitFor();
+    await kid.waitForTimeout(400); // deja terminar la animación de las monedas
+    await kid.screenshot({ path: `${SHOTS}/81-recibo-canje-monedas-375.png` });
     await rc.getByRole('button', { name: 'Cerrar', exact: true }).click();
     const after = (await api(kid, 'get', `/wallet/${me.id}`)).body.wallet;
     expect(after.points_available).toBe(before.points_available - 50);
@@ -1104,6 +1107,138 @@ test.describe.serial('Familia completa', () => {
         await p.context().close();
       }
     }
+  });
+
+  test('desmarcar (I17): «Hecha · Deshacer», desmarcar desde la fila y no se puede tras validar', async ({ browser }) => {
+    const me = (await api(kid, 'get', '/me')).body.user;
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+    const mk = (title: string, extra: Record<string, unknown> = {}) => api(adult, 'post', '/tasks', { title, points: 15, recurrence: 'daily', startDate: today, assignees: [me.id], ...extra });
+    expect((await mk('Tender la ropa', { requiresApproval: false })).status).toBe(200);
+    expect((await mk('Barrer la terraza')).status).toBe(200);
+    expect((await mk('Fregar los cacharros')).status).toBe(200);
+    const points = async () => (await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available;
+    const p0 = await points();
+
+    await kid.setViewportSize({ width: 375, height: 812 });
+    await kid.goto('/');
+    // 1) Toast «Hecha · Deshacer» al marcar; deshacer devuelve los puntos y la tarea.
+    await kid.getByRole('button', { name: 'Marcar «Tender la ropa» como hecha' }).click();
+    const toast = kid.locator('[aria-live=polite]').filter({ hasText: 'Hecha' });
+    await expect(toast).toContainText('+15 puntos');
+    await expect(toast.getByRole('button', { name: 'Deshacer' })).toBeVisible();
+    expect(await points()).toBe(p0 + 15);
+    await kid.screenshot({ path: `${SHOTS}/76-hijo-deshacer-toast-375.png` });
+    await toast.getByRole('button', { name: 'Deshacer' }).click();
+    await expect(kid.getByText('Desmarcada: vuelve a estar por hacer')).toBeVisible();
+    await expect(kid.getByRole('button', { name: 'Marcar «Tender la ropa» como hecha' })).toBeVisible();
+    expect(await points()).toBe(p0);
+
+    // 2) Una tarea que pide validación: se puede desmarcar desde la fila mientras nadie la valide.
+    await kid.getByRole('button', { name: 'Marcar «Barrer la terraza» como hecha' }).click();
+    const row = kid.getByRole('listitem').filter({ hasText: 'Barrer la terraza' });
+    await expect(row.getByRole('button', { name: 'Desmarcar «Barrer la terraza»' })).toBeVisible();
+    const pending = async () => (await api(adult, 'get', '/dashboard')).body.pendingApprovals.map((x: any) => x.title);
+    expect(await pending()).toContain('Barrer la terraza');
+    await kid.screenshot({ path: `${SHOTS}/77-hijo-desmarcar-fila-375.png`, fullPage: true });
+    await row.getByRole('button', { name: 'Desmarcar «Barrer la terraza»' }).click();
+    await expect(row.getByRole('button', { name: 'Marcar «Barrer la terraza» como hecha' })).toBeVisible();
+    expect(await pending()).not.toContain('Barrer la terraza');
+    // Sin aviso a los adultos por desmarcar: solo el de haberla enviado antes.
+    const notes = (await api(adult, 'get', '/notifications')).body.notifications.filter((n: any) => /desmarc/i.test(n.title));
+    expect(notes).toHaveLength(0);
+
+    // 3) Si un adulto la valida, el hijo ya no puede desmarcarla.
+    await kid.getByRole('button', { name: 'Marcar «Fregar los cacharros» como hecha' }).click();
+    const inst = (await api(kid, 'get', '/instances')).body.instances.find((i: any) => i.title === 'Fregar los cacharros');
+    expect((await api(adult, 'post', `/instances/${inst.id}/review`, { action: 'approve' })).status).toBe(200);
+    expect((await api(kid, 'post', `/instances/${inst.id}/unmark`, {})).status).toBe(409);
+    await kid.reload();
+    await expect(kid.getByRole('listitem').filter({ hasText: 'Fregar los cacharros' }).getByRole('button', { name: /Desmarcar/ })).toHaveCount(0);
+  });
+
+  test('pantalla (I16): plan semanal, desglose del saldo, ajuste, pausa y recuperación', async ({ browser }) => {
+    const me = (await api(kid, 'get', '/me')).body.user;
+    // El plan se pone desde Ajustes (escritorio); activarlo carga ya esa semana.
+    await adult.goto('/ajustes');
+    const plan = adult.getByRole('region', { name: 'Plan semanal de pantalla' });
+    const lucia = plan.getByRole('listitem').filter({ hasText: KID.name });
+    await lucia.getByLabel('Minutos por semana').fill('130');
+    await expect(lucia.getByLabel('Minutos por semana')).toHaveAttribute('aria-describedby', /.+/); // la pista va enlazada al campo
+    await lucia.getByText('Plan semanal activo').click();
+    await expect(lucia.getByText('= 2 h 10 min cada semana')).toBeVisible();
+    await lucia.getByRole('button', { name: `Guardar el plan de ${KID.name}` }).click();
+    await expect(adult.getByText(`Plan de ${KID.name} guardado`)).toBeVisible();
+    // Minutos ganados aparte (como los de un bono), para ver los dos grupos.
+    expect((await api(adult, 'post', '/screen/adjust', { userId: me.id, delta: 45, note: 'Gracias por ayudar' })).status).toBe(200);
+    // Un hermano no ve nada de esto.
+    const hugo = await newPhonePage(browser);
+    await login(hugo, 'hugo', '1111', true);
+    await expect(hugo.getByRole('region', { name: 'Mi mesada' })).toBeVisible();
+    expect((await api(hugo, 'get', `/screen/${me.id}`)).status).toBe(403);
+    await hugo.context().close();
+
+    await kid.setViewportSize({ width: 375, height: 812 });
+    await kid.goto('/mesada');
+    const bal = kid.getByRole('list', { name: 'Desglose del saldo de pantalla' });
+    await expect(bal).toContainText('Plan de la semana: 2 h 10 min');
+    await expect(bal).toContainText(/caduca el lunes/);
+    await expect(bal).toContainText(/Ganados: .*los primeros caducan el lunes \d+ \w+/);
+    await bal.scrollIntoViewIfNeeded();
+    await kid.screenshot({ path: `${SHOTS}/78-hijo-pantalla-desglose-375.png` });
+
+    // Un trabajo extra para recuperar, y el ajuste desde la banca familiar en el móvil del adulto.
+    const extra = (await api(adult, 'post', '/extras', { title: 'Ordenar el trastero', points: 10, requiresApproval: true })).body.id;
+    const phone = await newPhonePage(browser);
+    await login(phone, ADULT.user, ADULT.pass);
+    await expect(phone.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    await phone.setViewportSize({ width: 375, height: 812 });
+    await phone.goto('/mesada');
+    const panel = phone.getByRole('article', { name: `Cuenta de ${KID.name}` });
+    await panel.getByRole('button', { name: 'Ajuste de pantalla' }).click();
+    const d = phone.getByRole('dialog');
+    await d.getByRole('radio', { name: /Habitación en orden/ }).click();
+    await expect(d.getByLabel('Minutos que se quitan')).toHaveValue('15');
+    await d.getByLabel('Nota amable (opcional)').fill('Mañana lo recogemos juntos');
+    await d.getByLabel('Forma de recuperar (opcional)').selectOption({ label: '🧰 Ordenar el trastero' });
+    await phone.screenshot({ path: `${SHOTS}/79-adulto-ajuste-pantalla-375.png` });
+    await d.getByRole('button', { name: 'Aplicar ajuste' }).click();
+    await expect(phone.getByText('Ajuste aplicado: −15 min')).toBeVisible();
+
+    // El hijo lo ve con palabras amables y puede recuperarlo.
+    const before = (await api(kid, 'get', `/screen/${me.id}`)).body;
+    await kid.goto('/mesada');
+    const hist = kid.getByRole('listitem').filter({ hasText: 'Ajuste de pantalla · Habitación en orden' });
+    await expect(hist).toContainText('Mañana lo recogemos juntos');
+    await expect(hist).toContainText('Los puedes recuperar con «Ordenar el trastero»');
+    expect(JSON.stringify(before)).not.toMatch(/castigo|penalizaci|multa/i);
+    const board = (await api(kid, 'get', '/extras')).body.board.find((b: any) => b.task_id === extra);
+    expect(board.assignee_id).toBe(me.id);
+    expect((await api(kid, 'post', `/instances/${board.id}/complete`, {})).status).toBe(200);
+    expect((await api(adult, 'post', `/instances/${board.id}/review`, { action: 'approve' })).status).toBe(200);
+    const after = (await api(kid, 'get', `/screen/${me.id}`)).body;
+    expect(after.balance).toBe(before.balance + 15);
+
+    // Pausa de 2 días: no puede pedir; las demás pantallas dicen «Pausa hasta …».
+    await panel.getByRole('button', { name: 'Ajuste de pantalla' }).click();
+    const d2 = phone.getByRole('dialog');
+    await d2.getByRole('radio', { name: /Respeto en familia/ }).click();
+    await d2.getByLabel('Días de pausa').fill('2');
+    await d2.getByRole('button', { name: 'Aplicar ajuste' }).click();
+    await expect(phone.getByText(/Pausa puesta hasta/)).toBeVisible();
+    await expect(panel.getByText(/^Pausa hasta /)).toBeVisible();
+    await kid.goto('/');
+    await expect(kid.getByText('Pausa hasta').first()).toBeVisible({ timeout: 15_000 });
+    await kid.screenshot({ path: `${SHOTS}/80-hijo-pausa-375.png` });
+    await kid.goto('/mesada');
+    await expect(kid.getByRole('button', { name: 'Pedir pantalla' })).toBeDisabled();
+    await expect(kid.getByRole('list', { name: 'Desglose del saldo de pantalla' })).toContainText('Tus minutos no caducan mientras tanto');
+    expect((await api(kid, 'post', '/payout-requests', { kind: 'screen', minutes: 5, category: 'tele' })).body.error).toBe('paused');
+    // Un adulto la termina antes.
+    await panel.getByRole('button', { name: 'Terminar pausa' }).click();
+    await expect(phone.getByText('Pausa terminada')).toBeVisible();
+    await kid.reload();
+    await expect(kid.getByRole('button', { name: 'Pedir pantalla' })).toBeEnabled();
+    await phone.context().close();
   });
 
   test('la app es instalable (manifest y service worker)', async () => {

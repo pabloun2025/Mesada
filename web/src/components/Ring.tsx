@@ -36,7 +36,7 @@ export function WeekRing({ points, goal, cents, size = 196, label = 'esta semana
       <div className="relative flex flex-col items-center text-center">
         <span className="num font-extrabold leading-none" style={{ fontSize: size * 0.24 }}>{points}</span>
         <span className="mt-0.5 text-sm muted">{goal > 0 ? `de ${goal} pts` : 'puntos'}</span>
-        <span className="num mt-1.5 rounded-full bg-leaf-soft px-2.5 py-0.5 text-sm font-bold text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]">≈ {euros(cents)}</span>
+        <span className="num mt-1.5 rounded-full bg-leaf-soft px-2.5 py-0.5 text-sm font-bold text-leaf-deep">≈ {euros(cents)}</span>
         <span className="sr-only">{label}</span>
       </div>
     </div>

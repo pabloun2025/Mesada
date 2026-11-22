@@ -130,6 +130,8 @@ describe('hora límite', () => {
     await F.mama.post('/api/holidays', { day: today(), label: 'Festivo' });
     const dueSoon = async () => (await pool().query(`SELECT * FROM notifications WHERE kind = 'task_due_soon'`)).rows;
     // 07:30: con la hora de L–V (08:00) avisaría; hoy es festivo (12:00), así que no
+    // Montar la tarea puede lanzar recordatorios con la hora real; se limpian para que la prueba no dependa del reloj.
+    await pool().query(`DELETE FROM notifications WHERE kind = 'task_due_soon'`);
     await scheduleReminders(pool(), F.ids.family, zonedToUtc(today(), '07:30', TZ));
     expect(await dueSoon()).toHaveLength(0);
     await scheduleReminders(pool(), F.ids.family, zonedToUtc(today(), '11:30', TZ));

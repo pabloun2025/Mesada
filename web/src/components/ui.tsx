@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 
 /* ---------- Colores y avatares de miembros ---------- */
@@ -122,13 +122,27 @@ export function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?
 
 /* ---------- Formularios ---------- */
 
+/**
+ * Campo con etiqueta, pista y error. La pista y el error se enlazan con el control mediante `aria-describedby`
+ * (y `aria-invalid` si hay error) para que los lectores de pantalla los lean junto al campo. Se hace sobre el control
+ * que recibe el `id`, así vale para cualquier `input`, `select` o `textarea` sin tocar cada formulario.
+ */
 export function Field({ label, hint, error, children }: { label: string; hint?: string; error?: string; children: (id: string) => ReactNode }) {
   const id = useId();
+  const noteId = `${id}-note`;
+  const box = useRef<HTMLDivElement>(null);
+  const hasNote = !!(error || hint);
+  useLayoutEffect(() => {
+    const el = box.current?.querySelector<HTMLElement>(`[id="${id}"]`);
+    if (!el) return;
+    if (hasNote) el.setAttribute('aria-describedby', noteId); else el.removeAttribute('aria-describedby');
+    if (error) el.setAttribute('aria-invalid', 'true'); else el.removeAttribute('aria-invalid');
+  });
   return (
-    <div className="space-y-1.5">
+    <div ref={box} className="space-y-1.5">
       <label htmlFor={id} className="block text-sm font-bold text-[var(--fg-2)]">{label}</label>
       {children(id)}
-      {error ? <p role="alert" className="text-sm font-bold text-berry-deep dark:text-[#ff9dbf]">{error}</p> : hint ? <p className="text-sm muted">{hint}</p> : null}
+      {error ? <p id={noteId} role="alert" className="text-sm font-bold text-berry-deep dark:text-[#ff9dbf]">{error}</p> : hint ? <p id={noteId} className="text-sm muted">{hint}</p> : null}
     </div>
   );
 }
@@ -218,17 +232,20 @@ export function Sheet({ open, onClose, title, subtitle, children, footer }: { op
 
 /* ---------- Avisos (toasts) ---------- */
 
-type Toast = { id: number; text: string; tone: 'ok' | 'error' };
-const ToastCtx = createContext<(text: string, tone?: 'ok' | 'error') => void>(() => {});
+/** Un aviso puede llevar una acción (p. ej. «Deshacer») y durar más de lo normal. */
+export type ToastOpts = { action?: { label: string; onClick: () => void }; ms?: number };
+type Toast = { id: number; text: string; tone: 'ok' | 'error'; action?: ToastOpts['action'] };
+const ToastCtx = createContext<(text: string, tone?: 'ok' | 'error', opts?: ToastOpts) => void>(() => {});
 export const useToast = () => useContext(ToastCtx);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const push = useCallback((text: string, tone: 'ok' | 'error' = 'ok') => {
+  const push = useCallback((text: string, tone: 'ok' | 'error' = 'ok', opts: ToastOpts = {}) => {
     const id = Date.now() + Math.random();
-    setToasts((t) => [...t, { id, text, tone }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3800);
+    setToasts((t) => [...t, { id, text, tone, action: opts.action }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), opts.ms ?? 3800);
   }, []);
+  const close = (id: number) => setToasts((t) => t.filter((x) => x.id !== id));
   return (
     <ToastCtx.Provider value={push}>
       {children}
@@ -236,9 +253,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`anim-sheet pointer-events-auto max-w-md rounded-2xl px-4 py-3 font-bold shadow-[var(--shadow-lift)] ${t.tone === 'ok' ? 'bg-ink text-white dark:bg-white dark:text-ink' : 'bg-berry text-white'}`}
+            className={`anim-sheet pointer-events-auto flex max-w-md items-center gap-2 rounded-2xl py-2 pr-2 pl-4 font-bold shadow-[var(--shadow-lift)] ${t.action ? '' : 'py-3 pr-4'} ${t.tone === 'ok' ? 'bg-ink text-white dark:bg-white dark:text-ink' : 'bg-berry text-white'}`}
           >
-            {t.text}
+            <span className="min-w-0 flex-1">{t.text}</span>
+            {t.action ? (
+              <button
+                type="button"
+                onClick={() => { t.action!.onClick(); close(t.id); }}
+                className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-white/15 px-4 underline underline-offset-4 hover:bg-white/25 dark:bg-ink/10 dark:hover:bg-ink/20"
+              >
+                {t.action.label}
+              </button>
+            ) : null}
           </div>
         ))}
       </div>

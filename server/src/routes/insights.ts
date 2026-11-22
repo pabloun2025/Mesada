@@ -61,6 +61,9 @@ function assertSelfOrAdult(u: AuthUser, userId: string) {
   if (u.role === 'child' && u.id !== userId) throw forbidden();
 }
 
+/** Sobre quién recae una acción del historial: el hijo indicado en los datos o, si la entidad es un usuario, ese usuario. */
+const FOR_USER = `COALESCE(NULLIF(a.data->>'for', '')::uuid, CASE WHEN a.entity = 'user' THEN a.entity_id END)`;
+
 export default async function insightRoutes(app: FastifyInstance) {
   app.get('/api/progress/:userId', async (req) => {
     const u = requireUser(req);
@@ -135,8 +138,9 @@ export default async function insightRoutes(app: FastifyInstance) {
       one(db, `SELECT ((SELECT count(*) FROM loans WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM goal_requests WHERE family_id = $1 AND status = 'pending'))::int AS n`, [u.familyId]),
       many(
         db,
-        `SELECT a.id, a.action, a.entity, a.data, a.created_at, u.display_name AS actor_name, u.avatar AS actor_avatar, u.color AS actor_color
-           FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id WHERE a.family_id = $1 ORDER BY a.created_at DESC LIMIT 15`,
+        `SELECT a.id, a.action, a.entity, a.data, a.created_at, u.display_name AS actor_name, u.avatar AS actor_avatar, u.color AS actor_color, fu.display_name AS for_name
+           FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id LEFT JOIN users fu ON fu.family_id = a.family_id AND fu.id = ${FOR_USER}
+          WHERE a.family_id = $1 ORDER BY a.created_at DESC LIMIT 15`,
         [u.familyId],
       ),
     ]);
@@ -186,15 +190,19 @@ export default async function insightRoutes(app: FastifyInstance) {
     return { range: q.range, rows };
   });
 
+  // Historial. Los adultos ven todo lo de la familia; un hijo, solo lo que ha hecho él (nada de lo que otros adultos hacen sobre
+  // sus hermanos, como los ajustes de pantalla).
   app.get('/api/activity', async (req) => {
-    const u = requireAdult(req);
+    const u = requireUser(req);
     const q = z.object({ before: z.coerce.number().int().optional() }).parse(req.query);
     const rows = await many(
       getPool(),
-      `SELECT a.id, a.action, a.entity, a.entity_id, a.data, a.created_at, u.display_name AS actor_name
+      `SELECT a.id, a.action, a.entity, a.entity_id, a.data, a.created_at, u.display_name AS actor_name, fu.display_name AS for_name
          FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id
-        WHERE a.family_id = $1 AND ($2::bigint IS NULL OR a.id < $2) ORDER BY a.id DESC LIMIT 100`,
-      [u.familyId, q.before ?? null],
+         LEFT JOIN users fu ON fu.family_id = a.family_id AND fu.id = ${FOR_USER}
+        WHERE a.family_id = $1 AND ($2::bigint IS NULL OR a.id < $2) AND ($3::uuid IS NULL OR a.actor_id = $3)
+        ORDER BY a.id DESC LIMIT 100`,
+      [u.familyId, q.before ?? null, u.role === 'child' ? u.id : null],
     );
     return { entries: rows };
   });

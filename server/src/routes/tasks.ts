@@ -11,11 +11,11 @@ import { audit } from '../lib/audit.js';
 import { config } from '../lib/config.js';
 import { familyToday, getFamily } from '../lib/family.js';
 import { ensureInstancesThrottled, regenerateTask } from '../lib/instances.js';
-import { completeInstance, reviewInstance } from '../lib/task-actions.js';
+import { completeInstance, reviewInstance, unmarkInstance } from '../lib/task-actions.js';
 import { checkInstance } from '../lib/check-tasks.js';
 import { bonusView, bonusLabel, BONUS_COLUMNS } from '../lib/bonus.js';
 import { deadlineAt, deadlineTime, holidaysBetween, reducedPoints } from '../lib/deadline.js';
-import { addDays, isValidDate } from '../lib/dates.js';
+import { addDays, isValidDate, todayIn } from '../lib/dates.js';
 import { notify } from '../lib/notify/dispatch.js';
 
 export const dateStr = z.string().refine(isValidDate, 'fecha no válida');
@@ -108,7 +108,7 @@ async function validateAssignees(familyId: string, ids: string[]) {
 export const INSTANCE_SELECT = `
   SELECT i.id, i.task_id, i.assignee_id, i.due_date, i.status, i.points, i.completed_by, i.completed_at, i.child_note,
          (i.photo_path IS NOT NULL) AS has_photo, i.reviewed_at, i.review_note,
-         i.deadline_at, i.on_time, i.check_met, i.review_outcome, i.penalty_points, i.penalty_screen, i.repeat_no, t.repeatable, t.max_per_day, t.cooldown_days,
+         i.deadline_at, i.on_time, i.check_met, (i.reviewed_by IS NOT NULL) AS adult_reviewed, i.review_outcome, i.penalty_points, i.penalty_screen, i.repeat_no, t.repeatable, t.max_per_day, t.cooldown_days,
          (SELECT count(*)::int FROM task_instances x WHERE x.task_id = i.task_id AND x.due_date = i.due_date AND x.status IN ('submitted','approved') AND x.assignee_id IS NOT DISTINCT FROM i.assignee_id) AS done_count,
          t.title, t.icon, t.description, t.difficulty, t.recurrence, t.assignment_mode, t.requires_approval, t.requires_photo, t.due_time,
          t.due_time_weekend, t.late_percent, t.points AS task_points, t.check_mode, t.penalty_minutes, t.success_minutes,
@@ -144,6 +144,13 @@ async function notifyAssigned(db: any, taskId: string, title: string, points: nu
   for (const k of kids) {
     await notify(db, { userId: k.id, event: 'task_assigned', title: `Nueva tarea: ${title}`, body: `+${points} puntos`, link: '/', dedupeKey: `assigned:${taskId}:${k.id}` });
   }
+}
+
+/** ¿Puede este hijo desmarcar la ocurrencia? Enviada y sin validar; si no pedía validación, hasta el final del día en que la marcó. */
+export function canUnmark(u: { id: string; role: string }, r: { completed_by: string | null; status: string; check_mode?: boolean; adult_reviewed?: boolean; completed_at: string | Date | null }, tz: string, today: string) {
+  if (u.role !== 'child' || r.completed_by !== u.id || r.check_mode) return false;
+  if (r.status === 'submitted') return true;
+  return r.status === 'approved' && !r.adult_reviewed && !!r.completed_at && todayIn(tz, new Date(r.completed_at)) === today;
 }
 
 export default async function taskRoutes(app: FastifyInstance) {
@@ -268,6 +275,7 @@ export default async function taskRoutes(app: FastifyInstance) {
         deadline_time: r.check_mode ? null : deadlineTime(r, r.due_date, holidays.has(r.due_date)),
         late_points: reducedPoints(r.task_points, r.late_percent),
         blocked_until: blockedUntil,
+        can_unmark: canUnmark(u, r, fam.timezone, today),
       };
     });
     return { today, instances };
@@ -313,6 +321,13 @@ export default async function taskRoutes(app: FastifyInstance) {
       if (photoPath) fs.rmSync(path.join(config.uploadDir, photoPath), { force: true });
       throw e;
     }
+  });
+
+  // El hijo desmarca una tarea que marcó por error (I17). Sin aviso a los adultos.
+  app.post('/api/instances/:id/unmark', async (req) => {
+    const u = requireUser(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    return unmarkInstance(u, id);
   });
 
   app.post('/api/instances/:id/review', async (req) => {

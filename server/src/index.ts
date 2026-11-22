@@ -4,6 +4,7 @@ import { getPool, many, migrate } from './lib/db.js';
 import { ensureInstances } from './lib/instances.js';
 import { processOutbox } from './lib/notify/worker.js';
 import { runWeeklyBank } from './lib/savings.js';
+import { runScreenExpiry, runScreenPlans } from './lib/screen.js';
 
 const app = await buildApp();
 const applied = await migrate();
@@ -17,6 +18,9 @@ async function tick() {
       await ensureInstances(getPool(), f.id);
       // Trabajo del lunes: interés del ahorro y cuotas de préstamos (idempotente, se repite sin riesgo).
       await runWeeklyBank(getPool(), f.id);
+      // Pantalla: primero caduca lo vencido y luego se carga el plan de la semana (idempotente por hijo y semana).
+      await runScreenExpiry(getPool(), f.id);
+      await runScreenPlans(getPool(), f.id);
     }
   } catch (e) {
     app.log.error(e, 'Fallo en la tarea periódica');

@@ -3,24 +3,27 @@ import { Delete } from 'lucide-react';
 import { Button, Sheet } from './ui';
 import { euros } from '../lib/format';
 
-/** Texto de teclado → cantidad: céntimos para euros, enteros para puntos. */
-export function rawToValue(raw: string, unit: 'eur' | 'pts'): number {
+/** Unidades: euros (con decimales) o enteros (puntos y minutos). */
+export type AmountUnit = 'eur' | 'pts' | 'min';
+
+/** Texto de teclado → cantidad: céntimos para euros, enteros para puntos y minutos. */
+export function rawToValue(raw: string, unit: AmountUnit): number {
   const n = Number(raw.replace(',', '.') || '0');
   if (!Number.isFinite(n)) return 0;
   return unit === 'eur' ? Math.round(n * 100) : Math.floor(n);
 }
 
-export function valueToRaw(v: number, unit: 'eur' | 'pts'): string {
-  if (unit === 'pts') return v > 0 ? String(v) : '';
+export function valueToRaw(v: number, unit: AmountUnit): string {
+  if (unit !== 'eur') return v > 0 ? String(v) : '';
   if (v <= 0) return '';
   return v % 100 === 0 ? String(v / 100) : (v / 100).toFixed(2).replace('.', ',').replace(/0$/, '');
 }
 
 /** Aplica una tecla al texto escrito: sin ceros a la izquierda, 2 decimales como mucho y un máximo de 6 cifras enteras. */
-export function pressKey(raw: string, key: string, unit: 'eur' | 'pts'): string {
+export function pressKey(raw: string, key: string, unit: AmountUnit): string {
   if (key === 'back') return raw.slice(0, -1);
   if (key === ',') {
-    if (unit === 'pts' || raw.includes(',')) return raw;
+    if (unit !== 'eur' || raw.includes(',')) return raw;
     return `${raw || '0'},`;
   }
   if (!/^\d$/.test(key)) return raw;
@@ -30,13 +33,13 @@ export function pressKey(raw: string, key: string, unit: 'eur' | 'pts'): string 
 }
 
 /** Importe grande: lo escrito en tinta y los decimales que faltan en gris. */
-function AmountDisplay({ raw, unit, over }: { raw: string; unit: 'eur' | 'pts'; over: boolean }) {
+function AmountDisplay({ raw, unit, over }: { raw: string; unit: AmountUnit; over: boolean }) {
   const [int, dec] = raw.split(',');
   const typedDec = dec ?? '';
   const ink = over ? 'text-berry-deep' : 'text-[var(--fg)]';
   return (
     <p aria-live="polite" className="num flex items-baseline justify-center text-[3.75rem] leading-none font-extrabold">
-      <span className="sr-only">{unit === 'eur' ? euros(rawToValue(raw, 'eur')) : `${rawToValue(raw, 'pts')} puntos`}</span>
+      <span className="sr-only">{unit === 'eur' ? euros(rawToValue(raw, 'eur')) : `${rawToValue(raw, unit)} ${unit === 'min' ? 'minutos' : 'puntos'}`}</span>
       <span aria-hidden className="inline-flex items-baseline">
         <span className={raw ? ink : 'text-[var(--line)]'}>{int || '0'}</span>
         {unit === 'eur' ? (
@@ -47,7 +50,7 @@ function AmountDisplay({ raw, unit, over }: { raw: string; unit: 'eur' | 'pts'; 
           </>
         ) : null}
         <span className="caret ml-0.5 inline-block h-12 w-[3px] self-center rounded-full bg-tangerine" />
-        <span className="ml-2 text-3xl font-bold text-[var(--fg-3)]">{unit === 'eur' ? '€' : 'pts'}</span>
+        <span className="ml-2 text-3xl font-bold text-[var(--fg-3)]">{unit === 'eur' ? '€' : unit}</span>
       </span>
     </p>
   );
@@ -58,7 +61,7 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', 'back'];
 export interface AmountSheetProps {
   title: string;
   subtitle?: ReactNode;
-  unit: 'eur' | 'pts';
+  unit: AmountUnit;
   /** Máximo permitido (céntimos o puntos). */
   max: number;
   min?: number;
@@ -99,7 +102,7 @@ export function AmountSheet(p: AmountSheetProps) {
   const over = value > p.max;
   const under = value > 0 && value < min;
   const ok = value >= min && value <= p.max && !p.blocked;
-  const fmt = (n: number) => (unit === 'eur' ? euros(n) : `${n} pts`);
+  const fmt = (n: number) => (unit === 'eur' ? euros(n) : `${n} ${unit === 'min' ? 'min' : 'pts'}`);
   const reason = over ? (p.overReason?.(p.max) ?? `Como mucho ${fmt(p.max)}`) : under ? (p.underReason?.(min) ?? `Como mínimo ${fmt(min)}`) : '';
 
   useEffect(() => {
@@ -160,7 +163,7 @@ export function AmountSheet(p: AmountSheetProps) {
         {!p.locked ? (
           <div role="group" aria-label="Teclado numérico" className="mt-4 grid grid-cols-3 gap-x-2.5 gap-y-2">
             {KEYS.map((k) => {
-              const hidden = k === ',' && unit === 'pts';
+              const hidden = k === ',' && unit !== 'eur';
               if (hidden) return <span key={k} />;
               return (
                 <button

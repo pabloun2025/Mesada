@@ -102,7 +102,7 @@ export function AccountRail({ bank, wallet }: { bank: Bank; wallet: Wallet }) {
           <small className="text-xl font-bold">€</small>
         </AccountCard>
         <AccountCard tone="points" title="Cuenta de puntos" number={bank.accounts.points} foot={<>≈ {euros(wallet.points_value_cents)} por convertir</>}>
-          <span className={bank.points < 0 ? 'text-berry-deep' : ''}>{bank.points}</span>
+          <span className={bank.points < 0 ? 'text-[#9b1241]' : ''}>{bank.points}</span>
           <small className="text-xl font-bold">pts</small>
         </AccountCard>
       </div>

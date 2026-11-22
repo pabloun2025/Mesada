@@ -2,7 +2,7 @@ import { many, one, tx } from './db.js';
 import type { AuthUser } from './auth.js';
 import { badRequest, conflict, forbidden, notFound } from './errors.js';
 import { familyToday, getFamily, pointsToCents, centsToPoints } from './family.js';
-import { addMoney, addPoints, lockUser, moneyBalance, pointsBalance } from './ledger.js';
+import { addMoney, addPoints, LIFETIME_POINTS_SQL, lockUser, moneyBalance, pointsBalance } from './ledger.js';
 import { audit } from './audit.js';
 import { notify, notifyAdults } from './notify/dispatch.js';
 import { isValidDate, periodBounds } from './dates.js';
@@ -88,7 +88,7 @@ export async function recordPaymentTx(db: any, adult: AuthUser, p: PaymentInput)
     [adult.familyId, p.userId, p.amountCents, p.method, p.note ?? '', adult.id, p.idempotencyKey ?? null],
   );
   await addMoney(db, { familyId: adult.familyId, userId: p.userId, deltaCents: -p.amountCents, kind: 'payment', refId: pay.id, note: p.note ?? 'Pago', createdBy: adult.id, idempotencyKey: `payment:${pay.id}` });
-  await audit(db, adult.familyId, adult.id, 'allowance.payment', 'payment', pay.id, { userId: p.userId, cents: p.amountCents, method: p.method });
+  await audit(db, adult.familyId, adult.id, 'allowance.payment', 'payment', pay.id, { userId: p.userId, for: p.userId, cents: p.amountCents, method: p.method });
   if (p.notifyChild !== false) {
     const left = available - p.amountCents;
     await notify(db, {
@@ -114,7 +114,7 @@ export async function adjustPoints(adult: AuthUser, p: { userId: string; delta: 
     const kind = p.bonus && p.delta > 0 ? 'bonus' : 'adjustment';
     const r = await addPoints(db, { familyId: adult.familyId, userId: p.userId, delta: p.delta, kind, note: p.note, createdBy: adult.id, idempotencyKey: p.idempotencyKey ? `adj:${adult.familyId}:${p.idempotencyKey}` : null });
     if (r.duplicate) return { duplicate: true };
-    await audit(db, adult.familyId, adult.id, 'points.adjust', 'user', p.userId, { delta: p.delta, note: p.note, kind });
+    await audit(db, adult.familyId, adult.id, 'points.adjust', 'user', p.userId, { delta: p.delta, note: p.note, kind, for: p.userId });
     await notify(db, { userId: p.userId, event: 'points_adjusted', title: p.delta > 0 ? `+${p.delta} puntos` : `${p.delta} puntos`, body: p.note, link: '/progreso', dedupeKey: r.id ? `points:${r.id}` : null });
     return { duplicate: false, balance: await pointsBalance(db, p.userId) };
   });
@@ -129,7 +129,7 @@ export async function adjustMoney(adult: AuthUser, p: { userId: string; deltaCen
     const r = await addMoney(db, { familyId: adult.familyId, userId: p.userId, deltaCents: p.deltaCents, kind: 'adjustment', note: p.note, createdBy: adult.id, idempotencyKey: p.idempotencyKey ? `madj:${adult.familyId}:${p.idempotencyKey}` : null });
     if (r.duplicate) return { duplicate: true };
     if ((await moneyBalance(db, p.userId)) < 0) throw conflict('El ajuste dejaría el saldo en negativo', 'insufficient_balance');
-    await audit(db, adult.familyId, adult.id, 'money.adjust', 'user', p.userId, { cents: p.deltaCents, note: p.note });
+    await audit(db, adult.familyId, adult.id, 'money.adjust', 'user', p.userId, { cents: p.deltaCents, note: p.note, for: p.userId });
     return { duplicate: false };
   });
 }
@@ -150,7 +150,7 @@ export async function transferSavings(actor: AuthUser, p: { userId: string; cent
     const a = await addMoney(db, { familyId: actor.familyId, userId: p.userId, account: fromAcc, deltaCents: -p.cents, kind: 'transfer', note: 'Hucha', createdBy: actor.id, idempotencyKey: key ? key + ':out' : null });
     if (a.duplicate) return { duplicate: true };
     await addMoney(db, { familyId: actor.familyId, userId: p.userId, account: toAcc, deltaCents: p.cents, kind: 'transfer', note: 'Hucha', createdBy: actor.id, idempotencyKey: key ? key + ':in' : null });
-    await audit(db, actor.familyId, actor.id, 'savings.transfer', 'user', p.userId, { cents: p.cents, direction: p.direction });
+    await audit(db, actor.familyId, actor.id, 'savings.transfer', 'user', p.userId, { cents: p.cents, direction: p.direction, for: p.userId });
     const fam = await getFamily(db, actor.familyId);
     await evaluateBadges(db, p.userId, familyToday(fam), fam.timezone, 0);
     return { duplicate: false };
@@ -205,7 +205,7 @@ export async function walletSummary(db: any, familyId: string, userId: string) {
     db,
     `SELECT
       (SELECT COALESCE(SUM(delta),0) FROM points_ledger WHERE user_id = $1)::int AS points_available,
-      (SELECT COALESCE(SUM(delta),0) FROM points_ledger WHERE user_id = $1 AND kind IN ('task','bonus') AND delta > 0)::int AS points_lifetime,
+      (SELECT ${LIFETIME_POINTS_SQL} FROM points_ledger WHERE user_id = $1) AS points_lifetime,
       (SELECT COALESCE(SUM(delta_cents),0) FROM money_ledger WHERE user_id = $1 AND account = 'available')::int AS cents_pending,
       (SELECT COALESCE(SUM(delta_cents),0) FROM money_ledger WHERE user_id = $1 AND account = 'savings')::int AS cents_savings,
       (SELECT COALESCE(SUM(cents),0) FROM settlements WHERE user_id = $1)::int AS cents_converted_total,

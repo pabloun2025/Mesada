@@ -1,7 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
-import { describeAction } from '../lib/activity';
+import { describeEntry } from '../lib/activity';
 import { Button, Loading, PageHeader } from '../components/ui';
 
 export default function Activity() {
@@ -20,7 +20,7 @@ export default function Activity() {
         {entries.map((a: any) => (
           <li key={a.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 p-3.5 text-sm">
             <span className="num w-32 shrink-0 muted">{fmtDateTime(a.created_at)}</span>
-            <span className="min-w-0 flex-1"><span className="font-bold">{a.actor_name ?? 'Sistema'}</span> {describeAction(a)}</span>
+            <span className="min-w-0 flex-1"><span className="font-bold">{a.actor_name ?? 'Sistema'}</span> {describeEntry(a)}</span>
           </li>
         ))}
       </ol>

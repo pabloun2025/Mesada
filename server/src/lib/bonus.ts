@@ -87,6 +87,11 @@ export async function grantBonus(db: Db, c: GrantCtx) {
   const existing = await one<any>(db, 'SELECT * FROM bonus_grants WHERE instance_id = $1 FOR UPDATE', [c.instanceId]);
   if (existing) {
     if (!existing.voided_at) return existing;
+    if (existing.surprise) {
+      // Tras desmarcar se soltó la sorpresa: al reactivar hay que volver a ganarla (si otra repetición ya la ganó, no se repite).
+      const claim = await db.query('INSERT INTO bonus_claims(task_id, user_id, instance_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING task_id', [existing.task_id, c.userId, c.instanceId]);
+      if (claim.rowCount === 0 && !(await one(db, 'SELECT 1 FROM bonus_claims WHERE task_id = $1 AND user_id = $2 AND instance_id = $3', [existing.task_id, c.userId, c.instanceId]))) return null;
+    }
     await db.query('UPDATE bonus_grants SET voided_at = NULL WHERE id = $1', [existing.id]);
     await applyGrantEffects(db, existing, c);
     return { ...existing, voided_at: null };
@@ -115,14 +120,16 @@ export async function grantBonus(db: Db, c: GrantCtx) {
 }
 
 /** Anula el bono de una ocurrencia (corrección «Cumplida» → «No cumplida»): compensa puntos y minutos y retira lo pendiente. */
-export async function voidBonus(db: Db, c: GrantCtx & { seq: number }) {
+export async function voidBonus(db: Db, c: GrantCtx & { seq: number; releaseClaim?: boolean; reason?: string }) {
   const g = await one<any>(db, 'SELECT * FROM bonus_grants WHERE instance_id = $1 AND voided_at IS NULL FOR UPDATE', [c.instanceId]);
   if (!g) return;
   await db.query('UPDATE bonus_grants SET voided_at = now() WHERE id = $1', [g.id]);
+  // Desmarcar una tarea con sorpresa: la sorpresa vuelve a estar disponible (se gana la próxima vez).
+  if (c.releaseClaim && g.surprise) await db.query('DELETE FROM bonus_claims WHERE task_id = $1 AND user_id = $2 AND instance_id = $3', [g.task_id, c.userId, c.instanceId]);
   if (g.points) {
-    await addPoints(db, { familyId: c.familyId, userId: c.userId, delta: -g.points, kind: 'adjustment', refId: c.instanceId, note: `Corrección: bono de «${g.task_title}» anulado`, createdBy: c.actorId, idempotencyKey: `bonus-rev:${c.instanceId}:${c.seq}` });
+    await addPoints(db, { familyId: c.familyId, userId: c.userId, delta: -g.points, kind: 'adjustment', refId: c.instanceId, note: `Corrección: bono de «${g.task_title}» anulado${c.reason ? ` (${c.reason})` : ''}`, createdBy: c.actorId, idempotencyKey: `bonus-rev:${c.instanceId}:${c.seq}`, reversesEarning: true });
   }
   if (g.minutes) {
-    await addScreen(db, { familyId: c.familyId, userId: c.userId, delta: -g.minutes, kind: 'adjustment', refId: c.instanceId, note: `Corrección: bono de «${g.task_title}» anulado`, createdBy: c.actorId, idempotencyKey: `bonus-min-rev:${c.instanceId}:${c.seq}` });
+    await addScreen(db, { familyId: c.familyId, userId: c.userId, delta: -g.minutes, kind: 'adjustment', refId: c.instanceId, note: `Corrección: bono de «${g.task_title}» anulado${c.reason ? ` (${c.reason})` : ''}`, createdBy: c.actorId, idempotencyKey: `bonus-min-rev:${c.instanceId}:${c.seq}` });
   }
 }

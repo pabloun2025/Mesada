@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { newKey, post } from '../lib/api';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { api, newKey, post } from '../lib/api';
 import { euros, refCode } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
-import { minutesLabel } from '../lib/deadline';
+import { minutesHM, minutesLabel } from '../lib/deadline';
 import { PAY_METHODS, SCREEN_CATEGORIES, screenPhrase } from '../lib/screen';
-import type { PayMethod, ScreenCategory, User, Wallet } from '../lib/types';
-import { Button, Field, Sheet, useToast } from '../components/ui';
+import type { PayMethod, ScreenCategory, ScreenView, User, Wallet } from '../lib/types';
+import { Button, Field, Segmented, Sheet, useToast } from '../components/ui';
 import { AmountSheet } from './AmountSheet';
 import { useReceipt } from './Receipt';
 
@@ -101,33 +101,51 @@ export function PaySheet({ child, wallet, onClose }: { child: User; wallet: Wall
   );
 }
 
-/** «Dar pantalla»: gasta minutos del saldo común y deja en qué se usaron. */
+/**
+ * «Dar pantalla»: hoja de importe con teclado (como el resto del banco). «Dar» gasta minutos del saldo y deja en qué se usaron;
+ * «Regalar» suma minutos extra con un motivo. En pausa no se pueden dar minutos.
+ */
 export function GiveScreenSheet({ child, minutes, onClose }: { child: User; minutes: number; onClose: () => void }) {
-  const [value, setValue] = useState('');
+  const [mode, setMode] = useState<'spend' | 'gift'>('spend');
   const [category, setCategory] = useState<ScreenCategory>('videojuegos');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const toast = useToast();
   const invalidate = useInvalidateAll();
+  const view = useQuery({ queryKey: ['screen', child.id], queryFn: () => api<ScreenView>(`/screen/${child.id}`) });
+  const pause = view.data?.pause ?? null;
   const save = useMutation({
-    mutationFn: () => post('/screen/spend', { userId: child.id, minutes: parseMinutes(value, 1440), category, note }),
+    mutationFn: (n: number) => {
+      if (mode === 'spend') return post('/screen/spend', { userId: child.id, minutes: n, category, note });
+      if (!note.trim()) throw new Error('Cuéntale por qué se los regalas');
+      return post('/screen/adjust', { userId: child.id, delta: n, note });
+    },
     onSuccess: (r) => {
-      toast(r.applied < r.requested ? `Solo tenía ${r.applied} min. Le quedan 0 min` : `Hecho. Le quedan ${minutesLabel(r.balance)}`);
+      toast(mode === 'spend' && r.applied < r.requested ? `Solo tenía ${r.applied} min. Le quedan 0 min` : `Hecho. Le quedan ${minutesHM(r.balance)}`);
       invalidate();
       onClose();
     },
     onError: (e: Error) => setError(e.message),
   });
   return (
-    <Sheet open onClose={onClose} title={`Dar pantalla a ${child.display_name}`} footer={<Button className="w-full" loading={save.isPending} onClick={() => save.mutate()}>Dar minutos</Button>}>
-      <div className="space-y-4">
-        <p className="muted">Le quedan <strong className="num text-[var(--fg)]">{minutesLabel(minutes)}</strong>. Los minutos salen de su saldo.</p>
-        <MinutesField value={value} onChange={setValue} />
-        <CategoryPicker value={category} onChange={setCategory} />
-        <NoteField value={note} onChange={setNote} />
-        {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
-      </div>
-    </Sheet>
+    <AmountSheet
+      title={`Dar pantalla a ${child.display_name}`}
+      subtitle={<>Le quedan <b className="num text-[var(--fg)]">{minutesHM(minutes)}</b></>}
+      unit="min" max={mode === 'spend' ? minutes : 1440} chips={[15, 30, 60]} variant="success"
+      blocked={mode === 'spend' && !!pause}
+      info={mode === 'spend' && pause ? <span className="font-bold text-berry-deep">{pause.label}: ahora no se pueden dar minutos</span> : undefined}
+      after={(v) => (mode === 'spend' ? <>Le quedarán {minutesHM(minutes - v)}</> : <>Tendrá {minutesHM(minutes + v)}</>)}
+      overReason={(m) => (mode === 'spend' ? `Solo le quedan ${minutesHM(m)}` : `Como mucho ${minutesHM(m)}`)}
+      extra={(
+        <>
+          <Segmented label="Qué hacer" value={mode} onChange={setMode} options={[{ value: 'spend', label: 'Dar' }, { value: 'gift', label: 'Regalar' }]} />
+          {mode === 'spend' ? <CategoryPicker value={category} onChange={setCategory} /> : null}
+          <NoteField value={note} onChange={setNote} label={mode === 'spend' ? 'Nota (opcional)' : 'Motivo'} />
+        </>
+      )}
+      cta={(v) => (v ? `${mode === 'spend' ? 'Dar' : 'Regalar'} ${minutesHM(v)}` : mode === 'spend' ? 'Dar minutos' : 'Regalar minutos')}
+      error={error} loading={save.isPending} onSubmit={(v) => { setError(''); save.mutate(v); }} onClose={onClose}
+    />
   );
 }
 
