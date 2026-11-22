@@ -20,6 +20,7 @@ const Family = lazy(() => import('./pages/Family'));
 const Stats = lazy(() => import('./pages/Stats'));
 const Activity = lazy(() => import('./pages/Activity'));
 const Settings = lazy(() => import('./pages/Settings'));
+const RelativeHome = lazy(() => import('./pages/RelativeHome'));
 const ChildToday = lazy(() => import('./pages/ChildToday'));
 const ChildProgress = lazy(() => import('./pages/ChildProgress'));
 const ChildMoney = lazy(() => import('./pages/ChildMoney'));
@@ -73,12 +74,19 @@ function AppRoutes() {
   }
 
   try { localStorage.setItem(KNOWN, '1'); } catch { /* sin almacenamiento: se verá la bienvenida */ }
-  const adult = me.data.user.role === 'adult';
+  const adult = me.data.user.role === 'adult' && !me.data.user.is_relative;
+  const relative = me.data.user.role === 'adult' && !!me.data.user.is_relative;
   return (
     <Suspense fallback={<Loading />}>
       <Routes>
-        <Route element={<Layout />}>
-          {adult ? (
+        {/* La moneda va en la clave: si la familia la cambia, todo se vuelve a pintar con el formato nuevo. */}
+        <Route element={<Layout key={me.data.family.currency} />}>
+          {relative ? (
+            <>
+              <Route index element={<RelativeHome />} />
+              <Route path="perfil" element={<Profile />} />
+            </>
+          ) : adult ? (
             <>
               <Route index element={<ParentDashboard />} />
               <Route path="validar" element={<Approvals />} />

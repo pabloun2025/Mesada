@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getPool, many, one } from '../lib/db.js';
 import { requireAdult, requireUser, type AuthUser } from '../lib/auth.js';
 import { conflict, forbidden, notFound } from '../lib/errors.js';
-import { goalAmounts, listGoals } from '../lib/savings.js';
+import { createGoal, goalAmounts, listGoals } from '../lib/savings.js';
 import { familyToday, getFamily } from '../lib/family.js';
 import { previousPeriod, isValidDate } from '../lib/dates.js';
 import {
@@ -114,13 +114,15 @@ export default async function moneyRoutes(app: FastifyInstance) {
     return { goals: await listGoals(getPool(), userId) };
   });
 
+  // El hijo propone una meta (queda por aprobar); un adulto la crea ya activa (I19).
   app.post('/api/goals', async (req) => {
     const u = requireUser(req);
-    const b = z.object({ userId: uuid, title: z.string().trim().min(1).max(80), targetCents: z.number().int().positive().max(100000000) }).parse(req.body);
+    const b = z.object({
+      userId: uuid, title: z.string().trim().min(1).max(80), targetCents: z.number().int().positive().max(100000000),
+      emoji: z.string().trim().max(16).nullable().optional(),
+    }).parse(req.body);
     await assertCanView(u, b.userId);
-    const g = await one(getPool(), 'INSERT INTO savings_goals(family_id, user_id, title, target_cents) VALUES ($1,$2,$3,$4) RETURNING *', [u.familyId, b.userId, b.title, b.targetCents]);
-    await audit(getPool(), u.familyId, u.id, 'goal.create', 'savings_goal', g.id, b);
-    return { goal: g };
+    return { goal: await createGoal(u, b) };
   });
 
   app.delete('/api/goals/:id', async (req) => {
@@ -131,7 +133,7 @@ export default async function moneyRoutes(app: FastifyInstance) {
     await assertCanView(u, g.user_id);
     // Con dinero dentro no se quita: antes hay que sacarlo o canjearlo.
     if ((await goalAmounts(getPool(), id)).balance !== 0) throw conflict('Esta meta tiene dinero ahorrado. Sácalo o canjéala antes de quitarla', 'goal_not_empty');
-    await getPool().query('UPDATE savings_goals SET archived = true WHERE id = $1', [id]);
+    await getPool().query('UPDATE savings_goals SET archived = true, closed_at = COALESCE(closed_at, now()) WHERE id = $1', [id]);
     return { ok: true };
   });
 }

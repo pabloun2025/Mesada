@@ -3,13 +3,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api, post } from '../lib/api';
 import { ConsentBox, Honeypot } from '../components/Consent';
-import { Button, Field } from '../components/ui';
+import { Button, Field, Segmented } from '../components/ui';
+import { KINSHIPS } from '../lib/kinship';
 import { AuthShell } from './AuthShell';
 
 export function Setup() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [f, setF] = useState({ familyName: '', displayName: '', username: '', password: '', email: '' });
+  const [currency, setCurrency] = useState<'EUR' | 'USD'>('EUR');
+  const [relationship, setRelationship] = useState('');
   const [accept, setAccept] = useState(false);
   const [website, setWebsite] = useState('');
   const status = useQuery({ queryKey: ['setup'], queryFn: () => api<{ legalVersion: string }>('/setup/status') });
@@ -22,7 +25,7 @@ export function Setup() {
     setError('');
     setLoading(true);
     try {
-      await post('/setup', { ...f, acceptTerms: accept, termsVersion: status.data?.legalVersion ?? '', website });
+      await post('/setup', { ...f, currency, relationship: relationship || undefined, acceptTerms: accept, termsVersion: status.data?.legalVersion ?? '', website });
       await qc.invalidateQueries();
       navigate('/familia');
     } catch (err: any) {
@@ -33,10 +36,20 @@ export function Setup() {
   };
 
   return (
-    <AuthShell title="Crea tu familia" subtitle="Serás la persona administradora. Después podrás añadir al otro adulto y a los hijos.">
+    <AuthShell title="Crea tu familia" subtitle="Serás la cuenta principal. Después podrás invitar a otros adultos y parientes y añadir a los hijos.">
       <form onSubmit={submit} className="relative space-y-4">
         <Field label="Nombre de la familia">{(id) => <input id={id} className="field" placeholder="Familia García…" value={f.familyName} onChange={set('familyName')} required />}</Field>
         <Field label="Tu nombre">{(id) => <input id={id} className="field" value={f.displayName} onChange={set('displayName')} required />}</Field>
+        <Field label="Tu parentesco (opcional)">
+          {(id) => (
+            <select id={id} className="field" value={relationship} onChange={(e) => setRelationship(e.target.value)}>
+              <option value="">Sin indicar</option>
+              {KINSHIPS.filter((k) => !k.relative).map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+            </select>
+          )}
+        </Field>
+        <Segmented label="Moneda de la familia" value={currency} onChange={setCurrency} options={[{ value: 'EUR', label: '€ Euro' }, { value: 'USD', label: '$ Dólar' }]} />
+        <p className="-mt-2 text-sm muted">Solo cambia el símbolo y el formato (6,00 € o $6.00). Puedes cambiarla luego en Ajustes.</p>
         <Field label="Usuario" hint="Letras, números, punto o guion. Sin espacios.">
           {(id) => <input id={id} className="field" spellCheck={false} name="username" autoCapitalize="none" autoComplete="username" value={f.username} onChange={set('username')} required minLength={3} />}
         </Field>

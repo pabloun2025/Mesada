@@ -1,4 +1,5 @@
 export type Role = 'adult' | 'child';
+export type Relationship = 'mother' | 'father' | 'partner' | 'guardian' | 'grandparent' | 'aunt_uncle' | 'other';
 
 export interface User {
   id: string;
@@ -17,6 +18,13 @@ export interface User {
   is_superadmin?: boolean;
   terms_version?: string | null;
   terms_accepted_at?: string | null;
+  /** Parentesco de un adulto (vacío en los anteriores a I20) y texto libre de «Otro». */
+  relationship?: Relationship | null;
+  relationship_label?: string | null;
+  /** Cuenta principal: la que creó la familia (o a la que se cedió). */
+  is_principal?: boolean;
+  /** Pariente (abuelo/a, tío/a, otro): ver y animar. */
+  is_relative?: boolean;
 }
 
 export interface Family {
@@ -307,14 +315,34 @@ export interface Goal {
   user_id: string;
   title: string;
   target_cents: number;
-  status: 'active' | 'bought' | 'cashed_out';
+  status: 'proposed' | 'active' | 'bought' | 'cashed_out' | 'rejected';
+  emoji: string | null;
+  has_photo: boolean;
+  decision_note: string;
   price_cents: number | null;
   principal_cents: number;
   interest_cents: number;
   interest_earned_cents: number;
+  /** Aportes de padres y parientes (se pierden, como el interés, si se saca el ahorro antes de llegar). */
+  contributions_cents: number;
+  matched_cents: number;
   balance_cents: number;
   reached: boolean;
+  auto_percent: number;
+  auto_pending_percent: number | null;
+  match_per_cents: number | null;
+  match_gives_cents: number | null;
+  match_cap_cents: number | null;
+  /** Media de lo ganado por semana (últimas 4 semanas cerradas) y semanas que faltan; null si no hay datos. */
+  weekly_cents: number | null;
+  weeks_left: number | null;
+  contributions: { id: string; kind: 'goal_gift' | 'goal_match'; cents: number; note: string; created_at: string; reversed: boolean }[];
   pending_request: { id: string; kind: 'redeem' | 'cashout'; status: string } | null;
+}
+
+export interface GoalProposals {
+  proposals: { id: string; user_id: string; title: string; target_cents: number; emoji: string | null; has_photo: boolean; created_at: string; display_name: string; avatar: string; color: string }[];
+  autoRequests: { id: string; user_id: string; title: string; auto_percent: number; auto_pending_percent: number; created_at: string; display_name: string; avatar: string; color: string }[];
 }
 
 export interface GoalRequest {

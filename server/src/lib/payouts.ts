@@ -10,7 +10,7 @@ import { familyToday, getFamily } from './family.js';
 import { assertNotPaused } from './screen-adjust.js';
 import { assertCanWithdraw } from './bank.js';
 
-const fmtEur = (c: number) => `${(c / 100).toFixed(2).replace('.', ',')} €`;
+import { fmtMoney } from './currency.js';
 const METHOD_PHRASE: Record<string, string> = { cash: ' en efectivo', transfer: ' por transferencia', bizum: ' por Bizum', other: '' };
 
 type NewRequest = { kind: 'money' | 'screen'; amountCents?: number; minutes?: number; category?: ScreenCategory; note?: string; idempotencyKey?: string };
@@ -23,6 +23,8 @@ export async function createPayoutRequest(child: AuthUser, p: NewRequest) {
   if (!isMoney && (!Number.isInteger(p.minutes) || p.minutes! <= 0 || p.minutes! > 1440)) throw badRequest('Minutos no válidos');
   if (!isMoney && !p.category) throw badRequest('Elige en qué quieres usar la pantalla');
   return tx(async (db) => {
+    const currency = (await getFamily(db, child.familyId)).currency;
+    const fmtEur = (c: number) => fmtMoney(c, currency);
     await lockUser(db, child.id);
     const idem = p.idempotencyKey ? `${child.id}:${p.idempotencyKey}` : null;
     if (idem) {
@@ -83,7 +85,9 @@ export async function cancelPayoutRequest(child: AuthUser, id: string) {
  */
 export async function approvePayoutRequest(adult: AuthUser, id: string, o: { method?: string; note?: string }) {
   return tx(async (db) => {
+    const currency = (await getFamily(db, adult.familyId)).currency;
     const r = await loadRequest(db, adult.familyId, id);
+    const fmtEur = (c: number) => fmtMoney(c, currency);
     if (r.status === 'approved') return { request: r, duplicate: true, reduced: (r.granted_cents ?? r.amount_cents) < (r.amount_cents ?? 0) || (r.granted_minutes ?? r.minutes) < (r.minutes ?? 0) };
     if (r.status !== 'pending') throw conflict('Esta petición ya está resuelta', 'already_decided');
     await lockUser(db, r.user_id);
@@ -133,7 +137,9 @@ export async function approvePayoutRequest(adult: AuthUser, id: string, o: { met
 
 export async function rejectPayoutRequest(adult: AuthUser, id: string, note = '') {
   return tx(async (db) => {
+    const currency = (await getFamily(db, adult.familyId)).currency;
     const r = await loadRequest(db, adult.familyId, id);
+    const fmtEur = (c: number) => fmtMoney(c, currency);
     if (r.status === 'rejected') return { request: r, duplicate: true };
     if (r.status !== 'pending') throw conflict('Esta petición ya está resuelta', 'already_decided');
     const upd = await one(db, `UPDATE payout_requests SET status = 'rejected', decision_note = $2, decided_by = $3, decided_at = now() WHERE id = $1 RETURNING *`, [id, note.trim(), adult.id]);

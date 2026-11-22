@@ -32,6 +32,7 @@ const mk = async (role: string, name: string, username: string, pw: string, avat
   )).id as string;
 
 const ana = await mk('adult', 'Ana', 'ana', 'demo-mesada', 'owl', 'indigo', null);
+await pool.query('UPDATE users SET is_principal = true, relationship = $2 WHERE id = $1', [ana, 'mother']); // la que crea la familia es la cuenta principal
 const carlos = await mk('adult', 'Carlos', 'carlos', 'demo-mesada', 'bear', 'sky', null);
 const lucia = await mk('child', 'Lucía', 'lucia', '1414', 'fox', 'tangerine', 2012, 180);
 const hugo = await mk('child', 'Hugo', 'hugo', '1111', 'cat', 'leaf', 2015, 140);

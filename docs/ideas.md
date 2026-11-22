@@ -235,7 +235,9 @@ Cuando una familia nueva entra por primera vez, un asistente paso a paso le ayud
 - **Tareas sugeridas:** lista por edad, ya marcada; el adulto desmarca lo que no sirva.
 - Cada paso explica en una frase qué es y para qué sirve (modo tutorial).
 
-## I19 · Meta de ahorro visible (22/11) — pendiente, programar tras lo actual
+## I19 · Meta de ahorro visible (22/11)
+
+**Estado: construida (23/11), ver D59 y D60.**
 
 Hoy la meta está escondida en «Mi banco › Mis productos». Pasa a ser una «meta de ahorro» con presencia propia.
 
@@ -246,3 +248,39 @@ Hoy la meta está escondida en «Mi banco › Mis productos». Pasa a ser una «
   - «Te faltan X semanas», calculado con lo que suele ganar por semana.
   - Ahorro automático: un % de cada cierre de semana va solo a la meta.
   - Aporte de los padres: el adulto suma un empujón (p. ej. 1 € por cada 4 € ahorrados).
+
+## I20 · Otros adultos, parientes y moneda (22/11)
+
+**Estado: construida (23/11), ver D61, D62 y D63.** Aclaración del dueño: madre, padre, pareja y tutor/a legal son adultos completos con los mismos permisos; la única diferencia es la **cuenta principal** (la que creó la familia), que es quien invita y quita adultos y parientes y puede ceder el papel. En la interfaz se llama «cuenta principal», no «organizador».
+
+- **Quién añade:** la cuenta principal (la que creó la familia) puede invitar a otro adulto (madre, padre, pareja, tutor/a legal) y a parientes (abuelos, tíos…).
+- **Parentesco:** se elige de una lista: Madre, Padre, Pareja, Tutor/a legal, Abuelo/a, Tío/a u Otro (texto libre). Se ve en Familia y en los avisos.
+- **Permisos:**
+  - Madre, padre, pareja y tutor/a legal: adulto completo, como hoy.
+  - Pariente: **ver y animar**. Ve el progreso de los niños, puede felicitar y dar premios o aportes. No valida tareas, no toca el dinero, los ajustes ni los miembros, y no borra datos.
+- **Datos de contacto:** el organizador pone el correo y el teléfono del otro adulto. A esa persona le llega una invitación por correo con un enlace para crear su contraseña. Después puede cambiar sus datos en Mi perfil.
+- **Moneda:** por familia, € o $. Se elige al crear la familia y se puede cambiar en Ajustes. Cambia el símbolo y el formato (6,00 € / $6.00); no convierte importes. Afecta a la app, los avisos, el ZIP de datos y los textos.
+- **Ficha del miembro (aclaración posterior):** la cuenta principal puede poner y cambiar el correo y el teléfono de WhatsApp de cualquier miembro (adultos, parientes e hijos); cada uno los cambia luego en Mi perfil. Solo la principal o la propia persona (403 para el resto); se avisa en la app al adulto o pariente afectado y queda en el historial.
+
+## I21 · Tiempo de pantalla más claro (22/11) — pendiente
+
+Hoy el hijo ve un total con dos líneas debajo y dos botones parecidos («Pedir pantalla» y «Anotar pantalla»). Se rehace para que se entienda de un vistazo, tanto el tiempo libre de cada semana como el extra que se gana.
+
+- **Vista del hijo: dos baterías.**
+  - «Semana» (azul): el plan gratuito; se recarga cada lunes.
+  - «Ganado» (dorado): minutos ganados con tareas, cada lote con su fecha de caducidad.
+  - Se gasta primero lo que caduca antes, y se ve cómo baja cada batería.
+- **Gastar: un solo botón «Usar pantalla».** Elige 15, 30 o 60 min, arranca una cuenta atrás y se descuenta solo. Si la familia lo exige, antes lo aprueba un adulto. Sustituye a «Pedir» y «Anotar».
+- **Ganar:**
+  - «+15 min» (o lo que toque) visible en cada tarea, igual que puntos y euros.
+  - Animación al validarse: los minutos «vuelan» a la batería Ganado.
+  - Aviso 3 días antes de caducar: «El lunes caducan 20 min: úsalos».
+- **Padres: una sola pantalla «Pantalla»** por hijo: plan semanal, saldo de cada batería, peticiones, ajustes manuales y pausa, todo junto.
+- **Ampliación del dueño (22/11): sistema completo de gestión del tiempo.**
+  - **Días de uso:** el plan semanal gratuito indica también qué días se puede usar (p. ej. solo fin de semana, o L–V máximo 30 min y S–D libre). Fuera de esos días el botón no arranca.
+  - **Espacio propio del hijo:** una sección «Mi pantalla» clara y separada. Al empezar el videojuego, iPad u ordenador, enciende el temporizador, que va descontando de su tiempo disponible en cuenta atrás.
+  - **El padre se entera y puede actuar:** al encender o apagar el temporizador le llega una notificación. El padre también puede encenderlo o pararlo desde su app si el hijo no lo hizo.
+  - **Fin del tiempo:** cuando se acaba salta una alarma (sonido y vibración en el móvil del hijo) y una notificación al hijo y a los padres. Aviso previo a los 5 min.
+  - **Castigos:** bloquear días u horas concretas (p. ej. «sin pantalla hasta el jueves» o «nada de 20 a 22 h»). Se ve en ambas apps con su motivo y cuándo termina.
+  - **Retos para desbloquear:** el padre puede asociar un reto al bloqueo (p. ej. «lee 20 min» u «ordena tu cuarto»); al validarlo, el bloqueo se levanta o se acorta.
+  - **Historial:** registro de sesiones (inicio, fin, quién lo encendió) para padres e hijo.

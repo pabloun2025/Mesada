@@ -8,6 +8,8 @@ import { notify, notifyAdults } from './notify/dispatch.js';
 import { isValidDate, periodBounds } from './dates.js';
 import { evaluateBadges } from './gamification.js';
 import { capUsedBetween } from './cap.js';
+import { fmtMoney } from './currency.js';
+import { applyAutoSave } from './savings.js';
 
 function periodLabel(start: string, end: string) {
   const f = (d: string, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('es-ES', { ...o, timeZone: 'UTC' }).format(new Date(`${d}T00:00:00Z`));
@@ -59,14 +61,15 @@ export async function settlePeriod(adult: AuthUser, userId: string, anyDateInPer
     if (cents > 0) {
       await addMoney(db, { familyId: adult.familyId, userId, deltaCents: cents, kind: 'conversion', refId: s.id, note: `Cierre ${periodLabel(start, end)}`, createdBy: adult.id, idempotencyKey: `settle-eur:${s.id}` });
     }
-    await audit(db, adult.familyId, adult.id, 'allowance.settle', 'settlement', s.id, { userId, start, end, points: converted, cents, capped });
-    await notify(db, { userId, event: 'settlement', title: 'Cierre de periodo', body: `${converted} puntos convertidos en ${(cents / 100).toFixed(2).replace('.', ',')} €`, link: '/mesada', dedupeKey: `settlement:${s.id}` });
+    // Ahorro automático (I19): el % acordado de lo cobrado va solo a cada meta.
+    const autoSaved = await applyAutoSave(db, adult.familyId, userId, s.id, cents, fam.currency, adult.id);
+    await audit(db, adult.familyId, adult.id, 'allowance.settle', 'settlement', s.id, { userId, start, end, points: converted, cents, capped, autoSaved });
+    await notify(db, { userId, event: 'settlement', title: 'Cierre de periodo', body: `${converted} puntos convertidos en ${fmtMoney(cents, fam.currency)}`, link: '/mesada', dedupeKey: `settlement:${s.id}` });
     return s;
   });
 }
 
 const METHOD_PHRASE: Record<string, string> = { cash: ' en efectivo', transfer: ' por transferencia', bizum: ' por Bizum', other: '' };
-const fmtEur = (c: number) => `${(c / 100).toFixed(2).replace('.', ',')} €`;
 
 type PaymentInput = { userId: string; amountCents: number; method: string; note?: string; idempotencyKey?: string; notifyChild?: boolean };
 
@@ -80,6 +83,7 @@ export async function recordPaymentTx(db: any, adult: AuthUser, p: PaymentInput)
   }
   await lockUser(db, p.userId);
   const available = await moneyBalance(db, p.userId);
+  const cur = (await getFamily(db, adult.familyId)).currency;
   if (p.amountCents > available) throw conflict('El pago supera el saldo pendiente de este hijo', 'insufficient_balance');
   const pay = await one(
     db,
@@ -91,6 +95,7 @@ export async function recordPaymentTx(db: any, adult: AuthUser, p: PaymentInput)
   await audit(db, adult.familyId, adult.id, 'allowance.payment', 'payment', pay.id, { userId: p.userId, for: p.userId, cents: p.amountCents, method: p.method });
   if (p.notifyChild !== false) {
     const left = available - p.amountCents;
+    const fmtEur = (c: number) => fmtMoney(c, cur);
     await notify(db, {
       userId: p.userId, event: 'payment',
       title: `${adult.displayName} te ha pagado ${fmtEur(p.amountCents)}${METHOD_PHRASE[p.method] ?? ''}.`,

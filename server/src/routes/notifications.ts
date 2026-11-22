@@ -2,27 +2,25 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { getPool, many, one, tx } from '../lib/db.js';
-import { createSession, hashPassword, requireAdult, requireUser, setSessionCookie, type AuthUser } from '../lib/auth.js';
+import { createSession, hashPassword, requireAdult, requirePrincipal, requireUser, setSessionCookie, type AuthUser } from '../lib/auth.js';
 import { badRequest, conflict, forbidden, HttpError, notFound } from '../lib/errors.js';
 import { LEGAL_VERSION } from '../lib/legal.js';
 import { enforceLimit } from '../lib/limits.js';
 import { audit } from '../lib/audit.js';
 import { CHANNELS, EVENTS, isEventKey } from '../lib/notify/events.js';
-import { absoluteLink, channelBlockReason, sendSystemEmail } from '../lib/notify/dispatch.js';
+import { absoluteLink, channelBlockReason, notify, sendSystemEmail } from '../lib/notify/dispatch.js';
 import { channelStatus } from '../lib/notify/providers.js';
 import { usage } from '../lib/notify/worker.js';
 import { lineConnect, lineStatus } from '../lib/notify/whatsapp-line.js';
 import { config } from '../lib/config.js';
 import { adultPassword, publicUser, usernameSchema } from './auth.js';
+import { phoneSchema, relationshipLabelSchema, relationshipSchema } from '../lib/schemas.js';
+import { randomUUID } from 'node:crypto';
+import { isRelativeKind, kinshipText, whoText } from '../lib/kinship.js';
 
 const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'hora no válida (HH:MM)');
-const phone = z
-  .string()
-  .trim()
-  .transform((s) => s.replace(/[\s.-]/g, ''))
-  .transform((s) => (/^\d{9}$/.test(s) ? `+34${s}` : s.startsWith('00') ? `+${s.slice(2)}` : s))
-  .refine((s) => /^\+[1-9]\d{7,14}$/.test(s), 'teléfono no válido (usa formato +34600000000)');
+const phone = phoneSchema;
 
 /** Un adulto gestiona sus avisos y los de los hijos; no los de otro adulto. Un hijo solo consulta los suyos. */
 async function assertCanManage(u: AuthUser, userId: string) {
@@ -86,10 +84,18 @@ export default async function notificationRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  /**
+   * Correo y teléfono (WhatsApp) de un miembro. Los cambia la cuenta principal (en cualquier miembro: adultos, parientes e hijos)
+   * o el propio miembro; ningún otro adulto ni pariente (403). Los avisos ya encolados pasan a usar el dato nuevo.
+   */
   app.put('/api/notify/contact/:userId', async (req) => {
     const u = requireAdult(req);
     const { userId } = z.object({ userId: z.string().uuid() }).parse(req.params);
-    await assertCanManage(u, userId);
+    const m = await one<{ id: string; role: string; email: string | null; phone: string | null; whatsapp_consent_at: string | null; active: boolean }>(
+      getPool(), 'SELECT id, role, email, phone, whatsapp_consent_at, active FROM users WHERE id = $1 AND family_id = $2', [userId, u.familyId],
+    );
+    if (!m) throw notFound('Miembro no encontrado');
+    if (m.id !== u.id && !u.isPrincipal) throw forbidden('Solo la cuenta principal o la propia persona pueden cambiar su correo y su teléfono');
     const b = z
       .object({
         // Sin `email`, el correo no se toca (el perfil solo cambia el WhatsApp).
@@ -99,17 +105,39 @@ export default async function notificationRoutes(app: FastifyInstance) {
       })
       .parse(req.body);
     const keepEmail = b.email === undefined;
-    const email = b.email || null;
+    const email = keepEmail ? m.email : b.email || null;
     const tel = b.phone || null;
-    const dup = email ? await one(getPool(), 'SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [email, userId]) : null;
+    const dup = email && email !== m.email ? await one(getPool(), 'SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [email, userId]) : null;
     if (dup) throw badRequest('Ese correo ya lo usa otra cuenta');
-    await getPool().query(
-      `UPDATE users SET email = CASE WHEN $5 THEN email ELSE $2 END, phone = $3,
-         whatsapp_consent_at = CASE WHEN $4 AND $3::text IS NOT NULL THEN COALESCE(whatsapp_consent_at, now()) ELSE NULL END
-       WHERE id = $1`,
-      [userId, email, tel, b.whatsappConsent, keepEmail],
-    );
-    await audit(getPool(), u.familyId, u.id, 'notify.contact_update', 'user', userId, { email: keepEmail ? 'sin cambios' : !!email, phone: !!tel, whatsappConsent: b.whatsappConsent });
+    // El consentimiento de WhatsApp de un adulto o pariente lo da esa persona: si la principal le cambia el número, queda por dar de nuevo.
+    const otherAdult = m.role === 'adult' && m.id !== u.id;
+    const emailChanged = (email ?? null) !== (m.email ?? null);
+    const phoneChanged = tel !== (m.phone ?? null);
+    const consent = otherAdult ? (phoneChanged ? false : !!m.whatsapp_consent_at) : b.whatsappConsent;
+    await tx(async (db) => {
+      await db.query(
+        `UPDATE users SET email = $2, phone = $3,
+           whatsapp_consent_at = CASE WHEN $4 AND $3::text IS NOT NULL THEN COALESCE(whatsapp_consent_at, now()) ELSE NULL END
+         WHERE id = $1`,
+        [userId, email, tel, consent],
+      );
+      // Los avisos usan siempre el dato más reciente: lo que esperaba en la cola se reencamina (o se omite si ya no hay dónde enviarlo).
+      if (emailChanged) {
+        await db.query(`UPDATE notification_outbox SET to_address = $2, status = CASE WHEN $2::text IS NULL THEN 'skipped' ELSE status END WHERE user_id = $1 AND channel = 'email' AND status = 'pending'`, [userId, email]);
+      }
+      if (phoneChanged || (!consent && m.whatsapp_consent_at)) {
+        await db.query(`UPDATE notification_outbox SET to_address = $2, status = CASE WHEN $2::text IS NULL OR NOT $3 THEN 'skipped' ELSE status END WHERE user_id = $1 AND channel = 'whatsapp' AND status = 'pending'`, [userId, tel, consent]);
+      }
+      await audit(db, u.familyId, u.id, 'notify.contact_update', 'user', userId, { for: userId, email: keepEmail ? 'sin cambios' : emailChanged ? (email ? 'cambiado' : 'quitado') : 'sin cambios', phone: phoneChanged ? (tel ? 'cambiado' : 'quitado') : 'sin cambios', whatsappConsent: consent });
+      // Si la principal cambia los datos de otro adulto o pariente con cuenta activa, se le avisa en la app.
+      if (otherAdult && m.active && (emailChanged || phoneChanged)) {
+        const what = [emailChanged ? 'tu correo' : '', phoneChanged ? 'tu teléfono' : ''].filter(Boolean).join(' y ');
+        await notify(db, {
+          userId, event: 'family_change', title: `${whoText(u.displayName, u.relationship, u.relationshipLabel)} ha cambiado ${what}`,
+          body: 'Puedes revisarlo y cambiarlo en Mi perfil.', link: '/perfil', dedupeKey: `contact-change:${userId}:${randomUUID()}`,
+        });
+      }
+    });
     return { ok: true };
   });
 
@@ -219,10 +247,19 @@ export default async function notificationRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // --- Invitaciones por correo para otro adulto de la familia ---
+  // --- Invitaciones por correo para otro adulto o pariente (solo la cuenta principal; D59) ---
   app.post('/api/invitations', async (req) => {
-    const u = requireAdult(req);
-    const b = z.object({ email: z.string().trim().toLowerCase().email('correo no válido').max(200), displayName: z.string().trim().min(1).max(60) }).parse(req.body);
+    const u = requirePrincipal(req);
+    const b = z
+      .object({
+        email: z.string().trim().toLowerCase().email('correo no válido').max(200),
+        displayName: z.string().trim().min(1).max(60),
+        relationship: relationshipSchema,
+        relationshipLabel: relationshipLabelSchema.optional(),
+        phone: z.union([z.literal(''), phoneSchema]).nullable().optional(),
+      })
+      .refine((v) => v.relationship !== 'other' || !!v.relationshipLabel, { message: 'Escribe qué parentesco tiene', path: ['relationshipLabel'] })
+      .parse(req.body);
     enforceLimit(req, 'invite', config.limits.invitePerHour);
     if (await one(getPool(), 'SELECT 1 FROM users WHERE lower(email) = $1', [b.email])) throw badRequest('Ese correo ya tiene una cuenta');
     const open = (await one<{ n: number }>(getPool(), `SELECT count(*)::int AS n FROM invitations WHERE family_id = $1 AND accepted_at IS NULL AND expires_at > now()`, [u.familyId]))!.n;
@@ -231,35 +268,50 @@ export default async function notificationRoutes(app: FastifyInstance) {
     if (members >= config.caps.maxMembers) throw conflict(`Una familia puede tener hasta ${config.caps.maxMembers} personas.`, 'too_many_members');
     const token = crypto.randomBytes(32).toString('base64url');
     const fam = await one(getPool(), 'SELECT name FROM families WHERE id = $1', [u.familyId]);
+    const label = b.relationship === 'other' ? b.relationshipLabel! : null;
+    const relative = isRelativeKind(b.relationship);
     await tx(async (db) => {
       const inv = await one(
         db,
-        `INSERT INTO invitations(family_id, email, display_name, token_hash, invited_by, expires_at) VALUES ($1,$2,$3,$4,$5, now() + interval '7 days') RETURNING id`,
-        [u.familyId, b.email, b.displayName, sha256(token), u.id],
+        `INSERT INTO invitations(family_id, email, display_name, token_hash, invited_by, expires_at, relationship, relationship_label, phone)
+         VALUES ($1,$2,$3,$4,$5, now() + interval '7 days',$6,$7,$8) RETURNING id`,
+        [u.familyId, b.email, b.displayName, sha256(token), u.id, b.relationship, label, b.phone || null],
       );
       await sendSystemEmail(db, {
         familyId: u.familyId,
         to: b.email,
         event: 'invitation',
-        subject: `${u.displayName} te invita a ${fam.name} en DiploP`,
-        body: `Hola, ${b.displayName}. ${u.displayName} te invita a gestionar las tareas y la mesada de ${fam.name}. Crea tu usuario con el enlace; caduca en 7 días.`,
+        subject: `${whoText(u.displayName, u.relationship, u.relationshipLabel)} te invita a ${fam.name} en DiploP`,
+        body: relative
+          ? `Hola, ${b.displayName}. ${u.displayName} te invita a ver cómo van las tareas y la mesada de ${fam.name} y a animar a los niños con felicitaciones y aportes a sus metas de ahorro. Crea tu usuario con el enlace; caduca en 7 días.`
+          : `Hola, ${b.displayName}. ${u.displayName} te invita a gestionar las tareas y la mesada de ${fam.name}. Crea tu usuario con el enlace; caduca en 7 días.`,
         link: absoluteLink(`/invitacion?token=${token}`) ?? `/invitacion?token=${token}`,
         dedupeKey: `invitation:${inv.id}`,
       });
-      await audit(db, u.familyId, u.id, 'invitation.create', 'invitation', inv.id, { email: b.email });
+      await audit(db, u.familyId, u.id, 'invitation.create', 'invitation', inv.id, { relationship: b.relationship });
     });
     return { ok: true };
   });
 
   app.get('/api/invitations', async (req) => {
-    const u = requireAdult(req);
+    const u = requirePrincipal(req);
     return {
       invitations: await many(
         getPool(),
-        `SELECT id, email, display_name, expires_at, accepted_at, created_at FROM invitations WHERE family_id = $1 ORDER BY created_at DESC LIMIT 20`,
+        `SELECT id, email, display_name, relationship, relationship_label, expires_at, accepted_at, created_at FROM invitations WHERE family_id = $1 ORDER BY created_at DESC LIMIT 20`,
         [u.familyId],
       ),
     };
+  });
+
+  // Anular una invitación que aún no se ha usado.
+  app.post('/api/invitations/:id/cancel', async (req) => {
+    const u = requirePrincipal(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const r = await getPool().query('DELETE FROM invitations WHERE id = $1 AND family_id = $2 AND accepted_at IS NULL', [id, u.familyId]);
+    if (!r.rowCount) throw notFound('Invitación no encontrada o ya usada');
+    await audit(getPool(), u.familyId, u.id, 'invitation.cancel', 'invitation', id);
+    return { ok: true };
   });
 
   app.post('/api/invitations/lookup', async (req) => {
@@ -267,7 +319,7 @@ export default async function notificationRoutes(app: FastifyInstance) {
     enforceLimit(req, 'invite-lookup', config.limits.inviteAcceptPerHour * 2);
     const inv = await one(
       getPool(),
-      `SELECT i.email, i.display_name, f.name AS family_name FROM invitations i JOIN families f ON f.id = i.family_id
+      `SELECT i.email, i.display_name, i.relationship, i.relationship_label, f.name AS family_name FROM invitations i JOIN families f ON f.id = i.family_id
         WHERE i.token_hash = $1 AND i.accepted_at IS NULL AND i.expires_at > now()`,
       [sha256(b.token)],
     );
@@ -294,11 +346,12 @@ export default async function notificationRoutes(app: FastifyInstance) {
       if (members >= config.caps.maxMembers) throw conflict('La familia ya tiene el máximo de personas.', 'too_many_members');
       const user = await one(
         db,
-        `INSERT INTO users(family_id, role, display_name, username, password_hash, email, avatar, color, terms_version, terms_accepted_at) VALUES ($1,'adult',$2,$3,$4,$5,'bear','sky',$6, now()) RETURNING id`,
-        [inv.family_id, inv.display_name, b.username, await hashPassword(b.password), inv.email, LEGAL_VERSION],
+        `INSERT INTO users(family_id, role, display_name, username, password_hash, email, phone, relationship, relationship_label, avatar, color, terms_version, terms_accepted_at)
+         VALUES ($1,'adult',$2,$3,$4,$5,$6,$7,$8,'bear','sky',$9, now()) RETURNING id`,
+        [inv.family_id, inv.display_name, b.username, await hashPassword(b.password), inv.email, inv.phone, inv.relationship ?? 'partner', inv.relationship_label, LEGAL_VERSION],
       );
       await db.query('UPDATE invitations SET accepted_at = now(), accepted_user_id = $2 WHERE id = $1', [inv.id, user.id]);
-      await audit(db, inv.family_id, user.id, 'invitation.accept', 'invitation', inv.id, { displayName: inv.display_name });
+      await audit(db, inv.family_id, user.id, 'invitation.accept', 'invitation', inv.id, { displayName: inv.display_name, relationship: inv.relationship });
       const s = await createSession(db, user.id, req.headers['user-agent']);
       return { userId: user.id as string, ...s };
     });

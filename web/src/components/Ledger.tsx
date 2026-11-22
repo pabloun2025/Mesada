@@ -9,7 +9,7 @@ import type { ScreenEntry, ScreenPauseRow, ScreenView } from '../lib/types';
 const KIND: Record<string, string> = {
   task: 'Tarea', adjustment: 'Ajuste', bonus: 'Extra', redemption: 'Recompensa', refund: 'Devolución', conversion: 'Cierre',
   payment: 'Pago', transfer: 'Ahorro', exchange: 'Canje', advance: 'Adelanto', loan: 'Préstamo', loan_repayment: 'Cuota del préstamo',
-  loan_interest: 'Interés del préstamo', interest: 'Interés', interest_forfeit: 'Interés perdido', goal_redeem: 'Meta',
+  loan_interest: 'Interés del préstamo', interest: 'Interés', interest_forfeit: 'Interés perdido', goal_redeem: 'Meta', goal_auto: 'Ahorro automático', goal_match: 'Aporte de los padres', goal_gift: 'Aporte', goal_reversal: 'Aporte anulado',
 };
 
 export const LEDGER_KIND = KIND;

@@ -84,7 +84,7 @@ describe('Alta con consentimiento (D48)', () => {
   });
 
   it('quien acepta una invitación también acepta los textos', async () => {
-    await F.mama.post('/api/invitations', { email: 'abuela@example.com', displayName: 'Abuela' });
+    await F.mama.post('/api/invitations', { email: 'abuela@example.com', displayName: 'Abuela', relationship: 'grandparent' });
     const out = (await pool().query(`SELECT link FROM notification_outbox WHERE event = 'invitation'`)).rows[0];
     const token = new URL(out.link, 'http://x').searchParams.get('token')!;
     const c = new Client(app);
@@ -225,7 +225,7 @@ describe('Borrar la familia entera (D49)', () => {
     const gp = await addPhoto(G.ids.family, G.ids.lucia, 'De G', 'g.jpg');
     const fp = await addPhoto(F.ids.family, F.ids.lucia, 'De F', 'f.jpg');
     await G.mama.post('/api/adjustments/points', { userId: G.ids.lucia, delta: 30, note: 'Regalo', bonus: true });
-    await G.mama.post('/api/invitations', { email: 'tio@example.com', displayName: 'Tío' });
+    await G.mama.post('/api/invitations', { email: 'tio@example.com', displayName: 'Tío', relationship: 'aunt_uncle' });
     await pool().query(`INSERT INTO admin_audit(actor_id, action, family_id) VALUES ($1, 'family.block', $2)`, [F.ids.mama, G.ids.family]);
 
     const r = await del(G.mama);

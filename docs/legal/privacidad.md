@@ -1,6 +1,6 @@
 # Política de privacidad
 
-_Versión 2026-11-22 · Última actualización: 22 de noviembre de 2026_
+_Versión 2026-11-23 · Última actualización: 23 de noviembre de 2026_
 
 DiploP es una aplicación para que las familias reparta tareas, puntos y mesada. Aquí te contamos, con frases cortas, qué datos guardamos, para qué, cuánto tiempo, dónde y cómo ejercer tus derechos.
 
@@ -14,21 +14,26 @@ DiploP guarda datos de niños y niñas. Por eso:
 
 - **Solo un adulto crea la familia.** Los hijos no se registran por su cuenta: el adulto les crea el usuario y el PIN.
 - **El adulto da el consentimiento por ellos.** Al marcar la casilla de la creación de la familia, declaras que eres mayor de edad y que tienes la patria potestad o la tutela de los menores que añadas, y aceptas esta política en tu nombre y en el suyo.
-- **Los adultos que se unen** por invitación también aceptan esta política al crear su cuenta.
+- **Los adultos y parientes que se unen** por invitación también aceptan esta política al crear su cuenta.
+- **Quien invita responde de la invitación.** Solo la cuenta principal de la familia (la que la creó) puede invitar a otro adulto o a un pariente, y al hacerlo declara que esa persona sabe que le invita y que cuenta con su permiso para dar su correo y su teléfono.
 - Guardamos el **mínimo**: te recomendamos usar un nombre de pila o un apodo para los menores, no apellidos ni datos que no hagan falta.
 - No hay publicidad, no vendemos datos, no hacemos perfiles ni tomamos decisiones automáticas sobre las personas.
 
 ## Qué datos guardamos
 
-**De los adultos:** nombre, usuario, correo, contraseña (solo una huella irreversible, nunca la contraseña), teléfono si lo pones para recibir avisos por WhatsApp, avatar y color, año de nacimiento si lo indicas, fecha y versión en que aceptaste esta política y la fecha del último acceso.
+**De los adultos y parientes:** nombre, usuario, correo, contraseña (solo una huella irreversible, nunca la contraseña), parentesco con los niños (madre, padre, pareja, tutor/a legal, abuelo/a, tío/a u otro, con el texto que se escriba), teléfono (lo da la cuenta principal al invitarte o lo pones tú; no se usa para WhatsApp si tú no lo activas), avatar y color, año de nacimiento si lo indicas, fecha y versión en que aceptaste esta política y la fecha del último acceso.
 
 **De los hijos:** nombre o apodo, usuario, PIN (solo su huella), año de nacimiento si lo indicas, avatar, color, objetivo semanal y, si un adulto lo configura y el menor tiene 13 años o más, un teléfono para avisos por WhatsApp.
 
-**Lo que se hace en la familia:** tareas y cuándo se hacen, notas y motivos de revisión, puntos, dinero de la mesada y pagos, minutos de pantalla, recompensas y canjes, metas de ahorro y préstamos, insignias, avisos y el historial de acciones de la familia.
+**Lo que se hace en la familia:** tareas y cuándo se hacen, notas y motivos de revisión, puntos, dinero de la mesada y pagos, minutos de pantalla, recompensas y canjes, metas de ahorro (con su emoji o foto opcional, el ahorro automático y los aportes de padres y parientes) y préstamos, las felicitaciones (mensajes cortos de hasta 140 caracteres que un adulto o pariente envía a un niño), la moneda elegida (euro o dólar: solo cambia el símbolo, no convierte importes), insignias, avisos y el historial de acciones de la familia.
 
 **Fotos de evidencia:** solo si una tarea las pide, el hijo puede subir una foto. Antes de guardarla se **reduce de tamaño** (1280 píxeles como máximo) y se le **quitan los datos ocultos** de la cámara, como la ubicación (GPS), el modelo del móvil y la fecha. Se guarda en una carpeta privada del servidor y solo la ven los adultos de la familia y quien la subió. **Se borra sola 7 días después de que un adulto valide la tarea** (aceptada, parcial o rechazada). Te pedimos que no salgan personas ni datos que no hagan falta.
 
-**Invitaciones:** el nombre y el correo de la persona invitada, hasta que acepta o caduca (7 días).
+**Fotos de metas de ahorro:** el hijo puede poner una foto del objetivo (se reduce y se le quitan los datos ocultos, igual que las de evidencia). **Se conserva mientras la meta siga abierta** y se borra 7 días después de que la meta se compre, se pase a efectivo, se rechace o se quite.
+
+**Invitaciones:** el nombre, el correo, el teléfono (si se indica) y el parentesco de la persona invitada, hasta que acepta o caduca (7 días). Si acepta, esos datos pasan a su perfil y puede cambiarlos cuando quiera en «Mi perfil»; si no, se borran al caducar o si la cuenta principal la anula.
+
+**Qué ve un pariente:** un abuelo/a, tío/a u otra persona invitada como «pariente» ve el nombre, el avatar, los puntos de la semana, la racha, el nivel y las metas de ahorro (nombre, precio, progreso y foto) de los niños, y puede felicitarles y hacer aportes a sus metas. No ve tareas, dinero de la cuenta, fotos de evidencia, historial ni datos de contacto de nadie, y no puede cambiar ni descargar nada.
 
 **Datos técnicos:** una sesión por dispositivo (con una huella del identificador, el navegador y la fecha de caducidad), registros del servidor con la dirección IP para detectar abusos y fallos, y los errores del servidor con un código y sin datos personales.
 

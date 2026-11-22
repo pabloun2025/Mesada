@@ -1,6 +1,6 @@
 # Aviso legal
 
-_Versión 2026-11-22 · Última actualización: 22 de noviembre de 2026_
+_Versión 2026-11-23 · Última actualización: 23 de noviembre de 2026_
 
 ## Quién está detrás
 

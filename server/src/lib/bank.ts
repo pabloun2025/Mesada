@@ -9,7 +9,7 @@ import { notify, notifyAdults } from './notify/dispatch.js';
 import { addDays, startOfWeek } from './dates.js';
 import { capStatus, weeklyCapCents } from './cap.js';
 
-export const fmtEur = (c: number) => `${(c / 100).toFixed(2).replace('.', ',')} €`;
+import { fmtMoney } from './currency.js';
 
 const NO_CAP = 'Pon un tope semanal en Ajustes';
 
@@ -43,6 +43,7 @@ export async function exchangePoints(child: AuthUser, p: { points: number; idemp
   if (!Number.isInteger(p.points) || p.points <= 0) throw badRequest('Puntos no válidos');
   return tx(async (db) => {
     const fam = await getFamily(db, child.familyId);
+    const fmtEur = (c: number) => fmtMoney(c, fam.currency);
     if (!fam.bank_exchange_enabled) throw disabled('El canje de puntos');
     await lockUser(db, child.id);
     const key = p.idempotencyKey ? `exch:${child.id}:${p.idempotencyKey}` : null;
@@ -78,6 +79,7 @@ export async function exchangePoints(child: AuthUser, p: { points: number; idemp
 
 /** Lo máximo que se puede adelantar ahora (0 si no se puede) y por qué no. */
 export async function advanceRoom(db: Db, fam: Family, userId: string, today: string) {
+  const fmtEur = (c: number) => fmtMoney(c, fam.currency);
   const cap = await capStatus(db, fam, userId, today);
   if (!fam.bank_advance_enabled) return { max: 0, cap, nextWeek: addDays(cap.weekStart, 7), reason: 'El adelanto está desactivado', hint: 'Desactivado' };
   const nextWeek = addDays(cap.weekStart, 7);
@@ -99,6 +101,7 @@ export async function takeAdvance(child: AuthUser, p: { cents: number; idempoten
   if (!Number.isInteger(p.cents) || p.cents <= 0) throw badRequest('Importe no válido');
   return tx(async (db) => {
     const fam = await getFamily(db, child.familyId);
+    const fmtEur = (c: number) => fmtMoney(c, fam.currency);
     if (!fam.bank_advance_enabled) throw disabled('El adelanto');
     if (weeklyCapCents(fam) == null) throw conflict(NO_CAP, 'no_cap');
     await lockUser(db, child.id);
@@ -167,6 +170,7 @@ export async function requestLoan(child: AuthUser, p: { amountCents: number; wee
   if (!Number.isInteger(p.weeks) || p.weeks <= 0) throw badRequest('Semanas no válidas');
   return tx(async (db) => {
     const fam = await getFamily(db, child.familyId);
+    const fmtEur = (c: number) => fmtMoney(c, fam.currency);
     if (!fam.bank_loan_enabled) throw disabled('El préstamo');
     const weekly = weeklyCapCents(fam);
     if (weekly == null) throw conflict(NO_CAP, 'no_cap');
@@ -218,6 +222,7 @@ export async function decideLoan(adult: AuthUser, id: string, o: { approve: bool
     if (l.status === want || (o.approve && ['active', 'paid'].includes(l.status))) return { loan: l, duplicate: true };
     if (l.status !== 'pending') throw conflict('Este préstamo ya está resuelto', 'already_decided');
     const fam = await getFamily(db, adult.familyId);
+    const fmtEur = (c: number) => fmtMoney(c, fam.currency);
     const note = o.note?.trim() ?? '';
     await lockUser(db, l.user_id);
     if (!o.approve) {
@@ -280,6 +285,7 @@ export async function chargeLoans(familyId: string, now = new Date()) {
       const l = await one(db, 'SELECT * FROM loans WHERE id = $1 FOR UPDATE', [id]);
       if (!l || l.status !== 'active') return 0;
       const fam = await getFamily(db, familyId);
+      const fmtEur = (c: number) => fmtMoney(c, fam.currency);
       const thisWeek = startOfWeek(familyToday(fam, now));
       await lockUser(db, l.user_id);
       let n = 0;
@@ -321,6 +327,7 @@ export async function chargeLoans(familyId: string, now = new Date()) {
 
 export async function bankOverview(db: Db, familyId: string, userId: string, now = new Date()) {
   const fam = await getFamily(db, familyId);
+  const fmtEur = (c: number) => fmtMoney(c, fam.currency);
   const today = familyToday(fam, now);
   const [money, points, savings] = await Promise.all([
     moneyBalance(db, userId),
@@ -360,9 +367,11 @@ export async function bankOverview(db: Db, familyId: string, userId: string, now
   else if (money < 0) { loanReason = 'Tu cuenta está en negativo'; loanHint = 'En negativo'; }
 
   const goalCount = (await one<{ n: number }>(db, `SELECT count(*)::int AS n FROM savings_goals WHERE user_id = $1 AND status = 'active' AND NOT archived`, [userId]))!.n;
+  const proposedCount = (await one<{ n: number }>(db, `SELECT count(*)::int AS n FROM savings_goals WHERE user_id = $1 AND status = 'proposed' AND NOT archived`, [userId]))!.n;
   let saveReason: string | null = null;
   let saveHint: string | null = null;
-  if (goalCount === 0) { saveReason = 'Crea primero una meta'; saveHint = 'Crea una meta'; }
+  if (goalCount === 0 && proposedCount > 0) { saveReason = 'Tu meta espera la aprobación de tus padres'; saveHint = 'En espera'; }
+  else if (goalCount === 0) { saveReason = 'Crea primero una meta'; saveHint = 'Crea una meta'; }
   else if (money <= 0) { saveReason = 'No tienes dinero para ahorrar'; saveHint = 'Sin saldo'; }
 
   return {
@@ -419,6 +428,7 @@ export async function balanceHistory(db: Db, fam: Family, userId: string, today:
 /** Resumen de banco de toda la familia para los padres: lo que deben, préstamos vivos e interés de la semana. */
 export async function familyBankSummary(db: Db, familyId: string, now = new Date()) {
   const fam = await getFamily(db, familyId);
+  const fmtEur = (c: number) => fmtMoney(c, fam.currency);
   const weekStart = startOfWeek(familyToday(fam, now));
   const r = await one<{ money: number; savings: number; interest: number; loans: number; loans_left: number }>(
     db,
@@ -462,7 +472,7 @@ export async function statement(db: Db, userId: string, account: StatementAccoun
       SELECT l.id, 'money'::text AS account, 'goal'::text AS scope, l.delta_cents AS amount, l.kind, l.note, l.created_at, c.display_name AS created_by_name,
              SUM(l.delta_cents) OVER (PARTITION BY l.goal_id ORDER BY l.created_at, l.seq)::int AS balance_after, NULL::text AS method, false AS is_withdrawal, l.seq
         FROM money_ledger l LEFT JOIN users c ON c.id = l.created_by WHERE l.user_id = $1 AND l.account = 'savings'
-    ) g WHERE g.kind IN ('interest','interest_forfeit','goal_redeem')`;
+    ) g WHERE g.kind IN ('interest','interest_forfeit','goal_redeem','goal_match','goal_gift','goal_reversal')`;
   const inner = account === 'points' ? pointsSql : account === 'money' ? moneySql : `${pointsSql} UNION ALL ${moneySql}`;
   const rows = await many(
     db,

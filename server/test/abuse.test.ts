@@ -104,7 +104,7 @@ describe('Recuperación e invitaciones (D50)', () => {
   it('invitaciones: límite por hora, tope de pendientes y tope de personas', async () => {
     config.limits.invitePerHour = 3;
     config.caps.maxPendingInvitations = 2;
-    const inv = (n: number) => F.mama.post('/api/invitations', { email: `inv${n}@example.com`, displayName: `Inv ${n}` });
+    const inv = (n: number) => F.mama.post('/api/invitations', { email: `inv${n}@example.com`, displayName: `Inv ${n}`, relationship: 'grandparent' });
     expect((await inv(1)).status).toBe(200);
     expect((await inv(2)).status).toBe(200);
     expect((await inv(3)).body.error).toBe('too_many_invitations');
@@ -118,7 +118,7 @@ describe('Recuperación e invitaciones (D50)', () => {
     const r = await add('sexto');
     expect(r.status).toBe(409);
     expect(r.body.error).toBe('too_many_members');
-    expect((await F.mama.post('/api/invitations', { email: 'otro@example.com', displayName: 'Otro' })).body.error).toBe('too_many_members');
+    expect((await F.mama.post('/api/invitations', { email: 'otro@example.com', displayName: 'Otro', relationship: 'other', relationshipLabel: 'Vecina' })).body.error).toBe('too_many_members');
   });
 
   it('restablecer contraseña: límite por IP', async () => {

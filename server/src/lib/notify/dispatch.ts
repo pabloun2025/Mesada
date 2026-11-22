@@ -92,8 +92,9 @@ export async function notify(db: Db, n: NotifyInput) {
   }
 }
 
+/** Avisa a los adultos completos; los parientes (ver y animar) no reciben avisos de gestión. */
 export async function notifyAdults(db: Db, familyId: string, n: Omit<NotifyInput, 'userId'>) {
-  const adults = await many<{ id: string }>(db, `SELECT id FROM users WHERE family_id = $1 AND role = 'adult' AND active`, [familyId]);
+  const adults = await many<{ id: string }>(db, `SELECT id FROM users WHERE family_id = $1 AND role = 'adult' AND active AND NOT is_relative`, [familyId]);
   for (const a of adults) await notify(db, { ...n, userId: a.id, dedupeKey: n.dedupeKey ? `${n.dedupeKey}:${a.id}` : null });
 }
 

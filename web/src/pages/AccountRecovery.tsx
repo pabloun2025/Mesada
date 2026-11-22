@@ -5,6 +5,7 @@ import { api, post } from '../lib/api';
 import { ConsentBox } from '../components/Consent';
 import { Button, Field, Loading } from '../components/ui';
 import { AuthShell } from './AuthShell';
+import { kinshipText } from '../lib/kinship';
 
 export function Forgot() {
   const [login, setLogin] = useState('');
@@ -87,8 +88,10 @@ export function AcceptInvitation() {
     setLoading(true);
     try {
       await post('/invitations/accept', { token, ...f, acceptTerms: accept, termsVersion: status.data?.legalVersion ?? '' });
-      await qc.invalidateQueries();
+      // La invitación ya está gastada: si se volviera a pedir daría 404 y saldría el aviso de error al entrar.
+      await qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'invitation' });
       navigate('/');
+      qc.removeQueries({ queryKey: ['invitation'] });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -105,7 +108,7 @@ export function AcceptInvitation() {
   }
   const i = inv.data.invitation;
   return (
-    <AuthShell title={`Únete a ${i.family_name}`} subtitle={`Hola, ${i.display_name}. Crea tu usuario de adulto (${i.email}).`}>
+    <AuthShell title={`Únete a ${i.family_name}`} subtitle={`Hola, ${i.display_name}. Crea tu usuario${kinshipText(i) ? ` como ${kinshipText(i).toLowerCase()}` : ' de adulto'} (${i.email}).`}>
       <form onSubmit={submit} className="space-y-4">
         <Field label="Usuario" hint="Letras, números, punto o guion. Sin espacios.">{(id) => <input id={id} name="username" className="field" autoComplete="username" spellCheck={false} autoCapitalize="none" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} required minLength={3} />}</Field>
         <Field label="Contraseña" hint="Mínimo 8 caracteres.">{(id) => <input id={id} className="field" type="password" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required minLength={8} />}</Field>

@@ -89,7 +89,7 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
   const rewards = useQuery({ queryKey: ['rewards'], queryFn: () => api<{ rewards: Reward[] }>('/rewards') });
   const kids = members.filter((m) => m.role === 'child' && m.active);
-  const adults = members.filter((m) => m.role === 'adult' && m.active);
+  const adults = members.filter((m) => m.role === 'adult' && !m.is_relative && m.active);
 
   const save = useMutation({
     mutationFn: () => {

@@ -6,7 +6,7 @@ import { forbidden, notFound } from '../lib/errors.js';
 import { familyToday, getFamily, pointsToCents, type Family } from '../lib/family.js';
 import { addDays, addMonthsStart, periodBounds, startOfWeek } from '../lib/dates.js';
 import { ensureInstancesThrottled } from '../lib/instances.js';
-import { BADGES, computeStreak, levelFor, lifetimePoints, pointsEarnedBetween } from '../lib/gamification.js';
+import { BADGES, badgeText, computeStreak, levelFor, lifetimePoints, pointsEarnedBetween } from '../lib/gamification.js';
 import { walletSummary } from '../lib/money.js';
 
 const ASSIGNED = `(i.assignee_id = $U OR i.completed_by = $U OR (i.assignee_id IS NULL AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = i.task_id AND a.user_id = $U)))`;
@@ -14,7 +14,7 @@ const ASSIGNED = `(i.assignee_id = $U OR i.completed_by = $U OR (i.assignee_id I
 const COUNTED = `NOT i.is_extra AND i.repeat_no = 1 AND NOT (i.status = 'pending' AND EXISTS (SELECT 1 FROM tasks tn WHERE tn.id = i.task_id AND tn.recurrence = 'as_needed'))`;
 const assigned = (param: string) => ASSIGNED.replaceAll('$U', param);
 
-async function progressFor(fam: Family, userId: string) {
+export async function progressFor(fam: Family, userId: string) {
   const db = getPool();
   const today = familyToday(fam);
   const user = await one(db, 'SELECT id, display_name, avatar, color, weekly_goal_points FROM users WHERE id = $1', [userId]);
@@ -53,7 +53,7 @@ async function progressFor(fam: Family, userId: string) {
       maxCents: Math.min(pointsToCents(fam, potential.max), fam.cap_cents ?? Infinity),
       earnedCents: pointsToCents(fam, potential.earned),
     },
-    badges: Object.entries(BADGES).map(([key, b]) => ({ key, ...b, awardedAt: earnedMap.get(key) ?? null })),
+    badges: Object.entries(BADGES).map(([key, b]) => ({ key, ...b, description: badgeText(b.description, fam.currency), awardedAt: earnedMap.get(key) ?? null })),
   };
 }
 
@@ -135,7 +135,7 @@ export default async function insightRoutes(app: FastifyInstance) {
       one(db, `SELECT count(*)::int AS n FROM bonus_grants WHERE family_id = $1 AND kind IN ('text','reward') AND fulfilled_at IS NULL AND voided_at IS NULL`, [u.familyId]),
       one(db, `SELECT count(*)::int AS n FROM payout_requests WHERE family_id = $1 AND status = 'pending'`, [u.familyId]),
       one(db, `SELECT count(*)::int AS n FROM screen_usage_logs WHERE family_id = $1 AND status = 'pending'`, [u.familyId]),
-      one(db, `SELECT ((SELECT count(*) FROM loans WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM goal_requests WHERE family_id = $1 AND status = 'pending'))::int AS n`, [u.familyId]),
+      one(db, `SELECT ((SELECT count(*) FROM loans WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM goal_requests WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM savings_goals WHERE family_id = $1 AND NOT archived AND (status = 'proposed' OR (status = 'active' AND auto_pending_percent IS NOT NULL))))::int AS n`, [u.familyId]),
       many(
         db,
         `SELECT a.id, a.action, a.entity, a.data, a.created_at, u.display_name AS actor_name, u.avatar AS actor_avatar, u.color AS actor_color, fu.display_name AS for_name

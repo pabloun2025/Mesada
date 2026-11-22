@@ -253,8 +253,8 @@ describe('recuperación de contraseña e invitaciones por correo', () => {
   });
 
   it('invita a otro adulto por correo y la invitación solo sirve una vez', async () => {
-    expect((await F.luciaC.post('/api/invitations', { email: 'abuela@example.com', displayName: 'Abuela' })).status).toBe(403);
-    expect((await F.mama.post('/api/invitations', { email: 'abuela@example.com', displayName: 'Abuela' })).status).toBe(200);
+    expect((await F.luciaC.post('/api/invitations', { email: 'abuela@example.com', displayName: 'Abuela', relationship: 'grandparent' })).status).toBe(403);
+    expect((await F.mama.post('/api/invitations', { email: 'abuela@example.com', displayName: 'Abuela', relationship: 'grandparent' })).status).toBe(200);
     await processOutbox();
     const token = tokenFrom(email.sent.at(-1)!.link);
     const anon = new Client(app);

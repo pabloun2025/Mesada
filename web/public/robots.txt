@@ -1,0 +1,11 @@
+# Solo son públicas la bienvenida y las páginas legales; el resto exige sesión.
+User-agent: *
+Allow: /$
+Allow: /privacidad
+Allow: /aviso-legal
+Allow: /condiciones
+Allow: /brand/
+Disallow: /api/
+Disallow: /
+
+Sitemap: https://mesada.veryfacil.org/sitemap.xml

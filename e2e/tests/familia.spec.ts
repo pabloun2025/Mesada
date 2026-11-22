@@ -27,6 +27,7 @@ function totp(secret: string, ms = Date.now()) {
  * Las pruebas son secuenciales y comparten estado (misma base de datos E2E).
  */
 const SHOTS = '../docs/capturas/e2e';
+const E2E_DB = 'postgres://postgres:postgres@127.0.0.1:5432/mesada_e2e';
 const ADULT = { user: 'ana', pass: 'contrasena-ana', name: 'Ana' };
 const KID = { user: 'lucia', pin: '1414', name: 'Lucía' };
 const TASK = 'Poner el lavavajillas';
@@ -38,13 +39,15 @@ let adminSecret = '';
 
 async function login(page: Page, user: string, pass: string, child = false) {
   await page.goto('/entrar');
+  // Si la primera carga se queda en blanco (máquina cargada), se recarga una vez en vez de esperar al tiempo límite.
+  if (!(await page.getByLabel('Usuario').isVisible({ timeout: 10_000 }).catch(() => false))) await page.reload();
   if (child) await page.getByRole('radio', { name: 'Soy hijo/a' }).click();
   await page.getByLabel('Usuario').fill(user);
   await page.getByLabel(child ? 'PIN' : 'Contraseña').fill(pass);
   await page.getByRole('button', { name: 'Entrar' }).click();
 }
 
-async function api(page: Page, method: 'get' | 'post', path: string, data?: unknown, headers: Record<string, string> = {}) {
+async function api(page: Page, method: 'get' | 'post' | 'patch', path: string, data?: unknown, headers: Record<string, string> = {}) {
   const res = await page.request[method](`/api${path}`, { data, headers: { 'X-Mesada': '1', ...headers } });
   return { status: res.status(), body: await res.json().catch(() => ({})) };
 }
@@ -138,6 +141,12 @@ async function newAdultPage(browser: Browser) {
   return ctx.newPage();
 }
 
+/** Un móvil pequeño de verdad: 375 px de ancho (las capturas del manual). */
+async function newSmallPage(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+  return ctx.newPage();
+}
+
 async function newPhonePage(browser: Browser) {
   const ctx = await browser.newContext({ ...devices['iPhone 13'], locale: 'es-ES', timezoneId: 'Europe/Madrid' });
   return ctx.newPage();
@@ -199,20 +208,48 @@ test.describe.serial('Familia completa', () => {
     expect(Date.now() - new Date(me.terms_accepted_at).getTime()).toBeLessThan(120_000);
   });
 
-  test('añade al otro adulto y a los dos hijos', async () => {
-    const add = async (role: 'adult' | 'child', name: string, user: string, pass: string) => {
+  test('invita al otro adulto por correo (simulado) y añade a los dos hijos', async ({ browser }) => {
+    // Otro adulto: la cuenta principal pone nombre, parentesco, correo y teléfono; llega un correo con un enlace.
+    await adult.getByRole('button', { name: 'Invitar' }).click();
+    const inv = adult.getByRole('dialog');
+    await inv.getByLabel('Nombre', { exact: true }).fill('Carlos');
+    await inv.getByLabel('Parentesco').selectOption('father');
+    await expect(inv.getByRole('note')).toContainText('adulto completo');
+    await inv.getByLabel('Correo').fill('carlos@example.com');
+    await inv.getByLabel(/Teléfono/).fill('611 22 33 44');
+    await inv.getByRole('button', { name: 'Enviar invitación' }).click();
+    await expect(adult.getByText('Invitación enviada a carlos@example.com')).toBeVisible();
+    await expect(adult.getByRole('region', { name: 'Invitaciones pendientes' })).toContainText('Carlos');
+    const sql = (q: string) => execFileSync('psql', [E2E_DB, '-Atc', q]).toString().trim();
+    // El proveedor de correo es simulado (nunca sale un correo real) y el correo con el enlace queda en la cola de envíos.
+    expect((await api(adult, 'get', '/notify/settings')).body.channels.email.real).toBe(false);
+    expect(sql(`SELECT channel || '|' || to_address || '|' || critical FROM notification_outbox WHERE event = 'invitation'`)).toBe('email|carlos@example.com|true');
+    const link = sql(`SELECT link FROM notification_outbox WHERE event = 'invitation' AND to_address = 'carlos@example.com'`);
+    const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+    const g = await ctx.newPage();
+    await g.goto(link);
+    await expect(g.getByRole('heading', { name: 'Únete a Familia Prueba' })).toBeVisible();
+    await expect(g.getByText(/como padre/)).toBeVisible();
+    await g.getByLabel('Usuario').fill('carlos');
+    await g.getByLabel('Contraseña').fill('contrasena-carlos');
+    await g.getByRole('checkbox', { name: /acepto/i }).check();
+    await g.getByRole('button', { name: 'Crear mi cuenta' }).click();
+    await expect(g.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    // Es un adulto completo (ve «Validar»), pero no la cuenta principal.
+    const cMe = (await api(g, 'get', '/me')).body.user;
+    expect(cMe).toMatchObject({ relationship: 'father', is_principal: false, is_relative: false, phone: '+34611223344' });
+    await ctx.close();
+    const add = async (name: string, user: string, pass: string) => {
       await adult.getByRole('button', { name: 'Añadir' }).first().click();
       const d = adult.getByRole('dialog');
-      if (role === 'adult') await d.getByRole('radio', { name: 'Adulto' }).click();
       await d.getByLabel('Nombre', { exact: true }).fill(name);
       await d.getByLabel('Usuario para entrar').fill(user);
-      await d.getByLabel(role === 'child' ? 'PIN' : 'Contraseña').fill(pass);
+      await d.getByLabel('PIN').fill(pass);
       await d.getByRole('button', { name: 'Añadir' }).click();
       await expect(adult.getByText(`${name} se ha unido a la familia`)).toBeVisible();
     };
-    await add('adult', 'Carlos', 'carlos', 'contrasena-carlos');
-    await add('child', KID.name, KID.user, KID.pin);
-    await add('child', 'Hugo', 'hugo', '1111');
+    await add(KID.name, KID.user, KID.pin);
+    await add('Hugo', 'hugo', '1111');
     await expect(adult.getByText('@lucia')).toBeVisible();
     await expect(adult.getByText('@hugo')).toBeVisible();
     await adult.screenshot({ path: `${SHOTS}/01-familia.png`, fullPage: true });
@@ -310,7 +347,7 @@ test.describe.serial('Familia completa', () => {
   test('cierre semanal: los puntos se convierten en euros', async () => {
     await adult.goto('/mesada');
     await adult.getByRole('button', { name: 'Cerrar semana' }).click();
-    await adult.getByRole('button', { name: 'Convertir puntos en euros' }).click();
+    await adult.getByRole('button', { name: 'Convertir puntos en dinero' }).click();
     // 10 puntos restantes × (5 € / 100 pts) = 0,50 €
     await expect(adult.getByText('Periodo cerrado: 0,50 € convertidos')).toBeVisible();
     const card = adult.getByRole('article').filter({ hasText: KID.name });
@@ -855,7 +892,12 @@ test.describe.serial('Familia completa', () => {
     const gd = kid.getByRole('dialog');
     await gd.getByLabel('¿Para qué ahorras?').fill('Vinilo');
     await gd.getByLabel('¿Cuánto cuesta? (€)').fill('20');
-    await gd.getByRole('button', { name: 'Crear meta' }).click();
+    await gd.getByRole('button', { name: 'Proponer meta' }).click();
+    // El hijo la propone; hasta que un adulto la apruebe no se puede ahorrar en ella.
+    await expect(kid.getByRole('listitem', { name: 'Meta Vinilo' })).toContainText('Esperando a que la aprueben');
+    const goalId = (await api(kid, 'get', `/goals/${me.id}`)).body.goals.find((x: any) => x.title === 'Vinilo').id;
+    expect((await api(adult, 'post', `/goals/${goalId}/proposal/approve`, {})).status).toBe(200);
+    await kid.reload();
     await expect(kid.getByRole('listitem', { name: 'Meta Vinilo' })).toBeVisible();
 
     await kid.getByRole('button', { name: 'Ahorrar', exact: true }).click();
@@ -1432,6 +1474,351 @@ test.describe.serial('Familia completa', () => {
     await kid.reload();
     await expect(kid.getByRole('button', { name: 'Pedir pantalla' })).toBeEnabled();
     await phone.context().close();
+  });
+
+  test('meta de ahorro visible (I19): tarjeta en Hoy, propuesta, aprobación, rechazo con motivo, ahorro automático, aporte de los padres y semanas', async ({ browser }) => {
+    test.setTimeout(180_000); // recorrido largo con varias personas: no se puede quedar corto por la carga de la máquina
+    const sql = (q: string) => execFileSync('psql', [E2E_DB, '-Atc', q]).toString().trim();
+    const noOverflow = (p: Page) => p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    const me = (await api(kid, 'get', '/me')).body.user;
+
+    // Un niño sin meta ve la tarjeta grande con el botón (a 375 px).
+    const h = await newSmallPage(browser);
+    await login(h, 'hugo', '1111', true);
+    const hcard = h.getByRole('region', { name: '¿Para qué ahorras?' });
+    await expect(hcard.getByRole('button', { name: 'Crear meta de ahorro' })).toBeVisible();
+    await expect(hcard).toContainText('¿Para qué ahorras?');
+    expect(await noOverflow(h)).toBeLessThanOrEqual(0);
+    await hcard.scrollIntoViewIfNeeded();
+    await h.screenshot({ path: `${SHOTS}/96-hijo-hoy-sin-meta-375.png` });
+    await h.context().close();
+
+    // Lucía ya tiene «Vinilo»: propone otra con emoji. Sin historial de lo que gana, no hay «Te faltan…».
+    await kid.goto('/');
+    const kcard = kid.getByRole('region', { name: '¿Para qué ahorras?' });
+    await expect(kcard).toContainText('Vinilo');
+    await expect(kcard).not.toContainText(/Te falta/);
+    await kcard.getByRole('button', { name: 'Crear otra meta de ahorro' }).click();
+    const d = kid.getByRole('dialog');
+    await d.getByLabel('¿Para qué ahorras?').fill('Bici');
+    await d.getByLabel('¿Cuánto cuesta? (€)').fill('60');
+    await d.getByRole('radio', { name: 'Emoji 🚲' }).click();
+    await d.getByRole('button', { name: 'Proponer meta' }).click();
+    await expect(kcard).toContainText('«Bici»: tus padres tienen que aprobarla');
+
+    // El adulto la ve en Validar y la aprueba ajustando el precio.
+    await adult.goto('/validar');
+    await adult.getByRole('button', { name: 'Aprobar la meta «Bici» de Lucía' }).click();
+    const ap = adult.getByRole('dialog');
+    await ap.getByLabel('Precio (€)').fill('50');
+    await ap.getByRole('button', { name: 'Aprobar meta' }).click();
+    await expect(adult.getByText('Meta de Lucía aprobada')).toBeVisible();
+    const goals = (await api(kid, 'get', `/goals/${me.id}`)).body.goals;
+    expect(goals.find((g: any) => g.title === 'Bici')).toMatchObject({ status: 'active', target_cents: 5000, emoji: '🚲' });
+    expect((await api(kid, 'get', '/notifications')).body.notifications.some((n: any) => /ha aprobado tu meta «Bici»/.test(n.title))).toBe(true);
+
+    // Otra propuesta que se rechaza: el motivo es obligatorio y lo lee el niño.
+    expect((await api(kid, 'post', '/goals', { userId: me.id, title: 'Moto', targetCents: 300000 })).status).toBe(200);
+    await adult.goto('/validar');
+    await adult.getByRole('button', { name: 'Rechazar la meta «Moto» de Lucía' }).click();
+    const rj = adult.getByRole('dialog');
+    await rj.getByRole('button', { name: 'Rechazar meta' }).click();
+    await expect(adult.getByText(/el motivo es obligatorio/)).toBeVisible();
+    await rj.getByLabel('Motivo (obligatorio)').fill('Es muy cara; ahorra primero para la bici');
+    await rj.getByRole('button', { name: 'Rechazar meta' }).click();
+    await expect(adult.getByText('Meta rechazada')).toBeVisible();
+    await kid.goto('/');
+    await expect(kcard).toContainText('«Moto» no se ha aprobado');
+    await expect(kcard).toContainText('Motivo: Es muy cara');
+    await kcard.getByRole('button', { name: 'Quitar aviso' }).click();
+    await expect(kcard).not.toContainText('«Moto»');
+
+    // Ahorro automático: lo pide el niño y lo aprueba un adulto.
+    await kcard.getByRole('button', { name: /^Ahorro automático/ }).click();
+    const au = kid.getByRole('dialog');
+    await au.getByRole('radio', { name: '20 %' }).click();
+    await au.getByRole('button', { name: 'Pedir a mis padres' }).click();
+    await expect(kid.getByText('Petición enviada. Tus padres la tienen que aprobar.')).toBeVisible();
+    await adult.goto('/validar');
+    await adult.getByRole('button', { name: 'Aprobar el ahorro automático de Lucía' }).click();
+    await expect(adult.getByText('Ahorro automático aprobado')).toBeVisible();
+    expect((await api(kid, 'get', `/goals/${me.id}`)).body.goals.find((g: any) => g.title === 'Vinilo').auto_percent).toBe(20);
+
+    // Los padres: aporte puntual y regla «1 por cada 4».
+    await adult.goto('/mesada');
+    const kidCard = adult.getByRole('article').filter({ hasText: KID.name });
+    await kidCard.getByRole('listitem', { name: 'Meta Vinilo' }).getByRole('button', { name: 'Gestionar meta' }).click();
+    const mg = adult.getByRole('dialog');
+    await mg.getByRole('region', { name: 'Aporte de los padres' }).getByRole('button', { name: 'Guardar aporte' }).click();
+    await expect(adult.getByText('Aporte de los padres guardado')).toBeVisible();
+    await kidCard.getByRole('listitem', { name: 'Meta Vinilo' }).getByRole('button', { name: 'Gestionar meta' }).click();
+    const mg2 = adult.getByRole('dialog');
+    await mg2.getByRole('region', { name: 'Aporte puntual' }).getByLabel('Importe (€)').fill('2');
+    await mg2.getByRole('region', { name: 'Aporte puntual' }).getByLabel('Mensaje (opcional)').fill('Por la nota de mates');
+    await mg2.getByRole('button', { name: 'Hacer el aporte' }).click();
+    await expect(adult.getByText('Aporte hecho a «Vinilo»')).toBeVisible();
+    await kid.goto('/mesada');
+    const vinilo = kid.getByRole('listitem', { name: 'Meta Vinilo' });
+    await expect(vinilo).toContainText('Aportes de tu familia');
+    await expect(vinilo).toContainText(/Tus padres ponen 1,00\s€ por cada 4,00\s€/);
+    await expect(vinilo).toContainText('Ahorro automático: 20 % de cada cierre');
+    const vin = (await api(kid, 'get', `/goals/${me.id}`)).body.goals.find((g: any) => g.title === 'Vinilo');
+    expect(vin).toMatchObject({ contributions_cents: 200, auto_percent: 20, match_per_cents: 400, match_gives_cents: 100, match_cap_cents: 1000 });
+
+    // «Te faltan X semanas»: con 4 semanas cerradas ganando 100 pts (5 €), la media es 5 € a la semana.
+    sql(`UPDATE users SET created_at = created_at - interval '40 days' WHERE id = '${me.id}'`);
+    sql(`INSERT INTO points_ledger(family_id, user_id, delta, kind, note, created_at) SELECT u.family_id, u.id, 100, 'task', 'e2e-semanas', date_trunc('week', now()) - (k || ' week')::interval + interval '2 days' FROM users u, generate_series(1,4) k WHERE u.id = '${me.id}'`);
+    try {
+      await kid.goto('/');
+      await expect(kcard).toContainText(/Te faltan \d+ semanas?/);
+      await expect(kcard).toContainText('Vinilo');
+      expect(await noOverflow(kid)).toBeLessThanOrEqual(0);
+      const k375 = await newSmallPage(browser);
+      await login(k375, KID.user, KID.pin, true);
+      const c375 = k375.getByRole('region', { name: '¿Para qué ahorras?' });
+      await expect(c375).toContainText(/Te faltan \d+ semanas?/);
+      expect(await noOverflow(k375)).toBeLessThanOrEqual(0);
+      await c375.scrollIntoViewIfNeeded();
+      await k375.screenshot({ path: `${SHOTS}/97-hijo-meta-semanas-375.png` });
+      // Y en oscuro, a 320 px de ancho.
+      await k375.setViewportSize({ width: 320, height: 700 });
+      await k375.evaluate(() => document.documentElement.classList.add('dark'));
+      await expect(c375).toBeVisible();
+      expect(await noOverflow(k375)).toBeLessThanOrEqual(0);
+      await c375.scrollIntoViewIfNeeded();
+      await k375.screenshot({ path: `${SHOTS}/98-hijo-meta-semanas-320-dark.png` });
+      await k375.context().close();
+    } finally {
+      sql(`SELECT set_config('mesada.erasure', 'on', true); DELETE FROM points_ledger WHERE note = 'e2e-semanas'`);
+      sql(`UPDATE users SET created_at = created_at + interval '40 days' WHERE id = '${me.id}'`);
+    }
+    expect(Number(sql(`SELECT count(*) FROM points_ledger WHERE note = 'e2e-semanas'`))).toBe(0);
+
+    // Banco: la meta con foto/emoji y el aporte, a 375 px.
+    const k2 = await newSmallPage(browser);
+    await login(k2, KID.user, KID.pin, true);
+    await expect(k2.getByRole('link', { name: 'Mi banco' }).first()).toBeVisible(); // la entrada termina antes de navegar
+    await k2.goto('/mesada');
+    await expect(k2.getByRole('listitem', { name: 'Meta Bici' })).toBeVisible();
+    expect(await noOverflow(k2)).toBeLessThanOrEqual(0);
+    await k2.getByRole('listitem', { name: 'Meta Vinilo' }).scrollIntoViewIfNeeded();
+    await k2.screenshot({ path: `${SHOTS}/99-banco-meta-aportes-375.png` });
+    await k2.context().close();
+  });
+
+  test('parientes (I20): invitación por correo simulado, ver y animar, solo la cuenta principal invita y nada más está permitido', async ({ browser }) => {
+    test.setTimeout(180_000); // recorrido largo con varias personas: no se puede quedar corto por la carga de la máquina
+    const sql = (q: string) => execFileSync('psql', [E2E_DB, '-Atc', q]).toString().trim();
+    const noOverflow = (p: Page) => p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    const me = (await api(kid, 'get', '/me')).body.user;
+
+    // La cuenta principal invita a una abuela con su correo y su teléfono (a 375 px).
+    const a = await newSmallPage(browser);
+    await login(a, ADULT.user, ADULT.pass);
+    await expect(a.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    await a.goto('/familia');
+    await expect(a.getByText('Cuenta principal').first()).toBeVisible();
+    await a.getByRole('button', { name: 'Invitar' }).click();
+    const inv = a.getByRole('dialog');
+    await inv.getByLabel('Nombre', { exact: true }).fill('Rosa');
+    await inv.getByLabel('Parentesco').selectOption('grandparent');
+    await expect(inv.getByRole('note')).toContainText('Será pariente');
+    await inv.getByLabel('Correo').fill('rosa@example.com');
+    await inv.getByLabel(/Teléfono/).fill('699 11 22 33');
+    expect(await noOverflow(a)).toBeLessThanOrEqual(0);
+    await a.screenshot({ path: `${SHOTS}/100-invitar-pariente-375.png` });
+    await inv.getByRole('button', { name: 'Enviar invitación' }).click();
+    await expect(a.getByText('Invitación enviada a rosa@example.com')).toBeVisible();
+    expect((await api(adult, 'get', '/notify/settings')).body.channels.email.real).toBe(false); // correo simulado
+    expect(sql(`SELECT channel FROM notification_outbox WHERE event = 'invitation' AND to_address = 'rosa@example.com'`)).toBe('email');
+    expect(sql(`SELECT subject FROM notification_outbox WHERE to_address = 'rosa@example.com'`)).toContain('Ana te invita a Familia Prueba');
+    const link = sql(`SELECT link FROM notification_outbox WHERE event = 'invitation' AND to_address = 'rosa@example.com'`);
+
+    // Rosa crea su usuario con el enlace del correo.
+    const r = await newSmallPage(browser);
+    await r.goto(link);
+    await expect(r.getByText(/como abuelo\/a/)).toBeVisible();
+    await r.getByLabel('Usuario').fill('rosa');
+    await r.getByLabel('Contraseña').fill('contrasena-rosa');
+    await r.getByRole('checkbox', { name: /acepto/i }).check();
+    await r.getByRole('button', { name: 'Crear mi cuenta' }).click();
+    await expect(r.getByRole('heading', { name: 'Hola, Rosa' })).toBeVisible();
+
+    // Navegación propia y simple: solo Inicio y Mi perfil; nada de Validar, Tareas ni Ajustes.
+    const nav = r.getByRole('navigation', { name: 'Principal' });
+    await expect(nav.getByRole('link')).toHaveCount(2);
+    await expect(nav.getByRole('link', { name: 'Inicio' })).toBeVisible();
+    await expect(r.getByRole('link', { name: /Validar|Tareas|Ajustes|Mesada/ })).toHaveCount(0);
+    const lucia = r.getByRole('article', { name: KID.name });
+    await expect(lucia).toContainText('puntos esta semana');
+    await expect(lucia.getByRole('listitem', { name: 'Meta Vinilo' })).toBeVisible();
+    await expect(lucia.getByRole('listitem', { name: 'Meta Bici' })).toBeVisible();
+    expect(await noOverflow(r)).toBeLessThanOrEqual(0);
+    await r.screenshot({ path: `${SHOTS}/101-pariente-inicio-375.png`, fullPage: true });
+
+    // Felicitar: el mensaje le llega al niño con el parentesco.
+    await lucia.getByRole('button', { name: 'Felicitar a Lucía' }).click();
+    const ch = r.getByRole('dialog');
+    await ch.getByRole('button', { name: '¡Qué orgullo!' }).click();
+    await ch.getByRole('button', { name: 'Enviar felicitación' }).click();
+    await expect(r.getByText('Felicitación enviada a Lucía')).toBeVisible();
+    await kid.goto('/');
+    await kid.getByRole('button', { name: /^Avisos/ }).click();
+    await expect(kid.getByRole('dialog')).toContainText('Rosa (Abuelo/a) te felicita');
+    await expect(kid.getByRole('dialog')).toContainText('¡Qué orgullo!');
+    await kid.screenshot({ path: `${SHOTS}/102-hijo-felicitacion-aviso.png` });
+
+    // Aportar a una meta.
+    const before = (await api(kid, 'get', `/goals/${me.id}`)).body.goals.find((g: any) => g.title === 'Bici').balance_cents;
+    await lucia.getByRole('listitem', { name: 'Meta Bici' }).getByRole('button', { name: 'Aportar a esta meta' }).click();
+    const gf = r.getByRole('dialog');
+    await gf.getByLabel('Importe (€)').fill('3');
+    await gf.getByLabel('Mensaje (opcional)').fill('Para tu bici');
+    await r.screenshot({ path: `${SHOTS}/103-pariente-aporte-375.png` });
+    await gf.getByRole('button', { name: 'Hacer el aporte' }).click();
+    await expect(r.getByText('Aporte hecho a «Bici»')).toBeVisible();
+    await expect.poll(async () => (await api(kid, 'get', `/goals/${me.id}`)).body.goals.find((g: any) => g.title === 'Bici').balance_cents).toBe(before + 300);
+    await expect(lucia.getByRole('listitem', { name: 'Meta Bici' })).toContainText(/3,00\s€ de 50,00\s€/);
+    // Un adulto lo ve en el libro y puede anularlo.
+    expect(sql(`SELECT note FROM money_ledger WHERE kind = 'goal_gift' ORDER BY seq DESC LIMIT 1`)).toBe('Aporte de Rosa (Abuelo/a): Para tu bici');
+
+    // En el servidor, todo lo demás es 403 (no basta con esconder los botones).
+    expect((await api(r, 'get', '/dashboard')).status).toBe(403);
+    expect((await api(r, 'get', '/tasks')).status).toBe(403);
+    expect((await api(r, 'get', `/bank/${me.id}`)).status).toBe(403);
+    expect((await api(r, 'get', '/privacy/export')).status).toBe(403);
+    expect((await api(r, 'get', '/invitations')).status).toBe(403);
+    expect((await api(r, 'post', '/payments', { userId: me.id, amountCents: 100, method: 'cash' })).status).toBe(403);
+    expect((await api(r, 'post', '/adjustments/points', { userId: me.id, delta: 5, note: 'x' })).status).toBe(403);
+    expect((await api(r, 'post', '/privacy/delete-family', { password: 'contrasena-rosa', phrase: 'BORRAR MI FAMILIA' })).status).toBe(403);
+    expect((await api(r, 'patch', '/family', { name: 'Hackeada' })).status).toBe(403);
+    expect((await api(r, 'get', '/family')).body.members.every((m: any) => m.username === undefined || m.display_name === 'Rosa')).toBe(true);
+    await r.goto('/validar');
+    await expect(r.getByRole('heading', { name: 'Hola, Rosa' })).toBeVisible();
+    await r.goto('/ajustes');
+    await expect(r.getByRole('heading', { name: 'Hola, Rosa' })).toBeVisible();
+
+    // Mi perfil: nombre, correo y teléfono.
+    await r.goto('/perfil');
+    await expect(r.getByRole('region', { name: 'Tus datos' })).toContainText('Abuelo/a');
+    await r.getByLabel('Nombre', { exact: true }).fill('Rosa María');
+    await r.getByRole('button', { name: 'Guardar nombre' }).click();
+    await expect(r.getByText('Nombre guardado')).toBeVisible();
+    await r.getByLabel('Teléfono móvil').fill('+34 688 77 66 55');
+    await r.getByRole('button', { name: 'Guardar teléfono' }).click();
+    await expect(r.getByText('Teléfono guardado')).toBeVisible();
+    await r.getByLabel('Correo').fill('rosa.maria@example.com');
+    await r.getByRole('button', { name: 'Guardar correo' }).click();
+    await expect(r.getByText('Correo guardado')).toBeVisible();
+    expect((await api(r, 'get', '/me')).body.user).toMatchObject({ display_name: 'Rosa María', phone: '+34688776655', email: 'rosa.maria@example.com', relationship: 'grandparent' });
+    expect(await noOverflow(r)).toBeLessThanOrEqual(0);
+    await r.screenshot({ path: `${SHOTS}/104-pariente-perfil-375.png` });
+    await r.context().close();
+
+    // Familia: Rosa aparece como pariente con su parentesco; Carlos (padre) es adulto completo pero no puede invitar.
+    await a.goto('/familia');
+    const parientes = a.getByRole('region', { name: 'Parientes' });
+    await expect(parientes).toContainText('Rosa María');
+    await expect(parientes).toContainText('Abuelo/a');
+    await expect(a.getByRole('region', { name: 'Adultos' })).toContainText('Padre');
+    await expect(a.getByRole('region', { name: 'Adultos' })).toContainText('Cuenta principal');
+    expect(await noOverflow(a)).toBeLessThanOrEqual(0);
+    await a.screenshot({ path: `${SHOTS}/105-familia-parentescos-375.png`, fullPage: true });
+    // La cuenta principal pone el correo y el teléfono de otro miembro desde su ficha; a la persona se le avisa en la app.
+    await a.getByRole('button', { name: 'Editar a Rosa María' }).click();
+    const ficha = a.getByRole('dialog');
+    const datos = ficha.getByRole('group', { name: 'Correo y teléfono' });
+    await expect(datos).toBeVisible();
+    await expect(datos.getByLabel('Correo')).toHaveValue('rosa.maria@example.com');
+    await datos.getByLabel(/Teléfono de WhatsApp/).fill('677 88 99 00');
+    await datos.getByLabel('Correo').fill('rosa.nueva@example.com');
+    await datos.scrollIntoViewIfNeeded();
+    expect(await noOverflow(a)).toBeLessThanOrEqual(0);
+    await a.screenshot({ path: `${SHOTS}/110-ficha-miembro-correo-telefono-375.png` });
+    await ficha.getByRole('button', { name: 'Guardar' }).click();
+    await expect(a.getByText('Perfil guardado')).toBeVisible();
+    expect(sql(`SELECT email || '|' || phone FROM users WHERE username = 'rosa'`)).toBe('rosa.nueva@example.com|+34677889900');
+    expect(sql(`SELECT count(*) FROM notifications WHERE kind = 'family_change' AND title LIKE '%ha cambiado tu correo y tu teléfono'`)).toBe('1');
+    expect(sql(`SELECT count(*) FROM audit_log WHERE action = 'notify.contact_update' AND data->>'email' = 'cambiado'`)).toBe('1');
+    await a.context().close();
+
+    const c = await newSmallPage(browser);
+    await login(c, 'carlos', 'contrasena-carlos');
+    await expect(c.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    await c.goto('/familia');
+    await expect(c.getByRole('heading', { name: 'Familia', exact: true })).toBeVisible();
+    await expect(c.getByRole('button', { name: 'Invitar' })).toHaveCount(0);
+    await expect(c.getByText('Eres la cuenta principal')).toHaveCount(0);
+    expect((await api(c, 'post', '/invitations', { email: 'x@example.com', displayName: 'X', relationship: 'mother' })).status).toBe(403);
+    expect((await api(c, 'post', '/members', { role: 'adult', displayName: 'Z', username: 'zeta123', password: 'contrasena-larga' })).status).toBe(403);
+    // ...pero sí valida y puede ver los ajustes, como cualquier padre.
+    expect((await api(c, 'get', '/dashboard')).status).toBe(200);
+    await c.screenshot({ path: `${SHOTS}/106-familia-adulto-no-principal-375.png` });
+    await c.context().close();
+  });
+
+  test('moneda por familia (I20): dólares «$6.00» en la app, los avisos y los textos; y la de la familia principal sigue en euros', async ({ browser }) => {
+    test.setTimeout(180_000); // recorrido largo con varias personas: no se puede quedar corto por la carga de la máquina
+    const sql = (q: string) => execFileSync('psql', [E2E_DB, '-Atc', q]).toString().trim();
+    const noOverflow = (p: Page) => p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    sql(`INSERT INTO install_settings(key, value) VALUES ('registration_open', 'true') ON CONFLICT (key) DO UPDATE SET value = 'true'`);
+    const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+    try {
+      const p = await ctx.newPage();
+      await p.goto('/configurar');
+      await p.getByLabel('Nombre de la familia').fill('Familia Dólar');
+      await p.getByLabel('Tu nombre').fill('Pat');
+      await p.getByLabel('Tu parentesco (opcional)').selectOption('mother');
+      await p.getByRole('radio', { name: '$ Dólar' }).click();
+      await p.getByLabel('Usuario').fill('pat.dolar');
+      await p.getByLabel('Correo').fill('pat@example.com');
+      await p.getByLabel('Contraseña').fill('contrasena-pat-1');
+      await p.getByRole('checkbox', { name: /acepto/i }).check();
+      await p.screenshot({ path: `${SHOTS}/107-alta-moneda-375.png`, fullPage: true });
+      await p.getByRole('button', { name: 'Crear familia' }).click();
+      await expect(p.getByRole('heading', { name: 'Familia', exact: true })).toBeVisible();
+      expect((await api(p, 'get', '/me')).body).toMatchObject({ family: { currency: 'USD' }, user: { is_principal: true, relationship: 'mother' } });
+      const nene = (await api(p, 'post', '/members', { role: 'child', displayName: 'Nene', username: 'nene.dolar', password: '4321', weeklyGoalPoints: 50 })).body.member;
+      expect((await api(p, 'post', '/adjustments/money', { userId: nene.id, deltaCents: 600, note: 'Paga' })).status).toBe(200);
+      expect((await api(p, 'post', '/payments', { userId: nene.id, amountCents: 250, method: 'cash' })).status).toBe(200);
+      // Ajustes: el cambio de moneda se ve al momento, sin convertir nada.
+      await p.goto('/ajustes');
+      await expect(p.getByRole('radio', { name: '$ Dólar' })).toBeChecked();
+      await expect(p.getByText('Dólares', { exact: true })).toBeVisible();
+      await expect(p.getByText(/Una tarea de 20 puntos vale \$/)).toBeVisible();
+      await p.goto('/mesada');
+      await expect(p.getByText('$3.50').first()).toBeVisible(); // 6,00 − 2,50 pagados: los mismos importes, otro formato
+      await expect(p.getByText(/€/)).toHaveCount(0);
+      expect(await noOverflow(p)).toBeLessThanOrEqual(0);
+      await p.screenshot({ path: `${SHOTS}/108-mesada-dolares-375.png`, fullPage: true });
+      // El niño ve «$» en su banco y en el aviso del pago.
+      const k = await newSmallPage(browser);
+      await login(k, 'nene.dolar', '4321', true);
+      await expect(k.getByRole('link', { name: 'Mi banco' }).first()).toBeVisible();
+      await k.goto('/mesada');
+      await expect(k.getByText('$3.50').first()).toBeVisible();
+      await expect(k.getByText(/€/)).toHaveCount(0);
+      const avisos = (await api(k, 'get', '/notifications')).body.notifications;
+      expect(avisos.find((n: any) => /te ha pagado/.test(n.title)).title).toContain('$2.50');
+      expect(avisos.find((n: any) => /te ha pagado/.test(n.title)).body).toContain('$3.50');
+      expect(avisos.some((n: any) => /€/.test(n.title + n.body))).toBe(false);
+      expect(await noOverflow(k)).toBeLessThanOrEqual(0);
+      await k.screenshot({ path: `${SHOTS}/109-hijo-banco-dolares-375.png` });
+      await k.context().close();
+      // De dólares a euros y vuelta: solo cambia el formato.
+      await p.goto('/ajustes');
+      await p.getByRole('radio', { name: '€ Euro' }).click();
+      await p.getByRole('button', { name: 'Guardar ajustes', exact: true }).click();
+      await expect(p.getByText('Ajustes guardados')).toBeVisible();
+      await p.goto('/mesada');
+      await expect(p.getByText(/3,50\s€/).first()).toBeVisible();
+      expect((await api(p, 'post', '/privacy/delete-family', { password: 'contrasena-pat-1', phrase: 'BORRAR MI FAMILIA' })).status).toBe(200);
+    } finally {
+      sql(`DELETE FROM install_settings WHERE key = 'registration_open'`);
+      await ctx.close();
+    }
+    // La familia principal sigue en euros.
+    expect((await api(adult, 'get', '/me')).body.family.currency).toBe('EUR');
   });
 
   test('privacidad y datos: descargar el ZIP, borrar un hijo y borrar la familia entera (contraseña y frase)', async ({ browser }) => {

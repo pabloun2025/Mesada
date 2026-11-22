@@ -194,3 +194,35 @@ Los límites de IP son por hora y por instancia (se cuentan en memoria; con un v
 - **Te has quedado sin acceso de adulto:** con `docker compose exec db psql -U mesada mesada` puedes consultar la tabla `users`. Para restablecer una contraseña, crea otro adulto desde la cuenta del segundo adulto o restaura una copia.
 - **Alguien pide borrar o descargar sus datos:** puede hacerlo solo, en *Ajustes › Privacidad y datos* (adultos) o *Familia › Editar › Borrar los datos* (un hijo). Si escribe a `privacidad@veryfacil.org` y no puede entrar, pídele que use *¿Has olvidado la contraseña?*; si no hay otra vía, la administración puede ayudarle (nunca se leen sus datos).
 - **Un hijo ha olvidado el PIN o se ha bloqueado tras 5 intentos:** un adulto entra en *Familia → Editar → Nuevo PIN*. Así también se desbloquea.
+
+## 7. Espacio en disco
+
+**Ver qué ocupa:** Actions › **Operar** › `disco`. Muestra el disco total, usado y libre, el reparto de Docker (imágenes, volúmenes, caché), las carpetas de cada proyecto, las copias y los registros. Solo tamaños, ningún dato de usuarios.
+
+**Limpiar sin riesgo:** Actions › **Operar** › `limpiar-docker`. Borra la caché de construcción (deja 3 GB) y las imágenes sin usar de todos los proyectos. No toca contenedores, volúmenes ni datos. Cada despliegue de Mesada lo hace ya solo.
+
+**Copias locales:** con R2 activo, el servidor guarda solo `BACKUP_KEEP_DAYS_WITH_R2` días (3 por defecto) y el resto queda en R2 (`R2_RETENTION_DAYS`, 30). Si la última subida a R2 falló, se conservan los `BACKUP_KEEP_DAYS` (14) locales.
+
+**Base de datos:** no se puede llevar a R2. R2 guarda archivos, no ejecuta PostgreSQL. La base de Mesada ocupa pocos megas.
+
+### Agrandar el disco de la VM de Oracle (gratis hasta 200 GB en Always Free)
+
+El plan gratuito incluye 200 GB de almacenamiento en bloque en total (disco de arranque más volúmenes). Muchas VM se crean con unos 47 GB.
+
+1. Haz una copia antes: Actions › **Operar** › `estado` debe mostrar una copia reciente. Mejor aún, crea en la consola un *backup* del volumen de arranque: Storage › Boot volumes › tu volumen › *Create manual backup*.
+2. Consola de Oracle › **Compute › Instances** › tu instancia › **Boot volume** › el volumen › **Edit**. Pon el tamaño nuevo, por ejemplo 100 GB, y guarda. No hace falta parar la VM.
+3. Lo más fácil: Actions › **Operar** › `ampliar-disco`. Hace el *rescan*, agranda la partición y el sistema de archivos sin parar nada, y muestra el antes y el después. Si lo prefieres a mano, Oracle muestra unos comandos de *rescan*. Ejecútalos por SSH en la VM. Suelen ser estos:
+   ```bash
+   sudo dd iflag=direct if=/dev/oracleoci/oraclevda of=/dev/null count=1
+   echo "1" | sudo tee /sys/class/block/$(readlink /dev/oracleoci/oraclevda | cut -d/ -f2)/device/rescan
+   ```
+4. Agranda la partición y el sistema de archivos (Ubuntu):
+   ```bash
+   lsblk                      # mira el disco y la partición de / (p. ej. sda y sda1)
+   sudo growpart /dev/sda 1
+   sudo resize2fs /dev/sda1   # si / es ext4; con xfs: sudo xfs_growfs /
+   df -h /
+   ```
+5. Comprueba con Actions › **Operar** › `disco`.
+
+Pasarse de 200 GB entre todos los volúmenes de la cuenta tiene coste. Revisa en Storage › Block volumes que no haya otros volúmenes.

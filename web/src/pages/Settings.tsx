@@ -96,7 +96,7 @@ function BankSettings({ capOn }: { capOn: boolean }) {
         <h2 id="bank-settings" className="text-lg font-bold">Banco de los hijos</h2>
         <p className="text-sm muted">El «tope semanal» es el límite por periodo de arriba (si el cierre es mensual, se reparte en semanas).{capOn ? '' : ' Ahora no hay tope: el adelanto y el préstamo no estarán disponibles hasta que pongas uno.'}</p>
       </div>
-      <Toggle checked={b.bank_exchange_enabled} onChange={(v) => setB({ ...b, bank_exchange_enabled: v })} label="Canjear puntos por dinero" description="El hijo cambia puntos por euros cuando quiere. Cuenta para el tope de la semana." />
+      <Toggle checked={b.bank_exchange_enabled} onChange={(v) => setB({ ...b, bank_exchange_enabled: v })} label="Canjear puntos por dinero" description="El hijo cambia puntos por dinero cuando quiere. Cuenta para el tope de la semana." />
       {b.bank_exchange_enabled ? <NumField label="Mínimo por canje" unit="puntos" value={b.bank_exchange_min_points} onChange={(v) => setB({ ...b, bank_exchange_min_points: v })} /> : null}
       <Toggle checked={b.bank_withdraw_enabled} onChange={(v) => setB({ ...b, bank_withdraw_enabled: v })} label="Retirar dinero" description="El hijo pide su saldo y un adulto se lo paga." />
       {b.bank_withdraw_enabled ? <NumField label="Retiros por semana" unit="(de lunes a domingo)" value={b.bank_withdraw_per_week} onChange={(v) => setB({ ...b, bank_withdraw_per_week: v })} /> : null}
@@ -110,7 +110,7 @@ function BankSettings({ capOn }: { capOn: boolean }) {
           <NumField label="Interés por semana" unit="puntos" value={b.bank_loan_interest_points} onChange={(v) => setB({ ...b, bank_loan_interest_points: v })} />
         </div>
       ) : null}
-      <Toggle checked={b.bank_savings_enabled} onChange={(v) => setB({ ...b, bank_savings_enabled: v })} label="Interés del ahorro" description="Cada lunes las metas con dinero ganan interés, que pagáis vosotros. Se redondea al euro de arriba, con 1 € como mínimo." />
+      <Toggle checked={b.bank_savings_enabled} onChange={(v) => setB({ ...b, bank_savings_enabled: v })} label="Interés del ahorro" description="Cada lunes las metas con dinero ganan interés, que pagáis vosotros. Se redondea a la unidad de arriba, con 1 como mínimo." />
       {b.bank_savings_enabled ? <NumField label="Interés semanal" unit="%" step={0.1} value={b.bank_savings_rate_percent} onChange={(v) => setB({ ...b, bank_savings_rate_percent: v })} /> : null}
       {error ? <p role="alert" className="font-bold text-berry-deep">{error}</p> : null}
       <Button variant="secondary" loading={save.isPending} onClick={() => save.mutate()}>Guardar ajustes del banco</Button>
@@ -129,6 +129,7 @@ export default function Settings() {
     capEuros: family.cap_cents != null ? (family.cap_cents / 100).toFixed(2).replace('.', ',') : '10,00',
     leaderboardEnabled: family.leaderboard_enabled,
     celebrationsEnabled: family.celebrations_enabled,
+    currency: (family.currency === 'USD' ? 'USD' : 'EUR') as 'EUR' | 'USD',
   });
   const [error, setError] = useState('');
   const toast = useToast();
@@ -137,11 +138,11 @@ export default function Settings() {
     mutationFn: () => {
       const rateCents = parseEuros(f.rateEuros);
       const capCents = f.capOn ? parseEuros(f.capEuros) : null;
-      if (rateCents == null) throw new Error('El valor en euros no es válido');
+      if (rateCents == null) throw new Error('El valor no es válido');
       if (f.capOn && capCents == null) throw new Error('El límite no es válido');
       return patch('/family', {
         name: f.name, ratePoints: f.ratePoints, rateCents, settlementPeriod: f.settlementPeriod, capCents,
-        leaderboardEnabled: f.leaderboardEnabled, celebrationsEnabled: f.celebrationsEnabled,
+        leaderboardEnabled: f.leaderboardEnabled, celebrationsEnabled: f.celebrationsEnabled, currency: f.currency,
       });
     },
     onSuccess: () => { toast('Ajustes guardados'); setError(''); invalidate(); },
@@ -155,13 +156,17 @@ export default function Settings() {
         <section className="panel space-y-4 p-5">
           <h2 className="text-lg font-bold">Familia</h2>
           <Field label="Nombre">{(id) => <input id={id} className="field" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />}</Field>
+          <div>
+            <Segmented label="Moneda" value={f.currency} onChange={(v) => setF({ ...f, currency: v })} options={[{ value: 'EUR', label: '€ Euro' }, { value: 'USD', label: '$ Dólar' }]} />
+            <p className="mt-2 text-sm muted">Solo cambia el símbolo y el formato (6,00 € o $6.00). No convierte ningún importe.</p>
+          </div>
         </section>
         <section className="panel space-y-4 p-5">
-          <h2 className="text-lg font-bold">Puntos y euros</h2>
+          <h2 className="text-lg font-bold">Puntos y dinero</h2>
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Puntos">{(id) => <input id={id} className="field num w-28 font-bold" type="number" min={1} value={f.ratePoints} onChange={(e) => setF({ ...f, ratePoints: Number(e.target.value) })} />}</Field>
             <span className="pb-3 font-bold">=</span>
-            <Field label="Euros">{(id) => <input id={id} className="field num w-28 font-bold" inputMode="decimal" value={f.rateEuros} onChange={(e) => setF({ ...f, rateEuros: e.target.value })} />}</Field>
+            <Field label={f.currency === 'USD' ? 'Dólares' : 'Euros'}>{(id) => <input id={id} className="field num w-28 font-bold" inputMode="decimal" value={f.rateEuros} onChange={(e) => setF({ ...f, rateEuros: e.target.value })} />}</Field>
           </div>
           {preview != null && f.ratePoints > 0 ? <p className="text-sm muted">Una tarea de 20 puntos vale {euros(Math.floor((20 * preview) / f.ratePoints))}.</p> : null}
           <div>
@@ -169,7 +174,7 @@ export default function Settings() {
             <Segmented label="Periodo de cierre" value={f.settlementPeriod} onChange={(v) => setF({ ...f, settlementPeriod: v })} options={[{ value: 'week', label: 'Semanal' }, { value: 'month', label: 'Mensual' }]} />
           </div>
           <Toggle checked={f.capOn} onChange={(v) => setF({ ...f, capOn: v })} label="Límite por periodo" description="Máximo que se puede convertir en cada cierre. El resto se queda en puntos." />
-          {f.capOn ? <Field label="Límite (€)">{(id) => <input id={id} className="field num w-32 font-bold" inputMode="decimal" value={f.capEuros} onChange={(e) => setF({ ...f, capEuros: e.target.value })} />}</Field> : null}
+          {f.capOn ? <Field label={`Límite (${f.currency === 'USD' ? '$' : '€'})`}>{(id) => <input id={id} className="field num w-32 font-bold" inputMode="decimal" value={f.capEuros} onChange={(e) => setF({ ...f, capEuros: e.target.value })} />}</Field> : null}
         </section>
         <section className="panel p-5">
           <h2 className="mb-2 text-lg font-bold">Motivación</h2>

@@ -51,7 +51,13 @@ async function otherFamily() {
     config.allowRegistration = false;
   }
 }
-const goal = async (target = 5000, c = F.luciaC) => (await c.post('/api/goals', { userId: L(), title: 'Vinilo', targetCents: target })).body.goal as { id: string };
+/** El hijo propone la meta y un adulto la aprueba (I19); devuelve la meta ya activa. */
+const goal = async (target = 5000, c = F.luciaC) => {
+  const g = (await c.post('/api/goals', { userId: L(), title: 'Vinilo', targetCents: target })).body.goal as { id: string; status: string };
+  expect(g.status).toBe('proposed');
+  expect((await F.mama.post(`/api/goals/${g.id}/proposal/approve`, {})).status).toBe(200);
+  return g;
+};
 
 describe('funciones puras', () => {
   it('interés del ahorro: al euro de arriba y mínimo 1 €', () => {
@@ -472,7 +478,7 @@ describe('I7 ahorro programado', () => {
     // Ya no gana interés.
     await runWeeklyBank(pool(), F.ids.family, monday(2));
     expect(await saved(L())).toBe(0);
-    expect((await notes(L(), 'goal_decided'))[0].body).toContain('Sobraron 3,00 €');
+    expect((await notes(L(), 'goal_decided')).map((n) => n.body).join('\n')).toContain('Sobraron 3,00 €');
   });
 
   it('«Comprado» con falta: se descuenta y la cuenta puede quedar en negativo', async () => {
