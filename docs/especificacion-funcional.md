@@ -31,6 +31,8 @@ Familia de referencia: 2 adultos administradores y 2 hijos (11 y 14 años). Se p
 | Pasar dinero a la hucha | ✔ | ✘ | ✔ (solo meter, no sacar) |
 | Ver el historial de auditoría y las estadísticas familiares | ✔ | ✘ | ✘ (sus propias estadísticas sí) |
 | Ver fotos de evidencia | ✔ | ✘ | solo las que ha subido |
+| Usar la pantalla (temporizador), pedir tiempo extra, cumplir un reto | — | ✘ | ✔ (solo la suya, dentro de sus días y topes) |
+| Encender, parar o ampliar el temporizador de un hijo; dar minutos; bloquear; validar retos; cambiar días y topes | ✔ | ✘ | ✘ |
 
 **Parentesco y cuenta principal (I20).** Cada adulto tiene un parentesco: Madre, Padre, Pareja y Tutor/a legal son **adultos completos** con exactamente los mismos permisos (validar, pagar, ajustes, tareas, premios, metas y datos). Abuelo/a, Tío/a y Otro (con texto libre) son **parientes**: ven y animan. La única diferencia entre adultos completos es la **cuenta principal** (la que creó la familia): solo ella invita y quita adultos y parientes, cambia su parentesco y puede ceder el papel a otro adulto completo. A un pariente se le prohíbe **toda** ruta de la API que no esté en una lista cerrada (`lib/relative-gate.ts`); una prueba recorre todas las rutas registradas y comprueba que cada una devuelve 403.
 
@@ -81,6 +83,16 @@ Tres magnitudes separadas, cada una con su libro de movimientos de solo inserci�
 - **Concurrencia:** las operaciones de saldo bloquean la fila del usuario (`SELECT … FOR UPDATE`). Hay pruebas de aprobaciones y canjes simultáneos.
 - **Potencial del periodo:** «Si lo haces todo, esta semana puedes ganar X €», junto con lo ganado, lo que espera validación y lo perdido.
 
+### Tiempo de pantalla (I21)
+
+- **Dos baterías.** «Semana» (azul): el plan semanal gratuito, que se recarga el lunes; «Ganado» (dorado): minutos ganados con tareas, cada lote con su caducidad. Se gasta primero lo que caduca antes.
+- **Temporizador.** Un solo botón, «Usar pantalla» (15/30/60 min o a medida), enciende una cuenta atrás grande guardada en el servidor (inicio, fin previsto, quién la encendió y quién la paró). Al parar se descuenta lo usado de verdad; al acabarse, lo previsto. Si la familia lo exige, antes lo aprueba un adulto. Un adulto puede encender, parar y ampliar el temporizador de un hijo. Los padres reciben aviso (solo en la app) cuando el hijo empieza o para.
+- **Días de uso.** El plan indica los días permitidos (L–D) y un máximo opcional por día. Fuera de ellos el botón no arranca y explica por qué.
+- **Fin del tiempo.** Aviso a los 5 min y, al llegar a 0, alarma en la app del hijo (sonido, vibración y pantalla «Se acabó el tiempo») y aviso al hijo y a los padres (app y WhatsApp por defecto). Un proceso del servidor cierra las sesiones vencidas aunque nadie tenga la app abierta. Lo que se pasa del tiempo se descuenta de la semana siguiente.
+- **Castigos.** Bloquear días o una franja horaria con motivo y fin, visible en las dos apps, con un reto opcional (texto y foto si se pide): el hijo lo cumple, un adulto lo valida y el bloqueo se levanta o se acorta.
+- **Dar minutos y tiempo extra.** «Dar minutos» (adulto) descuenta al instante, sin temporizador; «Pedir tiempo extra» (hijo) hace lo mismo con aprobación. Lo que no llegue se cobra con puntos, dinero o como deuda de la semana siguiente (por defecto 15 min = 10 puntos o 0,25; configurable en Ajustes de pantalla).
+- **Historial** de sesiones (quién, cuándo, cuánto y cómo se pagó) para padres e hijo; «+N min» en cada tarea que da minutos y aviso 3 días antes de que caduquen los ganados.
+
 ## 6. Gamificación
 
 - **Niveles** según los puntos ganados de por vida: el nivel *n* requiere 25·(n−1)² puntos. Títulos: Novato, Aprendiz, Colaborador, Constante, Fiable, Experto, Crack, Maestro, Referente y Leyenda.
@@ -102,7 +114,7 @@ Tres magnitudes separadas, cada una con su libro de movimientos de solo inserci�
 ## 8. Notificaciones (módulo común multicanal)
 
 - **Canales:** en la aplicación (campana, siempre), **correo** (Resend por API con idempotencia, como firmador; o cualquier relé SMTP) y **WhatsApp** (Evolution API, con una instancia propia de Mesada en el servidor compartido). *Pendiente:* Web Push.
-- **Eventos (12):** nueva tarea asignada, recordatorio diario, tarea a punto de vencer, tarea enviada para validar (adultos), aprobada (con puntos), devuelta para repasar, ajuste de puntos, recompensa pedida (adultos), recompensa decidida, cierre de mesada, pago registrado e insignia. Cada evento tiene canales por defecto, pensados para ahorrar el cupo de correo: lo frecuente va por WhatsApp y el correo se reserva para lo importante.
+- **Eventos (12 + los de pantalla de I21):** nueva tarea asignada, recordatorio diario, tarea a punto de vencer, tarea enviada para validar (adultos), aprobada (con puntos), devuelta para repasar, ajuste de puntos, recompensa pedida (adultos), recompensa decidida, cierre de mesada, pago registrado e insignia. Cada evento tiene canales por defecto, pensados para ahorrar el cupo de correo: lo frecuente va por WhatsApp y el correo se reserva para lo importante.
 - **Preferencias:** por persona, evento y canal. **Solo los adultos** las cambian: las suyas y las de los hijos, nunca las de otro adulto. Los hijos las ven en solo lectura. Datos de contacto (correo de los adultos, teléfono y consentimiento de WhatsApp) gestionados por un adulto.
 - **Reglas de protección:** WhatsApp solo con teléfono, consentimiento registrado y **13 años como mínimo** (condiciones de WhatsApp en la UE). Con solo el año de nacimiento se toma la edad mínima posible, y sin año no hay WhatsApp. El correo solo se usa para adultos.
 - **Recordatorios configurables por familia:** hora del recordatorio diario, aviso X minutos antes de la hora límite y **horario de silencio** (lo que se genere durante el silencio espera a que termine, salvo los correos críticos).

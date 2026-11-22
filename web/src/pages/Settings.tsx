@@ -7,7 +7,7 @@ import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import { Button, Field, IconButton, PageHeader, Segmented, Toggle, useToast } from '../components/ui';
 import type { Family } from '../lib/types';
-import { PlanSettings, ReasonsSettings } from '../components/ScreenSettings';
+import { PlanSettings, RatesSettings, ReasonsSettings } from '../components/ScreenSettings';
 import { PrivacySettings } from '../components/PrivacyData';
 
 /** Festivos y vacaciones: esos días rige la hora límite de fin de semana. */
@@ -183,6 +183,7 @@ export default function Settings() {
         </section>
         <BankSettings capOn={f.capOn} />
         <PlanSettings />
+        <RatesSettings />
         <ReasonsSettings />
         <Holidays />
         {error ? <p role="alert" className="font-bold text-berry-deep">{error}</p> : null}

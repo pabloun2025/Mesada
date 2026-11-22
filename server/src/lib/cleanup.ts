@@ -78,8 +78,22 @@ export async function runCleanup(now = new Date()): Promise<CleanupReport> {
     await db.query('UPDATE savings_goals SET photo_path = NULL WHERE id = $1', [e.id]);
   }
 
+  // 1c) Fotos de retos de pantalla: se borran los mismos días después de que un adulto valide el reto, o de que el bloqueo se levante.
+  const challengePhotos = await many<{ id: string; challenge_photo_path: string }>(
+    db,
+    `SELECT id, challenge_photo_path FROM screen_blocks
+      WHERE challenge_photo_path IS NOT NULL AND COALESCE(challenge_decided_at, lifted_at) IS NOT NULL
+        AND COALESCE(challenge_decided_at, lifted_at) < $1::timestamptz - make_interval(days => $2)`,
+    [now, r.photoDays],
+  );
+  for (const e of challengePhotos) {
+    freed += size(path.resolve(config.uploadDir, e.challenge_photo_path));
+    removePhotoFile(e.challenge_photo_path);
+    await db.query('UPDATE screen_blocks SET challenge_photo_path = NULL WHERE id = $1', [e.id]);
+  }
+
   // 2) Archivos sin fila (más de una hora, para no pisar una subida en curso) y filas sin archivo.
-  const referenced = new Set((await many<{ photo_path: string }>(db, 'SELECT photo_path FROM task_instances WHERE photo_path IS NOT NULL UNION ALL SELECT photo_path FROM savings_goals WHERE photo_path IS NOT NULL')).map((x) => path.normalize(x.photo_path)));
+  const referenced = new Set((await many<{ photo_path: string }>(db, 'SELECT photo_path FROM task_instances WHERE photo_path IS NOT NULL UNION ALL SELECT photo_path FROM savings_goals WHERE photo_path IS NOT NULL UNION ALL SELECT challenge_photo_path FROM screen_blocks WHERE challenge_photo_path IS NOT NULL')).map((x) => path.normalize(x.photo_path)));
   let orphanFiles = 0;
   for (const f of photoFilesOnDisk()) {
     if (referenced.has(path.normalize(f.rel)) || now.getTime() - f.mtimeMs < 3_600_000) continue;
@@ -98,6 +112,13 @@ export async function runCleanup(now = new Date()): Promise<CleanupReport> {
   for (const row of await many<{ id: string; photo_path: string }>(db, 'SELECT id, photo_path FROM savings_goals WHERE photo_path IS NOT NULL')) {
     if (!fs.existsSync(path.resolve(config.uploadDir, row.photo_path))) {
       await db.query('UPDATE savings_goals SET photo_path = NULL WHERE id = $1', [row.id]);
+      missing++;
+    }
+  }
+
+  for (const row of await many<{ id: string; challenge_photo_path: string }>(db, 'SELECT id, challenge_photo_path FROM screen_blocks WHERE challenge_photo_path IS NOT NULL')) {
+    if (!fs.existsSync(path.resolve(config.uploadDir, row.challenge_photo_path))) {
+      await db.query('UPDATE screen_blocks SET challenge_photo_path = NULL WHERE id = $1', [row.id]);
       missing++;
     }
   }

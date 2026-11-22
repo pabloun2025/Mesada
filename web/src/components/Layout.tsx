@@ -2,7 +2,7 @@ import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Bell, BellRing, CalendarCheck, ChartColumn, CircleCheckBig, Gift, Hammer, House, ListChecks, LogOut, Menu, Moon, PiggyBank, Settings, ShieldCheck, Sun, Trophy, User, Users, History,
+  Bell, BellRing, CalendarCheck, ChartColumn, CircleCheckBig, Gift, Hammer, House, ListChecks, LogOut, Menu, Moon, PiggyBank, Settings, ShieldCheck, Sun, Trophy, User, Users, History, MonitorPlay,
 } from 'lucide-react';
 import { api, ApiError, post } from '../lib/api';
 import { useLogout, useSession } from '../lib/session';
@@ -10,6 +10,7 @@ import { relative } from '../lib/format';
 import { kinshipText } from '../lib/kinship';
 import { Avatar, Empty, IconButton, Sheet } from './ui';
 import { RevealModal } from './RevealModal';
+import { MinutesFlight, ScreenAlarm } from './ScreenAlarm';
 import { ErrorBoundary } from './ErrorBoundary';
 import { LegalLinks } from './LegalLinks';
 
@@ -142,13 +143,14 @@ export function Layout() {
     : [
         { to: '/', label: 'Hoy', icon: <CalendarCheck size={22} />, end: true },
         { to: '/progreso', label: 'Progreso', icon: <Trophy size={22} /> },
-        { to: '/premios', label: 'Premios', icon: <Gift size={22} /> },
+        { to: '/pantalla', label: 'Pantalla', icon: <MonitorPlay size={22} /> },
         { to: '/mesada', label: 'Mi banco', icon: <PiggyBank size={22} /> },
       ];
   const secondary: NavItem[] = isRelativeUser
     ? []
     : isAdult
     ? [
+        { to: '/pantalla', label: 'Pantalla', icon: <MonitorPlay size={20} /> },
         { to: '/extras', label: 'Trabajos extra', icon: <Hammer size={20} /> },
         { to: '/premios', label: 'Recompensas', icon: <Gift size={20} /> },
         { to: '/familia', label: 'Familia', icon: <Users size={20} /> },
@@ -160,6 +162,7 @@ export function Layout() {
         ...(user.is_superadmin ? [{ to: '/administracion', label: 'Administración', icon: <ShieldCheck size={20} /> }] : []),
       ]
     : [
+        { to: '/premios', label: 'Premios', icon: <Gift size={20} /> },
         { to: '/extras', label: 'Trabajos extra', icon: <Hammer size={20} /> },
         { to: '/perfil', label: 'Mi perfil', icon: <User size={20} /> },
         { to: '/avisos', label: 'Mis avisos', icon: <BellRing size={20} /> },
@@ -186,6 +189,7 @@ export function Layout() {
               key={i.to}
               to={i.to}
               end={i.end}
+              {...(i.to === '/pantalla' ? { 'data-minutes-fallback': '' } : {})}
               className={({ isActive }) =>
                 `flex h-11 items-center gap-3 rounded-full px-4 font-bold transition ${isActive ? 'bg-ink text-white dark:bg-white dark:text-ink' : 'text-[var(--fg-2)] hover:bg-[var(--chip)]'}`
               }
@@ -238,6 +242,7 @@ export function Layout() {
                 key={i.to}
                 to={i.to}
                 end={i.end}
+                {...(i.to === '/pantalla' ? { 'data-minutes-fallback': '' } : {})}
                 className={({ isActive }) => `relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-bold ${isActive ? 'text-tangerine' : 'text-[var(--fg-3)]'}`}
               >
                 {({ isActive }) => (
@@ -258,6 +263,8 @@ export function Layout() {
           </div>
         </nav>
         {user.role === 'child' ? <RevealModal /> : null}
+        {user.role === 'child' ? <ScreenAlarm /> : null}
+        {user.role === 'child' ? <MinutesFlight /> : null}
         <MoreSheet open={more} onClose={() => setMore(false)} items={secondary} />
       </div>
     </div>

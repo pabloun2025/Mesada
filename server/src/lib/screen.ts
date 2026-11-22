@@ -4,7 +4,7 @@ import { badRequest } from './errors.js';
 import { addDays, diffDays, isoWeekday, startOfWeek, todayIn } from './dates.js';
 import { zonedToUtc } from './notify/time.js';
 
-export type ScreenKind = 'bonus' | 'penalty' | 'spend' | 'adjustment' | 'refund' | 'task' | 'usage' | 'plan' | 'expiry';
+export type ScreenKind = 'bonus' | 'penalty' | 'spend' | 'adjustment' | 'refund' | 'task' | 'usage' | 'plan' | 'expiry' | 'session';
 
 /** Categorías de pantalla: comparten un único saldo de minutos, solo describen en qué se gastó. */
 export const SCREEN_CATEGORIES = ['videojuegos', 'tele', 'tablet', 'movil', 'ordenador', 'otro'] as const;
@@ -216,17 +216,21 @@ export async function shiftLots(db: Db, familyId: string, userId: string, days: 
   }
 }
 
-/** Desglose del saldo para el hijo: plan de la semana y ganados (con su primera caducidad). */
+/** Desglose del saldo para el hijo: plan de la semana y ganados (con su primera caducidad, lo que se recibió y cada lote). */
 export async function screenBuckets(db: Db, userId: string) {
-  const rows = await many<{ source: string; remaining: number; expires_at: Date }>(
-    db, `SELECT source, remaining, expires_at FROM screen_lots WHERE user_id = $1 AND remaining > 0 ORDER BY expires_at`, [userId],
+  const rows = await many<{ source: string; remaining: number; amount: number; expires_at: Date }>(
+    db, `SELECT source, remaining, amount, expires_at FROM screen_lots WHERE user_id = $1 AND remaining > 0 ORDER BY expires_at`, [userId],
   );
-  const sum = (f: (s: string) => boolean) => rows.filter((r) => f(r.source)).reduce((s, r) => s + r.remaining, 0);
+  const sum = (f: (s: string) => boolean, k: 'remaining' | 'amount' = 'remaining') => rows.filter((r) => f(r.source)).reduce((s, r) => s + r[k], 0);
   const first = (f: (s: string) => boolean) => rows.find((r) => f(r.source))?.expires_at ?? null;
   const isPlan = (s: string) => s === 'plan';
   const isEarned = (s: string) => s !== 'plan';
   return {
-    plan: { minutes: sum(isPlan), expires_at: first(isPlan) },
-    earned: { minutes: sum(isEarned), first_expires_at: first(isEarned) },
+    // `amount` es lo que entró en esos lotes: sirve para pintar cuánta batería queda.
+    plan: { minutes: sum(isPlan), amount: sum(isPlan, 'amount'), expires_at: first(isPlan) },
+    earned: {
+      minutes: sum(isEarned), amount: sum(isEarned, 'amount'), first_expires_at: first(isEarned),
+      lots: rows.filter((r) => isEarned(r.source)).map((r) => ({ minutes: r.remaining, expires_at: r.expires_at })),
+    },
   };
 }

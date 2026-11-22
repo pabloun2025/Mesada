@@ -65,7 +65,8 @@ export default async function screenRoutes(app: FastifyInstance) {
     const u = requireAdult(req);
     const plans = await many(
       getPool(),
-      `SELECT c.id AS user_id, c.display_name, c.avatar, c.color, COALESCE(p.minutes_per_week, 0) AS minutes_per_week, COALESCE(p.enabled, false) AS enabled
+      `SELECT c.id AS user_id, c.display_name, c.avatar, c.color, COALESCE(p.minutes_per_week, 0) AS minutes_per_week, COALESCE(p.enabled, false) AS enabled,
+              COALESCE(p.allowed_days, '{1,2,3,4,5,6,7}') AS allowed_days, COALESCE(p.day_max, '{}'::jsonb) AS day_max, COALESCE(p.require_approval, false) AS require_approval
          FROM users c LEFT JOIN screen_plans p ON p.user_id = c.id
         WHERE c.family_id = $1 AND c.role = 'child' AND c.active ORDER BY c.display_name`,
       [u.familyId],

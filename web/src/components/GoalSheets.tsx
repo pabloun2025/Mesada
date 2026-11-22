@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Camera, Gift, Undo2 } from 'lucide-react';
-import { api, newKey, post, put } from '../lib/api';
+import { Camera, Gift, Pencil, Trash2, Undo2 } from 'lucide-react';
+import { api, newKey, patch, post, put } from '../lib/api';
 import { currencySymbol, euros, fmtDate, parseEuros } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import type { Goal } from '../lib/types';
@@ -106,7 +106,26 @@ export function ManageGoalSheet({ goal, onClose }: { goal: Goal; onClose: () => 
     cap: goal.match_cap_cents ? (goal.match_cap_cents / 100).toString().replace('.', ',') : '10',
   });
   const [auto, setAuto] = useState(goal.auto_percent);
+  const [edit, setEdit] = useState({ title: goal.title, target: (goal.target_cents / 100).toString().replace('.', ','), emoji: goal.emoji ?? '' });
+  const [cancelling, setCancelling] = useState(false);
+  const [reason, setReason] = useState('');
   const done = (msg: string) => { toast(msg); invalidate(); onClose(); };
+  const saveEdit = useMutation({
+    mutationFn: () => {
+      const targetCents = parseEuros(edit.target);
+      if (!edit.title.trim()) throw new Error('Ponle un nombre a la meta');
+      if (!targetCents) throw new Error('Escribe un precio válido');
+      return patch(`/goals/${goal.id}`, { title: edit.title.trim(), targetCents, emoji: edit.emoji || null });
+    },
+    onSuccess: (r: { changed: boolean }) => (r.changed ? done('Meta cambiada. Le hemos avisado.') : onClose()),
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  // El motivo va en el cuerpo de DELETE: el servidor lo acepta y se lo cuenta al niño.
+  const cancel = useMutation({
+    mutationFn: () => api<{ returned_cents: number }>(`/goals/${goal.id}`, { method: 'DELETE', body: { reason: reason.trim() || undefined } }),
+    onSuccess: (r) => done(r.returned_cents ? `Meta cancelada. ${euros(r.returned_cents)} han vuelto a su banco.` : 'Meta cancelada'),
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
   const sendGift = useMutation({
     mutationFn: () => {
       const cents = parseEuros(gift.amount);
@@ -139,7 +158,18 @@ export function ManageGoalSheet({ goal, onClose }: { goal: Goal; onClose: () => 
   return (
     <Sheet open onClose={onClose} title={`Meta «${goal.title}»`} subtitle={`${euros(goal.balance_cents)} de ${euros(goal.target_cents)}`}>
       <div className="space-y-6">
-        <section aria-label="Aporte puntual" className="space-y-3">
+        <section aria-label="Cambiar la meta" className="space-y-3">
+          <h3 className="font-bold">Cambiar la meta</h3>
+          <Field label="Nombre">{(id) => <input id={id} className="field" maxLength={80} value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />}</Field>
+          <Field label={`Precio (${currencySymbol()})`}>{(id) => <input id={id} className="field num" inputMode="decimal" value={edit.target} onChange={(e) => setEdit({ ...edit, target: e.target.value })} />}</Field>
+          <div role="radiogroup" aria-label="Emoji de la meta" className="flex flex-wrap gap-1.5">
+            {GOAL_EMOJIS.map((em) => (
+              <button key={em} type="button" role="radio" aria-checked={edit.emoji === em} aria-label={em} onClick={() => setEdit({ ...edit, emoji: edit.emoji === em ? '' : em })} className={`size-11 rounded-full text-xl ${edit.emoji === em ? 'bg-tangerine-soft ring-2 ring-tangerine dark:bg-tangerine/20' : 'bg-[var(--chip)]'}`}>{em}</button>
+            ))}
+          </div>
+          <Button variant="secondary" loading={saveEdit.isPending} onClick={() => saveEdit.mutate()}><Pencil size={16} aria-hidden /> Guardar cambios</Button>
+        </section>
+        <section aria-label="Aporte puntual" className="space-y-3 border-t border-[var(--line)] pt-5">
           <h3 className="font-bold">Aporte puntual</h3>
           <p className="text-sm muted">Un premio o un empujón. Se suma a la meta y se avisa al niño.</p>
           <Field label={`Importe (${currencySymbol()})`}>{(id) => <input id={id} className="field num" inputMode="decimal" value={gift.amount} onChange={(e) => setGift({ ...gift, amount: e.target.value })} />}</Field>
@@ -182,6 +212,26 @@ export function ManageGoalSheet({ goal, onClose }: { goal: Goal; onClose: () => 
             </ul>
           </section>
         ) : null}
+        <section aria-label="Cancelar la meta" className="space-y-3 border-t border-[var(--line)] pt-5">
+          <h3 className="font-bold">Cancelar la meta</h3>
+          {cancelling ? (
+            <>
+              <p className="text-sm">
+                {goal.balance_cents > 0
+                  ? <>Sus <b className="num">{euros(goal.principal_cents)}</b> ahorrados vuelven a su cuenta de dinero del banco.{goal.interest_cents + goal.contributions_cents > 0 ? <> Se pierden <b className="num">{euros(goal.interest_cents + goal.contributions_cents)}</b> de interés y aportes.</> : null}</>
+                  : 'No tiene dinero ahorrado.'}
+              </p>
+              <Field label="Motivo para el niño (opcional)">{(id) => <input id={id} className="field" maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />}</Field>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="danger" loading={cancel.isPending} onClick={() => cancel.mutate()}>Sí, cancelar la meta</Button>
+                <Button variant="ghost" onClick={() => setCancelling(false)}>No</Button>
+              </div>
+            </>
+          ) : (
+            <Button variant="ghost" disabled={!!goal.pending_request} onClick={() => setCancelling(true)}><Trash2 size={16} aria-hidden /> Cancelar meta</Button>
+          )}
+          {goal.pending_request ? <p className="text-sm muted">Tiene una petición esperando: resuélvela en Validar antes de cancelar.</p> : null}
+        </section>
       </div>
     </Sheet>
   );

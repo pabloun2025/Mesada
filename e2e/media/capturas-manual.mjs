@@ -280,9 +280,10 @@ try {
   });
   await api(A, 'post', '/screen/adjust', { userId: nora.id, delta: 45, note: 'Gracias por ayudar' });
   await step('pantalla-hijo', async () => {
-    await K.goto(BASE + '/mesada');
-    const bal = K.getByRole('list', { name: 'Desglose del saldo de pantalla' });
-    await bal.scrollIntoViewIfNeeded(); await shot(K, '42-hijo-pantalla');
+    // I21: «Mi pantalla» con las dos baterías (Semana y Ganado).
+    await K.goto(BASE + '/pantalla');
+    await K.getByTestId('battery-earned').waitFor();
+    await sleep(600); await shot(K, '42-hijo-pantalla');
   });
   await step('ajuste-pantalla', async () => {
     await A.goto(BASE + '/mesada');

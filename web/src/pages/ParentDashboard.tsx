@@ -8,11 +8,12 @@ import { euros, relative, weekdayLong } from '../lib/format';
 import { minutesLabel } from '../lib/deadline';
 import { describeEntry } from '../lib/activity';
 import type { Instance, User, Wallet } from '../lib/types';
-import { Avatar, Button, Empty, Loading, PageHeader, SectionTitle, color } from '../components/ui';
+import { Avatar, Button, buttonClass, Empty, Loading, PageHeader, SectionTitle, color } from '../components/ui';
 import { Bar, WeekRing } from '../components/Ring';
 import { ApprovalCard } from '../components/ApprovalCard';
 import { TaskRow } from '../components/TaskRow';
-import { GiveScreenSheet, PaySheet } from '../components/MoneySheets';
+import { PaySheet } from '../components/MoneySheets';
+import { GiveMinutesSheet } from '../components/ScreenSheets';
 
 export default function ParentDashboard() {
   const { user } = useSession();
@@ -103,7 +104,8 @@ export default function ParentDashboard() {
                   </dl>
                   <div className="flex gap-2 border-t border-[var(--line)] p-3">
                     <Button variant="success" size="sm" className="flex-1" disabled={k.wallet.cents_pending <= 0} onClick={() => setSheet({ kind: 'pay', child: k, wallet: k.wallet })}><Banknote size={16} aria-hidden /> Pagar</Button>
-                    <Button variant="secondary" size="sm" className="flex-1" disabled={k.wallet.screen_minutes <= 0} onClick={() => setSheet({ kind: 'screen', child: k, wallet: k.wallet })}><MonitorSmartphone size={16} aria-hidden /> Dar pantalla</Button>
+                    <Button variant="secondary" size="sm" className="flex-1 px-2" onClick={() => setSheet({ kind: 'screen', child: k, wallet: k.wallet })}><MonitorSmartphone size={16} aria-hidden /> Dar minutos</Button>
+                    <Link to={`/pantalla?hijo=${k.id}`} className={`${buttonClass('secondary', 'sm')} flex-1 px-2`} aria-label={`Pantalla de ${k.display_name}`}>Pantalla</Link>
                   </div>
                 </article>
               );
@@ -171,7 +173,7 @@ export default function ParentDashboard() {
         </section>
       </div>
       {sheet?.kind === 'pay' ? <PaySheet child={sheet.child} wallet={sheet.wallet} onClose={() => setSheet(null)} /> : null}
-      {sheet?.kind === 'screen' ? <GiveScreenSheet child={sheet.child} minutes={sheet.wallet.screen_minutes} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'screen' ? <GiveMinutesSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
     </div>
   );
 }

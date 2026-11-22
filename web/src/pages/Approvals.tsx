@@ -3,7 +3,8 @@ import { Check, CircleCheckBig, Gift, X } from 'lucide-react';
 import { api, post } from '../lib/api';
 import { addDays, fmtDate, relative } from '../lib/format';
 import { useDecideRedemption, useInvalidateAll } from '../lib/hooks';
-import type { BonusGrant, Instance, Redemption, ScreenLog } from '../lib/types';
+import type { BonusGrant, Instance, Redemption, ScreenLog, ScreenSession } from '../lib/types';
+import { ChallengeReviewCard, PendingSessionCard } from '../components/ScreenParts';
 import { screenPhrase } from '../lib/screen';
 import { Avatar, Badge, Button, Empty, Loading, PageHeader, PointsPill, SectionTitle, useToast } from '../components/ui';
 import { ApprovalCard } from '../components/ApprovalCard';
@@ -96,6 +97,27 @@ function PendingGrants() {
   );
 }
 
+/** Peticiones de pantalla y de tiempo extra, y retos de castigos cumplidos: se resuelven en un toque. */
+function PendingScreen() {
+  const list = useQuery({
+    queryKey: ['screen-pending'],
+    queryFn: () => api<{ sessions: (ScreenSession & { balance_minutes: number; rates: { pointsPer15: number; centsPer15: number } })[]; challenges: any[] }>('/screen/sessions/pending'),
+    refetchInterval: 30_000,
+  });
+  const sessions = list.data?.sessions ?? [];
+  const challenges = list.data?.challenges ?? [];
+  if (!sessions.length && !challenges.length) return null;
+  return (
+    <section className="mb-8" aria-label="Pantalla por validar">
+      <SectionTitle>Pantalla</SectionTitle>
+      <ul className="space-y-3">
+        {sessions.map((s) => <PendingSessionCard key={s.id} s={s} balance={s.balance_minutes} rates={s.rates} />)}
+        {challenges.map((c) => <ChallengeReviewCard key={c.id} b={c} />)}
+      </ul>
+    </section>
+  );
+}
+
 /** Pantalla que el hijo ha anotado: ya está restada; el adulto la confirma (con puntos de honestidad) o la anula. */
 function UsageLogs() {
   const toast = useToast();
@@ -150,6 +172,7 @@ export default function Approvals() {
   return (
     <div className="max-w-3xl">
       <PageHeader title="Validar" subtitle="Revisa lo que han hecho. Puedes ajustar los puntos antes de aprobar." />
+      <PendingScreen />
       <CheckTasks today={data.today} />
       <BankApprovals heading={() => <SectionTitle>Dinero y pantalla</SectionTitle>} />
       <UsageLogs />

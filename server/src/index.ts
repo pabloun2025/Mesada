@@ -6,6 +6,7 @@ import { processOutbox } from './lib/notify/worker.js';
 import { runWeeklyBank } from './lib/savings.js';
 import { maybeNightlyCleanup } from './lib/cleanup.js';
 import { runScreenExpiry, runScreenPlans } from './lib/screen.js';
+import { runScreenDebts, runScreenSessions } from './lib/screen-sessions.js';
 
 const app = await buildApp();
 const applied = await migrate();
@@ -22,6 +23,8 @@ async function tick() {
       // Pantalla: primero caduca lo vencido y luego se carga el plan de la semana (idempotente por hijo y semana).
       await runScreenExpiry(getPool(), f.id);
       await runScreenPlans(getPool(), f.id);
+      // Y lo que se pasó de tiempo la semana anterior se descuenta de la semana nueva.
+      await runScreenDebts(getPool(), f.id);
     }
   } catch (e) {
     app.log.error(e, 'Fallo en la tarea periódica');
@@ -49,12 +52,27 @@ const outboxTimer = setInterval(async () => {
   }
 }, 30 * 1000);
 
+// Sesiones de pantalla: cierra las vencidas y manda los avisos aunque nadie tenga la app abierta (cada 30 s).
+let screenBusy = false;
+const screenTimer = setInterval(async () => {
+  if (screenBusy) return;
+  screenBusy = true;
+  try {
+    await runScreenSessions(getPool());
+  } catch (e) {
+    app.log.error(e, 'Fallo al revisar las sesiones de pantalla');
+  } finally {
+    screenBusy = false;
+  }
+}, 30 * 1000);
+
 await app.listen({ port: config.port, host: config.host });
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, async () => {
     clearInterval(timer);
     clearInterval(outboxTimer);
+    clearInterval(screenTimer);
     await app.close();
     await getPool().end();
     process.exit(0);

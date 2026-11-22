@@ -47,7 +47,7 @@ async function login(page: Page, user: string, pass: string, child = false) {
   await page.getByRole('button', { name: 'Entrar' }).click();
 }
 
-async function api(page: Page, method: 'get' | 'post' | 'patch', path: string, data?: unknown, headers: Record<string, string> = {}) {
+async function api(page: Page, method: 'get' | 'post' | 'patch' | 'put', path: string, data?: unknown, headers: Record<string, string> = {}) {
   const res = await page.request[method](`/api${path}`, { data, headers: { 'X-Mesada': '1', ...headers } });
   return { status: res.status(), body: await res.json().catch(() => ({})) };
 }
@@ -145,6 +145,39 @@ async function newAdultPage(browser: Browser) {
 async function newSmallPage(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
   return ctx.newPage();
+}
+
+/** Captura a 375 px comprobando antes que no hay desbordes ni el aviso de datos sin cargar (nunca debe salir en una captura). */
+async function shot(page: Page, name: string, opts: { fullPage?: boolean } = {}) {
+  await expect(page.getByText('No se han podido cargar algunos datos')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), `desborde en ${name}`).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: opts.fullPage ?? false });
+}
+
+/** Sustitutos de Web Audio y vibración que cuentan las llamadas (no hay altavoz en las pruebas). */
+const AUDIO_SPY = `
+  window.__osc = 0; window.__vibes = [];
+  class FakeAC { constructor() { this.currentTime = 0; this.destination = {}; } resume() { return Promise.resolve(); }
+    createOscillator() { window.__osc++; return { type: '', frequency: { value: 0 }, connect: (x) => x, start() {}, stop() {} }; }
+    createGain() { return { gain: { setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect: (x) => x }; } }
+  window.AudioContext = FakeAC;
+  navigator.vibrate = (p) => { window.__vibes.push(p); return true; };
+`;
+
+async function newKidPhone(browser: Browser, opts: { spy?: boolean; reducedMotion?: boolean } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, locale: 'es-ES', timezoneId: 'Europe/Madrid', reducedMotion: opts.reducedMotion ? 'reduce' : 'no-preference' });
+  const page = await ctx.newPage();
+  if (opts.spy) await page.addInitScript(AUDIO_SPY);
+  await login(page, KID.user, KID.pin, true);
+  await expect(page.getByRole('region', { name: 'Mi mesada' })).toBeVisible();
+  return page;
+}
+
+async function newAdultPhone(browser: Browser) {
+  const page = await newSmallPage(browser);
+  await login(page, ADULT.user, ADULT.pass);
+  await expect(page.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+  return page;
 }
 
 async function newPhonePage(browser: Browser) {
@@ -556,7 +589,7 @@ test.describe.serial('Familia completa', () => {
     const row = kid.getByRole('listitem').filter({ hasText: CAMA }).first();
     await expect(row).toContainText(`Antes de las ${weekend ? '23:58' : '23:59'}`);
     await expect(row).toContainText('quedan');
-    await expect(row).toContainText('+30 min de pantalla');
+    await expect(row).toContainText('+30 min');
     expect(await kid.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     await kid.screenshot({ path: `${SHOTS}/13-hijo-hora-limite-375.png`, fullPage: true });
     await kid.getByRole('button', { name: `Marcar «${CAMA}» como hecha` }).click();
@@ -566,9 +599,8 @@ test.describe.serial('Familia completa', () => {
     await adult.getByRole('button', { name: `Aprobar «${CAMA}» de ${KID.name}` }).click();
     await expect(adult.getByText('Tarea aprobada')).toBeVisible();
 
-    await kid.goto('/mesada');
-    const screen = kid.getByText('Mi tiempo de pantalla').locator('xpath=ancestor::section');
-    await expect(screen).toContainText('30 min');
+    await kid.goto('/pantalla');
+    await expect(kid.getByTestId('battery-earned')).toContainText('30 min');
     await kid.screenshot({ path: `${SHOTS}/14-hijo-pantalla-375.png`, fullPage: true });
     // El adulto ve el saldo en la mesada
     await adult.goto('/mesada');
@@ -604,8 +636,8 @@ test.describe.serial('Familia completa', () => {
     await adult.getByRole('button', { name: `No cumplida: «${COCHE}» de ${KID.name}` }).click();
     await expect(adult.getByText('No cumplida: −15 min de pantalla')).toBeVisible();
 
-    await kid.goto('/mesada');
-    await expect(kid.getByText('Mi tiempo de pantalla').locator('xpath=ancestor::section')).toContainText('15 min');
+    await kid.goto('/pantalla');
+    await expect(kid.getByTestId('battery-earned')).toContainText('15 min');
     // Corregir: pasa a cumplida y se devuelven exactamente los 15 minutos
     await adult.getByRole("button", { name: `Cumplida: «${COCHE}» de ${KID.name}`, exact: true }).click();
     await expect(adult.getByText('Marcada como cumplida')).toBeVisible();
@@ -667,66 +699,62 @@ test.describe.serial('Familia completa', () => {
     await adult.screenshot({ path: `${SHOTS}/16-panel-pagar.png`, fullPage: true });
   });
 
-  test('el hijo pide minutos de pantalla y el adulto los aprueba', async () => {
+  test('el hijo pide tiempo extra y el adulto lo aprueba en un toque desde Validar (sin temporizador)', async () => {
     const me = (await api(kid, 'get', '/me')).body.user;
     await api(adult, 'post', '/screen/adjust', { userId: me.id, delta: 60, note: 'Fin de semana' });
     const before = (await api(kid, 'get', `/screen/${me.id}`)).body.balance;
 
     await kid.setViewportSize({ width: 375, height: 812 });
-    await kid.goto('/mesada');
-    await kid.getByRole('button', { name: 'Pedir pantalla' }).click();
+    await kid.goto('/pantalla');
+    await kid.getByRole('button', { name: 'Pedir tiempo extra' }).click();
     const kd = kid.getByRole('dialog');
-    await kd.getByLabel('Minutos').fill('10');
-    await kd.getByRole('radio', { name: 'Tele' }).click();
-    await kd.getByRole('button', { name: 'Enviar petición' }).click();
+    await keypad(kd, '10');
+    await kd.getByLabel('Para qué (opcional)').fill('Un vídeo de TikTok');
+    await kd.getByRole('button', { name: 'Pedir 10 min más' }).click();
     await expect(kid.getByText('Petición enviada. Un adulto la verá')).toBeVisible();
-    await expect(kid.getByText('10 min de tele')).toBeVisible();
-    // Solo una abierta por tipo
-    await expect(kid.getByRole('button', { name: 'Pedir pantalla' })).toBeDisabled();
+    await expect(kid.getByRole('region', { name: 'Tiempo extra pedido' })).toContainText('Esperando a que un adulto lo apruebe');
+    // Solo una petición abierta, y el saldo no se toca hasta que lo aprueben.
+    await expect(kid.getByRole('button', { name: 'Pedir tiempo extra' })).toHaveCount(0);
+    expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(before);
     expect(await kid.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     await kid.screenshot({ path: `${SHOTS}/17-hijo-pedir-pantalla-375.png`, fullPage: true });
 
+    // El aviso lleva a Validar, donde se resuelve en un toque.
+    const note = (await api(adult, 'get', '/notifications')).body.notifications.find((x: any) => x.kind === 'screen_request');
+    expect(note.title).toContain(`${KID.name} pide 10 min de tiempo extra`);
+    expect(note.link).toBe('/validar');
     await adult.goto('/validar');
-    await expect(adult.getByText('Pide 10 min de tele')).toBeVisible();
+    const card = adult.getByTestId('pending-screen');
+    await expect(card).toContainText(`${KID.name} pide 10 min de tiempo extra (Un vídeo de TikTok)`);
     await adult.screenshot({ path: `${SHOTS}/18-validar-peticiones.png`, fullPage: true });
     await adult.getByRole('button', { name: `Aprobar la petición de ${KID.name}` }).click();
-    await adult.getByRole('dialog').getByRole('button', { name: 'Dar minutos y aprobar' }).click();
-    await expect(adult.getByText('Petición aprobada')).toBeVisible();
+    await expect(adult.getByText('Aprobado: minutos descontados')).toBeVisible();
     expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(before - 10);
+    expect((await api(kid, 'get', `/screen/${me.id}/state`)).body.session).toBeNull(); // sin temporizador
 
-    const n = (await api(kid, 'get', '/notifications')).body.notifications.find((x: any) => x.kind === 'payout_decided');
-    expect(n.title).toBe(`${ADULT.name} te ha dado 10 min de tele.`);
-    expect(n.body).toBe(`Te quedan ${before - 10} min.`);
-    await kid.goto('/mesada');
-    await expect(kid.getByText('Aprobada', { exact: true }).first()).toBeVisible();
+    const n = (await api(kid, 'get', '/notifications')).body.notifications.find((x: any) => x.kind === 'screen_decided');
+    expect(n.title).toContain(`${ADULT.name} te ha dado 10 min de pantalla`);
+    await kid.goto('/pantalla');
+    await expect(kid.getByRole('list', { name: 'Historial de sesiones de pantalla' })).toContainText('Tiempo extra: 10 min (Un vídeo de TikTok)');
   });
 
-  test('el hijo anota su pantalla, el adulto la confirma y gana 5 puntos por honesto', async () => {
+  test('lo que el hijo anotaba antes sigue ahí: el adulto lo confirma y gana 5 puntos por honesto', async () => {
     const me = (await api(kid, 'get', '/me')).body.user;
     const bal = (await api(kid, 'get', `/screen/${me.id}`)).body.balance;
     const pts = (await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available;
-
-    await kid.goto('/mesada');
-    await kid.getByRole('button', { name: 'Anotar pantalla' }).click();
-    const kd = kid.getByRole('dialog');
-    await kd.getByLabel('Minutos').fill('20');
-    await kd.getByRole('radio', { name: 'Videojuegos' }).click();
-    await kd.getByRole('button', { name: 'Anotar', exact: true }).click();
-    await expect(kid.getByText('Anotado: 20 min de videojuegos. Falta que lo confirme un adulto')).toBeVisible();
-    // Se resta al momento y aún no hay puntos
+    // «Anotar pantalla» desapareció de la app (ahora hay temporizador), pero lo anotado antes se conserva y se valida igual.
+    expect((await api(kid, 'post', '/screen-logs', { minutes: 20, category: 'videojuegos' })).status).toBe(200);
     expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(bal - 20);
     expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available).toBe(pts);
-    await expect(kid.getByText('Por confirmar')).toBeVisible();
-    await kid.screenshot({ path: `${SHOTS}/19-hijo-anotar-pantalla-375.png`, fullPage: true });
+    await kid.goto('/pantalla');
+    await expect(kid.getByRole('button', { name: 'Anotar pantalla' })).toHaveCount(0);
+    await expect(kid.getByRole('button', { name: 'Pedir pantalla' })).toHaveCount(0);
 
     await adult.goto('/validar');
     await expect(adult.getByText(`${KID.name} anotó 20 min de videojuegos`)).toBeVisible();
     await adult.getByRole('button', { name: `Confirmar la pantalla de ${KID.name}` }).click();
     await expect(adult.getByText('Confirmada: +5 puntos por ser honesto')).toBeVisible();
     expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available).toBe(pts + 5);
-
-    await kid.goto('/mesada');
-    await expect(kid.getByText('Confirmado')).toBeVisible();
     const notes = (await api(kid, 'get', '/notifications')).body.notifications;
     expect(notes.some((x: any) => x.title === '+5 puntos por ser honesto')).toBe(true);
   });
@@ -1413,12 +1441,12 @@ test.describe.serial('Familia completa', () => {
     await hugo.context().close();
 
     await kid.setViewportSize({ width: 375, height: 812 });
-    await kid.goto('/mesada');
-    const bal = kid.getByRole('list', { name: 'Desglose del saldo de pantalla' });
-    await expect(bal).toContainText('Plan de la semana: 2 h 10 min');
-    await expect(bal).toContainText(/caduca el lunes/);
-    await expect(bal).toContainText(/Ganados: .*los primeros caducan el lunes \d+ \w+/);
-    await bal.scrollIntoViewIfNeeded();
+    await kid.goto('/pantalla');
+    const week = kid.getByTestId('battery-week');
+    const earned = kid.getByTestId('battery-earned');
+    await expect(week).toContainText('2 h 10 min');
+    await expect(week).toContainText(/caduca el lunes/);
+    await expect(earned).toContainText(/\d+ min caducan el lunes \d+ \w+/);
     await kid.screenshot({ path: `${SHOTS}/78-hijo-pantalla-desglose-375.png` });
 
     // Un trabajo extra para recuperar, y el ajuste desde la banca familiar en el móvil del adulto.
@@ -1441,7 +1469,8 @@ test.describe.serial('Familia completa', () => {
 
     // El hijo lo ve con palabras amables y puede recuperarlo.
     const before = (await api(kid, 'get', `/screen/${me.id}`)).body;
-    await kid.goto('/mesada');
+    await kid.goto('/pantalla');
+    await kid.getByText('Todos mis movimientos de minutos').click();
     const hist = kid.getByRole('listitem').filter({ hasText: 'Ajuste de pantalla · Habitación en orden' });
     await expect(hist).toContainText('Mañana lo recogemos juntos');
     await expect(hist).toContainText('Los puedes recuperar con «Ordenar el trastero»');
@@ -1464,17 +1493,369 @@ test.describe.serial('Familia completa', () => {
     await kid.goto('/');
     await expect(kid.getByText('Pausa hasta').first()).toBeVisible({ timeout: 15_000 });
     await kid.screenshot({ path: `${SHOTS}/80-hijo-pausa-375.png` });
-    await kid.goto('/mesada');
-    await expect(kid.getByRole('button', { name: 'Pedir pantalla' })).toBeDisabled();
-    await expect(kid.getByRole('list', { name: 'Desglose del saldo de pantalla' })).toContainText('Tus minutos no caducan mientras tanto');
+    await kid.goto('/pantalla');
+    await expect(kid.getByRole('button', { name: 'Usar pantalla' })).toBeDisabled();
+    await expect(kid.getByTestId('start-reason')).toContainText('Pausa hasta');
+    await expect(kid.getByText(/Tus minutos no caducan mientras tanto/)).toBeVisible();
     expect((await api(kid, 'post', '/payout-requests', { kind: 'screen', minutes: 5, category: 'tele' })).body.error).toBe('paused');
     // Un adulto la termina antes.
     await panel.getByRole('button', { name: 'Terminar pausa' }).click();
     await expect(phone.getByText('Pausa terminada')).toBeVisible();
     await kid.reload();
-    await expect(kid.getByRole('button', { name: 'Pedir pantalla' })).toBeEnabled();
+    await expect(kid.getByRole('button', { name: 'Usar pantalla' })).toBeEnabled();
     await phone.context().close();
   });
+
+  test('pantalla (I21): el temporizador vive en el servidor, avisa a los 5 min, suena y vibra al llegar a 0, y lo que te pasas va a la semana siguiente', async ({ browser }) => {
+    test.setTimeout(180_000);
+    const sql = (q: string) => execFileSync('psql', [E2E_DB, '-Atc', q]).toString().trim();
+    const me = (await api(kid, 'get', '/me')).body.user;
+    await api(adult, 'post', '/screen/adjust', { userId: me.id, delta: 90, note: 'Para probar el temporizador' });
+    const before = (await api(kid, 'get', `/screen/${me.id}`)).body.balance;
+
+    const k = await newKidPhone(browser, { spy: true });
+    await k.goto('/pantalla');
+    await expect(k.getByRole('heading', { name: 'Mi pantalla' })).toBeVisible();
+    await expect(k.getByTestId('battery-week')).toBeVisible();
+    await expect(k.getByTestId('battery-earned')).toBeVisible();
+    await expect(k.getByRole('button', { name: 'Usar pantalla' })).toBeEnabled();
+    await shot(k, '111-hijo-mi-pantalla-375', { fullPage: true });
+    // Ya no existen los dos botones antiguos.
+    await expect(k.getByRole('button', { name: 'Pedir pantalla' })).toHaveCount(0);
+    await expect(k.getByRole('button', { name: 'Anotar pantalla' })).toHaveCount(0);
+
+    // Empieza 15 min: cuenta atrás grande.
+    await k.getByRole('button', { name: 'Usar pantalla' }).click();
+    const d = k.getByRole('dialog');
+    await d.getByRole('button', { name: '15 min', exact: true }).click();
+    await d.getByRole('button', { name: 'Empezar 15 min' }).click();
+    await expect(k.getByText('Temporizador en marcha')).toBeVisible();
+    await expect(k.getByTestId('countdown')).toHaveText(/^1[45]:\d\d$/);
+    await expect(k.getByRole('button', { name: 'Usar pantalla' })).toHaveCount(0);
+    await shot(k, '112-hijo-temporizador-375', { fullPage: true });
+
+    // El servidor lo guarda: otro móvil (o recargar) ve la misma cuenta atrás.
+    const other = await newKidPhone(browser);
+    await other.goto('/pantalla');
+    await expect(other.getByTestId('countdown')).toHaveText(/^1[45]:\d\d$/);
+    await other.reload();
+    await expect(other.getByTestId('countdown')).toHaveText(/^1[45]:\d\d$/);
+    // En Hoy, un botón dice que está en marcha.
+    await other.goto('/');
+    await expect(other.getByRole('link', { name: /Pantalla en marcha/ })).toBeVisible();
+    await other.context().close();
+    const st = (await api(kid, 'get', `/screen/${me.id}/state`)).body;
+    expect(st.session).toMatchObject({ status: 'running', requested_minutes: 15, started_by: me.id });
+    // Nada se descuenta hasta que se para o se acaba.
+    expect(st.balance).toBe(before);
+
+    // El padre se entera y lo ve en su pantalla «Pantalla».
+    const started = (await api(adult, 'get', '/notifications')).body.notifications.find((n: any) => n.kind === 'screen_started');
+    expect(started.title).toBe(`${KID.name} ha empezado su pantalla`);
+    const ap = await newAdultPhone(browser);
+    await ap.goto('/pantalla');
+    await expect(ap.getByRole('heading', { name: 'Pantalla', exact: true })).toBeVisible();
+    await expect(ap.getByTestId('countdown')).toHaveText(/^1[45]:\d\d$/);
+    await expect(ap.getByRole('button', { name: `Parar el temporizador de ${KID.name}` })).toBeVisible();
+    await shot(ap, '113-padre-pantalla-temporizador-375');
+
+    // A 4:30 del final salta el aviso previo (con vibración).
+    sql(`UPDATE screen_sessions SET started_at = started_at - interval '10 minutes 30 seconds', planned_end_at = planned_end_at - interval '10 minutes 30 seconds' WHERE user_id = '${me.id}' AND status = 'running'`);
+    await expect(k.getByText('Te quedan 5 minutos de pantalla').first()).toBeVisible({ timeout: 25_000 });
+    await expect.poll(() => k.evaluate(() => (window as any).__vibes.length)).toBeGreaterThan(0);
+    await expect.poll(async () => (await api(kid, 'get', '/notifications')).body.notifications.some((n: any) => n.kind === 'screen_warning')).toBe(true);
+
+    // Al llegar a 0: el proceso del servidor cierra la sesión aunque la app esté cerrada, y en la app suena la alarma.
+    const vibesBefore = await k.evaluate(() => (window as any).__vibes.length);
+    sql(`UPDATE screen_sessions SET started_at = started_at - interval '5 minutes', planned_end_at = planned_end_at - interval '5 minutes' WHERE user_id = '${me.id}' AND status = 'running'`);
+    const alarm = k.getByRole('alertdialog');
+    await expect(alarm).toContainText('Se acabó el tiempo', { timeout: 25_000 });
+    await expect(alarm).toContainText('Han pasado tus 15 min de pantalla');
+    await expect.poll(() => k.evaluate(() => (window as any).__osc)).toBeGreaterThan(3);
+    expect(await k.evaluate(() => (window as any).__vibes.length)).toBeGreaterThan(vibesBefore);
+    await shot(k, '114-hijo-se-acabo-el-tiempo-375');
+    expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(before - 15);
+    expect((await api(kid, 'get', `/screen/${me.id}/state`)).body.session).toBeNull();
+    const ends = async (page: Page) => (await api(page, 'get', '/notifications')).body.notifications.filter((n: any) => n.kind === 'screen_ended');
+    expect((await ends(kid))[0].title).toBe('Se acabó el tiempo de pantalla');
+    expect((await ends(adult))[0].title).toContain(`A ${KID.name} se le acabó el tiempo de pantalla`);
+
+    // «Me he pasado»: se anota de más y se descuenta de la semana siguiente (no ahora).
+    await alarm.getByRole('button', { name: '+10 min' }).click();
+    await expect(k.getByText('Anotado: 10 min de más. Se descuentan la semana siguiente')).toBeVisible();
+    await expect(alarm).toHaveCount(0);
+    expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(before - 15);
+    expect((await api(kid, 'get', `/screen/${me.id}/state`)).body.debt_minutes).toBe(10);
+    await k.reload();
+    await expect(k.getByRole('alertdialog')).toHaveCount(0); // ya la cerró: no vuelve a salir
+    await expect(k.getByText('se descuentan de la semana que viene')).toBeVisible();
+    await expect(k.getByRole('list', { name: 'Historial de sesiones de pantalla' })).toContainText('15 min de pantalla');
+    // Lo ve el adulto en el historial y como aviso.
+    await ap.reload();
+    await expect(ap.getByRole('list', { name: 'Historial de sesiones de pantalla' })).toContainText('Se acabó el tiempo');
+    expect((await api(adult, 'get', '/notifications')).body.notifications.some((n: any) => n.kind === 'screen_overrun')).toBe(true);
+    await k.context().close();
+    await ap.context().close();
+  });
+
+  test('pantalla (I21): el padre enciende y para el temporizador, y «Dar minutos» descuenta ya y cobra con puntos lo que no llega', async ({ browser }) => {
+    test.setTimeout(120_000);
+    const me = (await api(kid, 'get', '/me')).body.user;
+    const ap = await newAdultPhone(browser);
+    await ap.goto(`/pantalla?hijo=${me.id}`);
+    // Encender temporizador (cuenta atrás), distinto de «Dar minutos».
+    await expect(ap.getByRole('button', { name: /Encender temporizador/ })).toBeVisible();
+    await expect(ap.getByRole('button', { name: /Dar minutos/ })).toBeVisible();
+    await shot(ap, '115-padre-dos-botones-375');
+    await ap.getByRole('button', { name: /Encender temporizador/ }).click();
+    const d = ap.getByRole('dialog');
+    await d.getByRole('button', { name: '15 min', exact: true }).click();
+    await d.getByLabel('Para qué (opcional)').fill('Película');
+    await d.getByRole('button', { name: 'Encender 15 min' }).click();
+    await expect(ap.getByText(`Temporizador encendido para ${KID.name}`)).toBeVisible();
+    await expect(ap.getByTestId('countdown')).toBeVisible();
+    const kidNote = (await api(kid, 'get', '/notifications')).body.notifications.find((n: any) => n.kind === 'screen_parent_started' && /puesto en marcha/.test(n.title));
+    expect(kidNote.title).toBe(`${ADULT.name} ha puesto en marcha tu pantalla`);
+    // El hijo lo ve en su móvil.
+    await kid.setViewportSize({ width: 375, height: 812 });
+    await kid.goto('/pantalla');
+    await expect(kid.getByTestId('countdown')).toBeVisible();
+    await expect(kid.getByTestId('screen-timer')).toContainText(`lo encendió ${ADULT.name}`);
+    // El padre lo para: se cobra lo usado y el hijo recibe aviso.
+    await ap.getByRole('button', { name: `Parar el temporizador de ${KID.name}` }).click();
+    await expect(ap.getByText(/Parado\. Ha usado \d+ min/)).toBeVisible();
+    const stopped = (await api(kid, 'get', '/notifications')).body.notifications.find((n: any) => n.kind === 'screen_stopped');
+    expect(stopped.title).toBe(`${ADULT.name} ha parado tu pantalla`);
+
+    // «Dar minutos» sin temporizador: el saldo queda corto y se cobra con puntos.
+    const bal = (await api(kid, 'get', `/screen/${me.id}`)).body.balance;
+    await api(adult, 'post', '/screen/adjust', { userId: me.id, delta: -(bal - 5), note: 'Dejar 5 min para probar' });
+    const pts = (await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available;
+    await ap.getByRole('button', { name: /Dar minutos/ }).click();
+    const g = ap.getByRole('dialog');
+    await keypad(g, '15');
+    await g.getByLabel('Para qué (opcional)').fill('TikTok');
+    await expect(g.getByText('No llegan los minutos: faltan 10 min')).toBeVisible();
+    await g.getByRole('radio', { name: '7 puntos' }).click();
+    await shot(ap, '116-padre-dar-minutos-cobro-375');
+    await g.getByRole('button', { name: 'Dar 15 min' }).click();
+    await expect(ap.getByText(`Hecho: 15 min (7 puntos) para ${KID.name}`)).toBeVisible();
+    expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(0);
+    expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available).toBe(pts - 7);
+    expect((await api(kid, 'get', `/screen/${me.id}/state`)).body.session).toBeNull(); // sin temporizador
+    const given = (await api(kid, 'get', '/notifications')).body.notifications.find((n: any) => /te ha dado 15 min de pantalla \(TikTok\)/.test(n.title));
+    expect(given.body).toBe('Pagados con 7 puntos.');
+    // Queda en el historial de sesiones y en el extracto del banco.
+    await expect(ap.getByRole('list', { name: 'Historial de sesiones de pantalla' })).toContainText('Minutos dados: 15 min (TikTok)');
+    await kid.goto('/mesada');
+    await expect(kid.getByText('Pantalla extra: 10 min (TikTok)')).toBeVisible();
+    // Devuelve algo de saldo para los siguientes recorridos.
+    await api(adult, 'post', '/screen/adjust', { userId: me.id, delta: 60, note: 'Reponer' });
+    await ap.context().close();
+  });
+
+  test('pantalla (I21): días permitidos y tope por día; fuera de ellos el botón no arranca y explica por qué', async ({ browser }) => {
+    test.setTimeout(120_000);
+    const me = (await api(kid, 'get', '/me')).body.user;
+    const dow = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+    const today = new Intl.DateTimeFormat('es-ES', { weekday: 'long', timeZone: 'Europe/Madrid' }).format(new Date());
+    const idx = dow.indexOf(today);
+    const dayName = today[0].toUpperCase() + today.slice(1);
+    const ap = await newAdultPhone(browser);
+    await ap.goto(`/pantalla?hijo=${me.id}`);
+    const plan = ap.getByRole('region', { name: 'Plan semanal' });
+    // Hoy no toca: el botón del hijo no arranca y lo explica.
+    await plan.getByRole('button', { name: dayName, exact: true }).click();
+    await plan.getByRole('button', { name: `Guardar el plan de ${KID.name}` }).click();
+    await expect(ap.getByText(`Plan de ${KID.name} guardado`)).toBeVisible();
+    await kid.goto('/pantalla');
+    await expect(kid.getByRole('button', { name: 'Usar pantalla' })).toBeDisabled();
+    await expect(kid.getByTestId('start-reason')).toContainText('Hoy no toca pantalla');
+    expect((await api(kid, 'post', '/screen/sessions', { minutes: 5 })).body.error).toBe('day');
+    await shot(kid, '117-hijo-dia-no-permitido-375', { fullPage: true });
+    // Se vuelve a permitir y se pone un tope de 10 min para hoy.
+    await plan.getByRole('button', { name: dayName, exact: true }).click();
+    await plan.getByText('Máximo por día').click();
+    // Hoy ya se ha usado algo en otras pruebas: el tope se pone «lo usado + 10 min».
+    const used = (await api(kid, 'get', `/screen/${me.id}/state`)).body.today.used;
+    await plan.locator('input[placeholder="Sin tope"]').nth(idx).fill(String(used + 10));
+    await expect(ap.getByText(`Plan de ${KID.name} guardado`)).toHaveCount(0, { timeout: 6000 }); // que no tape la captura
+    await plan.scrollIntoViewIfNeeded();
+    await shot(ap, '118-padre-dias-y-topes-375');
+    await plan.getByRole('button', { name: `Guardar el plan de ${KID.name}` }).click();
+    await expect(ap.getByText(`Plan de ${KID.name} guardado`).last()).toBeVisible();
+    await kid.reload();
+    await expect(kid.getByText(/Hoy: tope de .* te quedan 10 min/)).toBeVisible();
+    await kid.getByRole('button', { name: 'Usar pantalla' }).click();
+    const d = kid.getByRole('dialog');
+    await keypad(d, '15');
+    await expect(d.getByText('Hoy solo te quedan 10 min según tu plan')).toBeVisible();
+    await expect(d.getByRole('button', { name: 'Empezar 15 min' })).toBeDisabled();
+    await kid.keyboard.press('Escape');
+    // El padre puede exigir su aprobación en cada sesión.
+    await plan.getByLabel('Un adulto aprueba cada vez').check({ force: true });
+    await plan.getByText('Máximo por día').click(); // al guardar se repinta el plan y el desplegable vuelve a cerrarse
+    await plan.locator('input[placeholder="Sin tope"]').nth(idx).fill('');
+    await plan.getByRole('button', { name: `Guardar el plan de ${KID.name}` }).click();
+    await expect(ap.getByText(`Plan de ${KID.name} guardado`).last()).toBeVisible();
+    await kid.reload();
+    await kid.getByRole('button', { name: 'Usar pantalla' }).click();
+    await kid.getByRole('dialog').getByRole('button', { name: '15 min', exact: true }).click();
+    await kid.getByRole('dialog').getByRole('button', { name: 'Pedir 15 min' }).click();
+    await expect(kid.getByText('Petición enviada. Un adulto tiene que aprobarla')).toBeVisible();
+    await expect(kid.getByText('Esperando a un adulto')).toBeVisible();
+    await ap.goto('/validar');
+    await expect(ap.getByTestId('pending-screen')).toContainText(`${KID.name} pide usar 15 min de pantalla`);
+    await ap.getByRole('button', { name: `Aprobar la petición de ${KID.name}` }).click();
+    await expect(ap.getByText('Aprobado: temporizador en marcha')).toBeVisible();
+    await kid.reload();
+    await expect(kid.getByTestId('countdown')).toBeVisible();
+    await kid.getByRole('button', { name: 'Parar pantalla' }).click();
+    await expect(kid.getByText(/Parado\./)).toBeVisible();
+    // Se deja todo como estaba.
+    await ap.goto(`/pantalla?hijo=${me.id}`);
+    await plan.getByLabel('Un adulto aprueba cada vez').uncheck({ force: true });
+    await plan.getByRole('button', { name: `Guardar el plan de ${KID.name}` }).click();
+    await expect(ap.getByText(`Plan de ${KID.name} guardado`).last()).toBeVisible();
+    await ap.context().close();
+  });
+
+  test('pantalla (I21): castigo con reto con foto; el hijo lo cumple, un adulto lo valida y el bloqueo se levanta', async ({ browser }) => {
+    test.setTimeout(120_000);
+    const me = (await api(kid, 'get', '/me')).body.user;
+    const ap = await newAdultPhone(browser);
+    await ap.goto(`/pantalla?hijo=${me.id}`);
+    await ap.getByRole('button', { name: /Bloquear pantalla/ }).click();
+    const d = ap.getByRole('dialog');
+    await d.getByRole('button', { name: 'Hasta mañana' }).click();
+    await d.getByLabel('Motivo').fill('Notas del cole');
+    await d.getByLabel('Añadir un reto').check({ force: true });
+    await d.getByLabel('El reto').fill('Ordena tu cuarto');
+    await d.getByLabel('Pedir una foto como prueba').check({ force: true });
+    await shot(ap, '119-padre-bloquear-con-reto-375');
+    await d.getByRole('button', { name: 'Poner el bloqueo' }).click();
+    await expect(ap.getByText('Sin pantalla hasta mañana (incluido)').first()).toBeVisible();
+
+    // El hijo lo ve con su motivo y su reto; el botón no arranca.
+    await kid.goto('/pantalla');
+    const block = kid.getByRole('region', { name: 'Bloqueos de pantalla' });
+    await expect(block).toContainText('Sin pantalla hasta mañana (incluido)');
+    await expect(block).toContainText('Motivo: Notas del cole');
+    await expect(block).toContainText('Reto: Ordena tu cuarto');
+    await expect(kid.getByRole('button', { name: 'Usar pantalla' })).toBeDisabled();
+    await expect(kid.getByTestId('start-reason')).toContainText('Notas del cole');
+    expect((await api(kid, 'get', '/notifications')).body.notifications.some((n: any) => n.kind === 'screen_block' && /Sin pantalla hasta mañana/.test(n.title))).toBe(true);
+    await shot(kid, '120-hijo-bloqueo-con-reto-375', { fullPage: true });
+
+    // Sin foto no se puede enviar; con foto, sí.
+    await kid.getByRole('button', { name: 'Ya lo he hecho' }).click();
+    const sheet = kid.getByRole('dialog');
+    await sheet.getByRole('button', { name: 'Enviar a un adulto' }).click();
+    await expect(sheet.getByText('Haz una foto como prueba')).toBeVisible();
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    await sheet.getByLabel('Foto de prueba (obligatoria)').setInputFiles({ name: 'cuarto.png', mimeType: 'image/png', buffer: png });
+    await sheet.getByLabel('Cuéntalo (opcional)').fill('Todo recogido');
+    await sheet.getByRole('button', { name: 'Enviar a un adulto' }).click();
+    await expect(kid.getByText('Enviado. Un adulto lo validará')).toBeVisible();
+    await expect(block).toContainText('Esperando a que un adulto lo valide');
+
+    await ap.goto('/validar');
+    const card = ap.getByTestId('pending-challenge');
+    await expect(card).toContainText(`${KID.name} dice que ha cumplido su reto`);
+    await expect(card).toContainText('«Ordena tu cuarto»');
+    await expect(card.getByRole('img', { name: 'Foto del reto cumplido' })).toBeVisible();
+    await shot(ap, '121-validar-reto-375', { fullPage: true });
+    await card.getByRole('button', { name: 'Validar' }).click();
+    await expect(ap.getByText('Reto validado: bloqueo levantado')).toBeVisible();
+    await kid.reload();
+    await expect(kid.getByRole('button', { name: 'Usar pantalla' })).toBeEnabled();
+    await expect(kid.getByRole('region', { name: 'Bloqueos de pantalla' })).toHaveCount(0);
+    expect((await api(kid, 'get', '/notifications')).body.notifications.some((n: any) => /Reto cumplido/.test(n.title))).toBe(true);
+
+    // Una franja horaria que no toca ahora no bloquea, y se ve con sus horas.
+    const nowMin = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Europe/Madrid' }).format(new Date()).replace(':', '.').split('.').reduce((h, m) => String(Number(h) * 60 + Number(m)), '0'));
+    const away = nowMin < 12 * 60 ? ['22:00', '23:00'] : ['01:00', '02:00'];
+    const w = await api(adult, 'post', '/screen/blocks', { userId: me.id, kind: 'window', reason: 'Hora de dormir', endsOn: new Date().toISOString().slice(0, 10), windowStart: away[0], windowEnd: away[1] });
+    expect(w.status).toBe(200);
+    expect(w.body.label).toContain(`Sin pantalla de ${away[0]} a ${away[1]}`);
+    await kid.reload();
+    await expect(kid.getByRole('region', { name: 'Bloqueos de pantalla' })).toContainText(`Sin pantalla de ${away[0]} a ${away[1]}`);
+    await api(adult, 'post', `/screen/blocks/${w.body.id}/lift`, {});
+    // Un bloqueo con reto que acorta, y que se repite si no vale.
+    const b2 = (await api(adult, 'post', '/screen/blocks', { userId: me.id, kind: 'days', reason: 'Gritos', endsOn: new Date(Date.now() + 4 * 86400000).toISOString().slice(0, 10), challenge: { text: 'Lee 20 min', effect: 'shorten', days: 2 } })).body;
+    await api(kid, 'post', `/screen/blocks/${b2.id}/challenge/done`, { note: 'listo' });
+    expect((await api(adult, 'post', `/screen/blocks/${b2.id}/challenge/review`, { approve: true })).body.result).toBe('shortened');
+    await api(adult, 'post', `/screen/blocks/${b2.id}/lift`, {});
+    await ap.context().close();
+  });
+
+  test('pantalla (I21): los minutos ganados vuelan a la batería (o solo se avisa si se reduce el movimiento) y avisa antes de caducar', async ({ browser }) => {
+    test.setTimeout(120_000);
+    const sql = (q: string) => execFileSync('psql', [E2E_DB, '-Atc', q]).toString().trim();
+    const me = (await api(kid, 'get', '/me')).body.user;
+    const kidId = me.id;
+    // Una tarea que da 15 min de pantalla (+N min se ve junto a los puntos y los euros).
+    const task = (await api(adult, 'post', '/tasks', { title: 'Preparar la mochila', points: 5, recurrence: 'daily', startDate: new Date().toISOString().slice(0, 10), assignees: [kidId], requiresApproval: true, bonus: { kind: 'screen', minutes: 15 } })).body;
+    expect(task.id ?? task.task?.id).toBeTruthy();
+    const k = await newKidPhone(browser);
+    await k.goto('/');
+    const row = k.getByRole('listitem').filter({ hasText: 'Preparar la mochila' }).first();
+    await expect(row).toContainText('+15 min');
+    await expect(row.getByLabel('Más 15 minutos de pantalla')).toBeVisible();
+    await shot(k, '122-hijo-tarea-mas-minutos-375', { fullPage: true });
+    await k.goto('/pantalla');
+    await expect(k.getByTestId('battery-earned')).toBeVisible();
+    const before = (await api(kid, 'get', `/screen/${kidId}`)).body.balance;
+    // La hace el hijo y la valida un adulto.
+    const inst = (await api(k, 'get', '/instances')).body.instances.find((i: any) => i.title === 'Preparar la mochila');
+    expect((await api(k, 'post', `/instances/${inst.id}/complete`, {})).status).toBe(200);
+    expect((await api(adult, 'post', `/instances/${inst.id}/review`, { action: 'approve' })).status).toBe(200);
+    expect((await api(kid, 'get', `/screen/${kidId}`)).body.balance).toBe(before + 15);
+    // Al abrir la app, los minutos «vuelan» a la batería Ganado.
+    await k.reload();
+    const fly = k.getByTestId('minutes-flight');
+    await expect(fly).toBeVisible();
+    await expect(fly).toContainText('+15 min');
+    await expect(fly).toHaveCount(0, { timeout: 8000 });
+    const earnedNow = (await api(kid, 'get', `/screen/${kidId}/state`)).body.buckets.earned.minutes as number;
+    const hm = earnedNow < 60 ? `${earnedNow} min` : earnedNow % 60 ? `${Math.floor(earnedNow / 60)} h ${earnedNow % 60} min` : `${earnedNow / 60} h`;
+    await expect(k.getByTestId('battery-earned')).toContainText(hm);
+    await k.context().close();
+
+    // Con «reducir movimiento» no hay vuelo: solo aparece el aviso un momento.
+    const calm = await newKidPhone(browser, { reducedMotion: true });
+    await calm.goto('/pantalla');
+    await expect(calm.getByTestId('battery-earned')).toBeVisible();
+    await api(adult, 'post', '/screen/adjust', { userId: kidId, delta: 10, note: 'Gracias por ayudar' });
+    await calm.reload();
+    await expect(calm.getByTestId('minutes-flight')).toContainText('+10 min');
+    expect(await calm.getByTestId('minutes-flight').evaluate((el) => (el as HTMLElement).getAnimations().length)).toBe(0);
+    await calm.context().close();
+
+    // Aviso 3 días antes de caducar: banner y notificación («El lunes caducan 20 min: úsalos»).
+    sql(`UPDATE screen_lots SET expires_at = now() + interval '2 days' WHERE user_id = '${kidId}' AND source <> 'plan' AND remaining > 0`);
+    const mins = sql(`SELECT COALESCE(SUM(remaining),0) FROM screen_lots WHERE user_id = '${kidId}' AND source <> 'plan' AND remaining > 0`);
+    const k2 = await newKidPhone(browser);
+    await k2.goto('/pantalla');
+    await expect(k2.getByTestId('expiring-warning')).toContainText(`caducan ${mins} min: úsalos`);
+    await shot(k2, '123-hijo-caducan-minutos-375', { fullPage: true });
+    await expect.poll(async () => (await api(kid, 'get', '/notifications')).body.notifications.some((n: any) => n.kind === 'screen_expiring' && n.title.includes(`caducan ${mins} min`)), { timeout: 60_000, intervals: [2000] }).toBe(true);
+    // Modo oscuro de la pantalla del hijo.
+    await k2.getByRole('button', { name: 'Modo oscuro' }).click();
+    await expect(k2.locator('html')).toHaveClass(/dark/);
+    await shot(k2, '124-hijo-pantalla-oscuro-375', { fullPage: true });
+    await k2.context().close();
+  });
+
+  test('pantalla (I21): un hijo no ve la pantalla de un hermano ni usa lo de los adultos', async () => {
+    const me = (await api(kid, 'get', '/me')).body.user;
+    const hugo = (await api(adult, 'get', '/family')).body.members.find((m: any) => m.display_name === 'Hugo');
+    expect((await api(kid, 'get', `/screen/${hugo.id}/state`)).status).toBe(403);
+    expect((await api(kid, 'post', '/screen/blocks', { userId: me.id, kind: 'days', reason: 'x', endsOn: new Date().toISOString().slice(0, 10) })).status).toBe(403);
+    expect((await api(kid, 'put', `/screen/rules/${me.id}`, { allowedDays: [1], dayMax: {}, requireApproval: false })).status).toBe(403);
+    expect((await api(kid, 'post', '/screen/sessions', { userId: me.id, minutes: 5, mode: 'charge' })).status).toBe(403);
+  });
+
 
   test('meta de ahorro visible (I19): tarjeta en Hoy, propuesta, aprobación, rechazo con motivo, ahorro automático, aporte de los padres y semanas', async ({ browser }) => {
     test.setTimeout(180_000); // recorrido largo con varias personas: no se puede quedar corto por la carga de la máquina

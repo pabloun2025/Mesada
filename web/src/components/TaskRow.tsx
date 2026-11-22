@@ -37,6 +37,15 @@ function Deadline({ inst }: { inst: Instance }) {
   );
 }
 
+/** «+15 min»: los minutos de pantalla que da la tarea, junto a los puntos y los euros. */
+function MinutesPill({ minutes }: { minutes: number }) {
+  return (
+    <span className="num inline-flex h-7 items-center rounded-full bg-sky-soft px-2.5 text-sm font-bold text-[#1d4fb0] dark:bg-sky/20 dark:text-[#a9c7ff]" aria-label={`Más ${minutes} minutos de pantalla`}>
+      +{minutes} min
+    </span>
+  );
+}
+
 /** Valor en euros de los puntos de la tarea, junto a «+10 ★». */
 function Euro({ text }: { text: string }) {
   return <span className="num text-xs font-bold text-leaf-deep dark:text-[#7fe0b2]"><span aria-hidden className="hidden sm:inline">· </span>{text}</span>;
@@ -61,6 +70,7 @@ export function TaskRow({
   const unmark = useUnmark();
   const { family } = useSession();
   const euroOf = (pts: number) => euros(Math.floor((pts * family.rate_cents) / family.rate_points));
+  const mins = inst.status === 'declined' ? 0 : inst.minutes_reward ?? 0;
   const waiting = !!inst.blocked_until;
   const doable = canComplete && !inst.check_mode && !waiting && (inst.status === 'pending' || inst.status === 'rejected');
   const finished = inst.status === 'approved' || inst.status === 'submitted';
@@ -104,7 +114,7 @@ export function TaskRow({
           {inst.assignment_mode === 'rotation' ? <span className="inline-flex items-center gap-1 muted"><RotateCcw size={14} aria-hidden /> Por turnos</span> : null}
           {open && !check ? <Deadline inst={inst} /> : null}
           {check && open && inst.penalty_minutes ? <span className="muted">Si no se cumple: −{inst.penalty_minutes} min de pantalla</span> : null}
-          {open || inst.status === 'submitted' ? <BonusChip bonus={inst.bonus} /> : null}
+          {(open || inst.status === 'submitted') && !(inst.bonus && !inst.bonus.surprise && inst.bonus.kind === 'screen' && !inst.bonus.onTimeOnly) ? <BonusChip bonus={inst.bonus} /> : null}
           {inst.requires_photo ? <span className="inline-flex items-center gap-1 muted"><Camera size={14} aria-hidden /> Con foto</span> : null}
         </div>
         {(inst.status === 'rejected' || inst.status === 'declined' || inst.review_outcome === 'partial') && inst.review_note ? (
@@ -136,10 +146,11 @@ export function TaskRow({
             </span>
             <Euro text={euroOf(inst.late_points)} />
           </span>
-        ) : check && inst.points === 0 ? null : inst.status === 'declined' ? null : (
+        ) : check && inst.points === 0 ? (mins > 0 ? <MinutesPill minutes={mins} /> : null) : inst.status === 'declined' ? null : (
           <span className="flex flex-col items-end gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
             <PointsPill points={inst.points} tone={inst.status === 'approved' ? 'leaf' : 'tangerine'} star />
             {inst.points > 0 ? <Euro text={euroOf(inst.points)} /> : null}
+            {mins > 0 ? <MinutesPill minutes={mins} /> : null}
           </span>
         )}
         {justDone && celebrate ? (

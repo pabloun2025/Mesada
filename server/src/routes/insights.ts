@@ -133,7 +133,7 @@ export default async function insightRoutes(app: FastifyInstance) {
       one(db, `SELECT count(*)::int AS n FROM task_instances i JOIN tasks t ON t.id = i.task_id WHERE i.family_id = $1 AND i.status = 'expired' AND i.due_date >= $2 AND NOT t.check_mode`, [u.familyId, addDays(today, -7)]),
       one(db, `SELECT count(*)::int AS n FROM task_instances i JOIN tasks t ON t.id = i.task_id WHERE i.family_id = $1 AND t.check_mode AND i.check_met IS NULL AND i.status IN ('pending','expired') AND i.due_date BETWEEN $2 AND $3`, [u.familyId, addDays(today, -7), today]),
       one(db, `SELECT count(*)::int AS n FROM bonus_grants WHERE family_id = $1 AND kind IN ('text','reward') AND fulfilled_at IS NULL AND voided_at IS NULL`, [u.familyId]),
-      one(db, `SELECT count(*)::int AS n FROM payout_requests WHERE family_id = $1 AND status = 'pending'`, [u.familyId]),
+      one(db, `SELECT ((SELECT count(*) FROM payout_requests WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM screen_sessions WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM screen_blocks WHERE family_id = $1 AND status = 'active' AND challenge_status = 'submitted'))::int AS n`, [u.familyId]),
       one(db, `SELECT count(*)::int AS n FROM screen_usage_logs WHERE family_id = $1 AND status = 'pending'`, [u.familyId]),
       one(db, `SELECT ((SELECT count(*) FROM loans WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM goal_requests WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM savings_goals WHERE family_id = $1 AND NOT archived AND (status = 'proposed' OR (status = 'active' AND auto_pending_percent IS NOT NULL))))::int AS n`, [u.familyId]),
       many(
