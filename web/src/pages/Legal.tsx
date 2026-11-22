@@ -11,9 +11,16 @@ export default function Legal({ doc }: { doc: LegalDoc }) {
   useEffect(() => {
     const prev = document.title;
     document.title = `${meta.title} · DiploP`;
+    // Cada página legal es su propia dirección canónica para los buscadores.
+    const canonical = document.querySelector<HTMLLinkElement>('link[rel=canonical]');
+    const prevCanonical = canonical?.href;
+    canonical?.setAttribute('href', `https://mesada.veryfacil.org${meta.to}`);
     window.scrollTo(0, 0);
-    return () => { document.title = prev; };
-  }, [meta.title]);
+    return () => {
+      document.title = prev;
+      if (canonical && prevCanonical) canonical.setAttribute('href', prevCanonical);
+    };
+  }, [meta.title, meta.to]);
   return (
     <div className="min-h-dvh">
       <header className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-[max(1rem,env(safe-area-inset-left))] pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
