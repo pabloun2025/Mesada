@@ -230,7 +230,12 @@ export function BlockSheet({ child, onClose }: { child: User; onClose: () => voi
   return (
     <Sheet
       open onClose={onClose} title={`Descanso de pantalla para ${child.display_name}`} subtitle="Se verá en su app con el motivo y cuándo termina."
-      footer={<>{error ? <p role="alert" className="mb-2 text-center text-sm font-bold text-berry-deep">{error}</p> : null}<Button size="lg" className="w-full" loading={save.isPending} disabled={!reason.trim() || (withChallenge && !text.trim())} onClick={() => { setError(''); save.mutate(); }}>Programar el descanso</Button></>}
+      footer={<>{error ? <p role="alert" className="mb-2 text-center text-sm font-bold text-berry-deep">{error}</p> : null}<Button size="lg" className="w-full" loading={save.isPending} onClick={() => {
+        // El botón no se desactiva: al pulsar se explica qué falta (desactivado no dice por qué y se lee mal).
+        if (!reason.trim()) return setError('Escribe el motivo: lo verá en su app.');
+        if (withChallenge && !text.trim()) return setError('Escribe el reto o quita «Añadir un reto».');
+        setError(''); save.mutate();
+      }}>Programar el descanso</Button></>}
     >
       <div className="space-y-5 pt-1">
         <Segmented label="Tipo de descanso" value={kind} onChange={setKind} options={[{ value: 'days', label: 'Días enteros' }, { value: 'window', label: 'Una franja' }]} />
