@@ -220,3 +220,17 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Al desmarcar es como si no la hubiera marcado: se quitan los puntos si ya se sumaron, y si la vuelve a marcar cuenta la hora nueva (a tiempo o tarde).
 - En tareas compartidas, «Cuando haga falta», repetibles y trabajos extra, desmarcar la deja libre otra vez para los demás.
 - No se avisa al adulto: sale de «Por validar» y queda en el historial.
+
+## I18 · Configuración inicial guiada y tareas sugeridas (22/11) — pendiente
+
+Cuando una familia nueva entra por primera vez, un asistente paso a paso le ayuda a dejarlo funcionando. Se puede saltar en cualquier momento y retomar desde Ajustes.
+
+- **Cuándo:** sale sola al crear la familia; si se salta, queda «Configuración guiada» en Ajustes.
+- **Pasos:**
+  1. Hijos y edades.
+  2. Tareas sugeridas según la edad de cada hijo.
+  3. Puntos y mesada (valor del punto, meta semanal).
+  4. Pantalla y premios (plan semanal de minutos y premios de partida).
+  5. Invitar a otro adulto (opcional, último paso).
+- **Tareas sugeridas:** lista por edad, ya marcada; el adulto desmarca lo que no sirva.
+- Cada paso explica en una frase qué es y para qué sirve (modo tutorial).
