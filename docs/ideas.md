@@ -212,3 +212,11 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - **Forma de recuperar:** el padre puede ofrecer una tarea extra; al hacerla y validarla, vuelven los minutos (o se acorta la pausa).
   - Solo lo ven el hijo y los adultos, no los hermanos.
 - Las pérdidas de minutos que ya existen («No cumplida −15 min» y «Rechazar con penalidad») pasan a llamarse «Ajuste de pantalla», con motivo en positivo y en el mismo historial.
+
+## I17. Desmarcar una tarea marcada por error (22/11)
+**Estado: decidida, sin programar.**
+- Al marcar «Hecha» sale unos segundos «Hecha · Deshacer».
+- Además, el hijo puede desmarcarla mientras ningún adulto la haya validado; si la tarea no requiere validación, hasta el final del día.
+- Al desmarcar es como si no la hubiera marcado: se quitan los puntos si ya se sumaron, y si la vuelve a marcar cuenta la hora nueva (a tiempo o tarde).
+- En tareas compartidas, «Cuando haga falta», repetibles y trabajos extra, desmarcar la deja libre otra vez para los demás.
+- No se avisa al adulto: sale de «Por validar» y queda en el historial.
