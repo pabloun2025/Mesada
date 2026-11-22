@@ -47,7 +47,7 @@ export default function ChildMoney() {
 
       <AccountRail bank={bank} wallet={w} />
       {negative ? (
-        <p role="status" className="mt-3 rounded-2xl bg-berry-soft p-3 text-sm font-bold text-berry dark:bg-berry/20">
+        <p role="status" className="mt-3 rounded-2xl bg-berry-soft p-3 text-sm font-bold text-berry-deep dark:bg-berry/20">
           Tu cuenta de dinero está en negativo. Lo próximo que ganes la irá devolviendo; mientras tanto no puedes retirar ni pedir otro préstamo.
         </p>
       ) : null}

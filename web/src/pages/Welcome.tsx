@@ -48,8 +48,9 @@ function Card({ icon: Icon, title, children }: { icon: typeof Check; title: stri
 export function Welcome({ canRegister }: { canRegister: boolean }) {
   return (
     <div className="min-h-dvh">
-      <header className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
-        <img src="/brand/logo.png" alt="DiploP" width={120} height={48} className="h-9 w-auto" />
+      <header className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-[max(1rem,env(safe-area-inset-left))] pt-[max(0.75rem,env(safe-area-inset-top))] pb-3">
+        <img src="/brand/logo.png" alt="DiploP" width={120} height={48} className="h-9 w-auto dark:hidden" />
+        <img src="/brand/logo-white.png" alt="DiploP" width={120} height={48} className="hidden h-9 w-auto dark:block" />
         <Cta canRegister={canRegister} where="top" />
       </header>
 
@@ -63,7 +64,7 @@ export function Welcome({ canRegister }: { canRegister: boolean }) {
 
         <section aria-labelledby="como" className="mb-10">
           <h2 id="como" className="mb-4 text-2xl font-extrabold">Cómo funciona</h2>
-          <ol className="grid gap-3 md:grid-cols-3">
+          <ol className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {STEPS.map((s, i) => (
               <li key={s.title} className="card relative p-4">
                 <span className="num absolute top-3 right-4 text-3xl font-extrabold text-[var(--fg-3)]/40" aria-hidden>{i + 1}</span>
@@ -75,7 +76,7 @@ export function Welcome({ canRegister }: { canRegister: boolean }) {
           </ol>
         </section>
 
-        <div className="grid gap-10 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
           <section aria-labelledby="padres">
             <h2 id="padres" className="mb-4 text-2xl font-extrabold">Para padres</h2>
             <ul className="space-y-3">{PARENTS.map((c) => <Card key={c.title} icon={c.icon} title={c.title}>{c.text}</Card>)}</ul>

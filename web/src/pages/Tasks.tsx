@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { CalendarDays, ListChecks, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, ListChecks, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api, del, post, put } from '../lib/api';
 import { addDays, fmtDate, WEEKDAYS, WEEKDAYS_LONG } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
@@ -129,7 +129,7 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
       title={d.id ? 'Editar tarea' : 'Nueva tarea'}
       footer={
         <div className="space-y-2">
-          {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+          {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
           <Button className="w-full" loading={save.isPending} onClick={() => save.mutate()}>{d.id ? 'Guardar cambios' : 'Crear tarea'}</Button>
         </div>
       }
@@ -167,10 +167,10 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
         {d.recurrence === 'daily' || d.recurrence === 'weekly' ? (
           <div>
             <p className="mb-2 text-sm muted">{d.recurrence === 'daily' ? 'Días (vacío = todos)' : 'Días de la semana'}</p>
-            <div className="flex gap-1.5">
+            <div className="grid grid-cols-7 gap-1">
               {WEEKDAYS.map((w, i) => (
                 <button key={w} type="button" aria-pressed={d.weekdays.includes(i + 1)} aria-label={WEEKDAYS_LONG[i]} onClick={() => set('weekdays', (toggleIn(d.weekdays, i + 1) as number[]).sort())}
-                  className={`num size-10 rounded-full font-bold transition ${d.weekdays.includes(i + 1) ? 'bg-ink text-white dark:bg-white dark:text-ink' : 'bg-[var(--chip)] text-[var(--fg-2)]'}`}>
+                  className={`num h-11 rounded-full font-bold transition ${d.weekdays.includes(i + 1) ? 'bg-ink text-white dark:bg-white dark:text-ink' : 'bg-[var(--chip)] text-[var(--fg-2)]'}`}>
                   {w}
                 </button>
               ))}
@@ -254,7 +254,7 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
           </Disclosure>
         )}
 
-        <Disclosure title="Bono extra" summary={d.bonusKind === 'none' ? 'Sin bono' : d.bonusSurprise ? '🎁 Sorpresa' : 'Bono visible'} defaultOpen={d.bonusKind !== 'none'}>
+        <Disclosure title="Bono extra" summary={d.bonusKind === 'none' ? 'Sin bono' : d.bonusSurprise ? 'Sorpresa' : 'Bono visible'} defaultOpen={d.bonusKind !== 'none'}>
           <Field label="Tipo de bono">
             {(id) => (
               <select id={id} className="field" value={d.bonusKind} onChange={(e) => set('bonusKind', e.target.value as Draft['bonusKind'])}>
@@ -281,7 +281,7 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
           ) : null}
           {d.bonusKind !== 'none' ? (
             <div className="divide-y divide-[var(--line)] rounded-2xl bg-[var(--chip)]/50 px-4">
-              <Toggle checked={d.bonusSurprise} onChange={(v) => set('bonusSurprise', v)} label="Sorpresa" description="Tu hijo ve «🎁 Sorpresa» sin saber qué es. La gana una sola vez, la primera que la haga." />
+              <Toggle checked={d.bonusSurprise} onChange={(v) => set('bonusSurprise', v)} label="Sorpresa" description="Tu hijo ve «Sorpresa» sin saber qué es. La gana una sola vez, la primera que la haga." />
               {!d.checkMode ? <Toggle checked={d.bonusOnTimeOnly} onChange={(v) => set('bonusOnTimeOnly', v)} label="Solo si llega a tiempo" description="Si es tarde, no hay bono. Si no, se gana siempre." /> : null}
             </div>
           ) : null}
@@ -306,9 +306,9 @@ function WeekView({ today }: { today: string }) {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={() => setOffset((o) => o - 1)}>‹ Anterior</Button>
+        <Button variant="ghost" size="sm" onClick={() => setOffset((o) => o - 1)}><ChevronLeft size={16} aria-hidden /> Anterior</Button>
         <span className="font-bold">{fmtDate(monday)} – {fmtDate(addDays(monday, 6))}</span>
-        <Button variant="ghost" size="sm" onClick={() => setOffset((o) => o + 1)}>Siguiente ›</Button>
+        <Button variant="ghost" size="sm" onClick={() => setOffset((o) => o + 1)}>Siguiente <ChevronRight size={16} aria-hidden /></Button>
       </div>
       <div className="mb-5 grid grid-cols-7 gap-1.5">
         {days.map((dd, i) => {
@@ -354,7 +354,7 @@ export default function Tasks() {
       ) : tasks.isLoading ? (
         <Loading />
       ) : tasks.data?.tasks.length ? (
-        <ul className="grid gap-2.5 md:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
           {tasks.data.tasks.map((t) => (
             <li key={t.id} className="card flex items-center gap-3 p-3.5">
               <span aria-hidden className="flex size-12 shrink-0 items-center justify-center rounded-[var(--radius-tile)] bg-[var(--chip)] text-2xl">{t.icon}</span>

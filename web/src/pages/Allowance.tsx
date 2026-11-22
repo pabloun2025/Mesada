@@ -43,7 +43,7 @@ function ScreenSheet({ child, minutes, onClose }: { child: User; minutes: number
         <Field label="Minutos">{(id) => <input id={id} className="field num text-xl font-bold" inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
         {mode === 'spend' ? <CategoryPicker value={category} onChange={setCategory} /> : null}
         <Field label={mode === 'spend' ? 'Nota (opcional)' : 'Motivo'}>{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder={mode === 'spend' ? 'Consola, tablet…' : ''} />}</Field>
-        {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
         <div className="border-t border-[var(--line)] pt-3"><ScreenList userId={child.id} /></div>
       </div>
     </Sheet>
@@ -83,7 +83,7 @@ function AdjustSheet({ child, onClose }: { child: User; onClose: () => void }) {
         </div>
         <Field label={type === 'points' ? 'Puntos' : 'Importe (€)'}>{(id) => <input id={id} className="field num text-xl font-bold" inputMode={type === 'points' ? 'numeric' : 'decimal'} value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
         <Field label="Motivo" hint="Queda en el historial y lo verá tu hijo/a.">{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Gracias por ayudar con la mudanza…" maxLength={300} />}</Field>
-        {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
       </div>
     </Sheet>
   );
@@ -97,7 +97,7 @@ function BalanceTile({ tone, label, value, note }: { tone: 'money' | 'points'; l
   return (
     <div className={`min-w-0 rounded-[1.1rem] p-3.5 ${money ? 'bg-tangerine-soft dark:bg-tangerine/15' : 'bg-sun-soft dark:bg-sun/15'}`}>
       <p className="text-[0.8rem] text-[var(--fg-2)]">{label}</p>
-      <p className={`num mt-0.5 text-[1.9rem] leading-tight font-extrabold ${value.startsWith('-') || value.startsWith('−') ? 'text-berry' : ''}`}>{value}</p>
+      <p className={`num mt-0.5 text-[1.9rem] leading-tight font-extrabold ${value.startsWith('-') || value.startsWith('−') ? 'text-berry-deep' : ''}`}>{value}</p>
       <p className="mt-1 text-xs text-[var(--fg-3)]">{note}</p>
     </div>
   );
@@ -211,7 +211,7 @@ export default function Allowance() {
 
       <section aria-label="Cuentas de los hijos">
         <h2 className="mb-3 text-[1.3rem] font-bold">Cuentas de los hijos</h2>
-        <div className="grid items-start gap-4 min-[1100px]:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-4 min-[1100px]:grid-cols-2">
           {kids.map((k, i) => <KidPanel key={k.id} child={k} wallet={wallets[i]?.data?.wallet} pending={pendingFor(k.id)} onSheet={(kind, w, bank) => setSheet({ kind, child: k, wallet: w, bank })} />)}
         </div>
       </section>

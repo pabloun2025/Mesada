@@ -33,7 +33,7 @@ export function pressKey(raw: string, key: string, unit: 'eur' | 'pts'): string 
 function AmountDisplay({ raw, unit, over }: { raw: string; unit: 'eur' | 'pts'; over: boolean }) {
   const [int, dec] = raw.split(',');
   const typedDec = dec ?? '';
-  const ink = over ? 'text-berry' : 'text-[var(--fg)]';
+  const ink = over ? 'text-berry-deep' : 'text-[var(--fg)]';
   return (
     <p aria-live="polite" className="num flex items-baseline justify-center text-[3.75rem] leading-none font-extrabold">
       <span className="sr-only">{unit === 'eur' ? euros(rawToValue(raw, 'eur')) : `${rawToValue(raw, 'pts')} puntos`}</span>
@@ -130,7 +130,7 @@ export function AmountSheet(p: AmountSheetProps) {
       subtitle={p.subtitle}
       footer={
         <>
-          {reason ? <p role="alert" className="mb-2 text-center text-sm font-bold text-berry">{reason}</p> : p.error ? <p role="alert" className="mb-2 text-center text-sm font-bold text-berry">{p.error}</p> : null}
+          {reason ? <p role="alert" className="mb-2 text-center text-sm font-bold text-berry-deep">{reason}</p> : p.error ? <p role="alert" className="mb-2 text-center text-sm font-bold text-berry-deep">{p.error}</p> : null}
           <Button size="lg" variant={p.variant ?? 'primary'} className="w-full" disabled={!ok} loading={p.loading} onClick={() => ok && p.onSubmit(value)}>
             {value > 0 ? p.cta(value) : p.cta(0)}
           </Button>
@@ -148,7 +148,7 @@ export function AmountSheet(p: AmountSheetProps) {
                 type="button"
                 aria-pressed={value === c.value}
                 onClick={() => setRaw(valueToRaw(c.value, unit))}
-                className={`num h-10 rounded-full border-[1.5px] px-[1.1rem] font-semibold transition ${value === c.value ? 'border-tangerine bg-tangerine-soft text-tangerine-deep dark:bg-tangerine/20' : 'border-transparent bg-[var(--chip)]'}`}
+                className={`num h-11 rounded-full border-[1.5px] px-[1.1rem] font-semibold transition ${value === c.value ? 'border-tangerine bg-tangerine-soft text-tangerine-deep dark:bg-tangerine/20' : 'border-transparent bg-[var(--chip)]'}`}
               >
                 {c.label}
               </button>

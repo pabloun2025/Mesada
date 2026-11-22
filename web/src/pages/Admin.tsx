@@ -97,7 +97,7 @@ function Enroll({ onDone }: { onDone: () => void }) {
           <Button loading={enable.isPending} onClick={() => enable.mutate()}>Activar</Button>
         </>
       )}
-      {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+      {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
     </section>
   );
 }
@@ -118,7 +118,7 @@ function Verify({ onDone }: { onDone: () => void }) {
       <CodeInput value={code} onChange={setCode} label="Código" />
       <p className="text-sm muted">Este dispositivo se recordará 90 días: no te lo volveremos a pedir aquí.</p>
       <Button type="submit" loading={verify.isPending}>Entrar</Button>
-      {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+      {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
     </form>
   );
 }
@@ -127,7 +127,7 @@ function Stat({ label, value, tone }: { label: string; value: string | number; t
   return (
     <div className="card p-4">
       <p className="text-sm font-bold text-[var(--fg-2)]">{label}</p>
-      <p className={`num mt-1 text-2xl font-extrabold ${tone === 'berry' ? 'text-berry' : tone === 'leaf' ? 'text-leaf' : ''}`}>{value}</p>
+      <p className={`num mt-1 text-2xl font-extrabold ${tone === 'berry' ? 'text-berry-deep' : tone === 'leaf' ? 'text-leaf-text' : ''}`}>{value}</p>
     </div>
   );
 }
@@ -158,10 +158,10 @@ function Overview() {
         <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
           <div className="flex justify-between gap-2"><dt className="muted">Correo</dt><dd className="font-bold">{notify.channels.email.real ? notify.channels.email.provider : 'Simulado'} · {notify.usage.email.sent}/{notify.usage.email.cap} este mes</dd></div>
           <div className="flex justify-between gap-2"><dt className="muted">WhatsApp</dt><dd className="font-bold">{notify.channels.whatsapp.real ? notify.channels.whatsapp.provider : 'Simulado'} · {notify.usage.whatsapp.sent}/{notify.usage.whatsapp.cap} hoy</dd></div>
-          <div className="flex justify-between gap-2"><dt className="muted">Línea de WhatsApp</dt><dd className={`font-bold ${line.state === 'open' ? 'text-leaf' : 'text-berry'}`}>{lineText}</dd></div>
+          <div className="flex justify-between gap-2"><dt className="muted">Línea de WhatsApp</dt><dd className={`font-bold ${line.state === 'open' ? 'text-leaf-text' : 'text-berry-deep'}`}>{lineText}</dd></div>
           <div className="flex justify-between gap-2"><dt className="muted">En cola</dt><dd className="num font-bold">{notify.outbox.pending}</dd></div>
           <div className="flex justify-between gap-2"><dt className="muted">Enviados (24 h)</dt><dd className="num font-bold">{notify.outbox.sent24}</dd></div>
-          <div className="flex justify-between gap-2"><dt className="muted">Fallidos (24 h)</dt><dd className={`num font-bold ${notify.outbox.failed24 ? 'text-berry' : ''}`}>{notify.outbox.failed24}</dd></div>
+          <div className="flex justify-between gap-2"><dt className="muted">Fallidos (24 h)</dt><dd className={`num font-bold ${notify.outbox.failed24 ? 'text-berry-deep' : ''}`}>{notify.outbox.failed24}</dd></div>
         </dl>
       </section>
 
@@ -170,7 +170,7 @@ function Overview() {
         <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
           <div className="flex justify-between gap-2"><dt className="muted">Encendido desde hace</dt><dd className="font-bold">{fmtUptime(health.uptimeSeconds)}</dd></div>
           <div className="flex justify-between gap-2"><dt className="muted">Base de datos</dt><dd className="font-bold">{fmtBytes(health.dbBytes)}</dd></div>
-          <div className="flex justify-between gap-2"><dt className="muted">Copias de seguridad</dt><dd className={`font-bold ${health.backups?.last ? '' : 'text-berry'}`}>{health.backups?.last ? `${health.backups.count} · última ${relative(health.backups.last)}` : 'No se encuentran'}</dd></div>
+          <div className="flex justify-between gap-2"><dt className="muted">Copias de seguridad</dt><dd className={`font-bold ${health.backups?.last ? '' : 'text-berry-deep'}`}>{health.backups?.last ? `${health.backups.count} · última ${relative(health.backups.last)}` : 'No se encuentran'}</dd></div>
           <div className="flex justify-between gap-2"><dt className="muted">Node</dt><dd className="font-bold">{health.node}</dd></div>
         </dl>
       </section>
@@ -344,7 +344,7 @@ export default function Admin() {
     <div className="max-w-4xl">
       <PageHeader
         title="Administración"
-        subtitle={<span className="inline-flex items-center gap-1.5"><ShieldCheck size={16} className="text-leaf" aria-hidden /> {s.deviceTrusted ? 'Dispositivo recordado: no se pide el código.' : 'Verificada. Se vuelve a pedir el código a las 12 horas.'}</span>}
+        subtitle={<span className="inline-flex items-center gap-1.5"><ShieldCheck size={16} className="text-leaf-text" aria-hidden /> {s.deviceTrusted ? 'Dispositivo recordado: no se pide el código.' : 'Verificada. Se vuelve a pedir el código a las 12 horas.'}</span>}
       />
       <div className="mb-5">
         <Segmented label="Sección" value={tab} onChange={setTab} options={[

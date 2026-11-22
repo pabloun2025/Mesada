@@ -1039,6 +1039,73 @@ test.describe.serial('Familia completa', () => {
     await kid.screenshot({ path: `${SHOTS}/47-hijo-banco-monedas-375.png` });
   });
 
+  test('calidad de interfaz: claro y oscuro a 375 y 320 px, sin desbordar y con objetivos táctiles de 44 px', async ({ browser }) => {
+    let n = 48;
+    const overflow = (p: Page) => p.evaluate(() => {
+      let o = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+      for (const e of document.querySelectorAll('body *')) {
+        const r = e.getBoundingClientRect();
+        if (r.width > 0 && r.right > document.documentElement.clientWidth + 1 && !e.closest('.rail,[role=tablist],.sr-only,.confetti,dialog:not([open])')) o = Math.max(o, Math.round(r.right - document.documentElement.clientWidth));
+      }
+      return o;
+    });
+    // Botones e iconos de la cabecera y de la barra inferior: mínimo 44 px.
+    const small = (p: Page) => p.evaluate(() =>
+      [...document.querySelectorAll('header button, nav[aria-label=Principal] a, nav[aria-label=Principal] button')]
+        .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.width < 44 || r.height < 44); })
+        .map((e) => e.getAttribute('aria-label') ?? e.textContent));
+    for (const theme of ['light', 'dark'] as const) {
+      for (const w of [375, 320]) {
+        const mk = async () => {
+          const ctx = await browser.newContext({ viewport: { width: w, height: 760 }, hasTouch: true, colorScheme: theme, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+          await ctx.addInitScript((t) => localStorage.setItem('mesada:theme', t), theme);
+          return ctx.newPage();
+        };
+        const shot = async (p: Page, name: string, full = true) => {
+          expect(await overflow(p), `${name} ${w} ${theme} desborda`).toBeLessThanOrEqual(0);
+          await p.waitForTimeout(250);
+          await p.screenshot({ path: `${SHOTS}/${n++}-${name}-${w}-${theme}.png`, fullPage: full });
+        };
+        // Públicas.
+        let p = await mk();
+        await p.goto('/bienvenida');
+        await expect(p.getByRole('heading', { name: 'Cómo funciona' })).toBeVisible();
+        await shot(p, 'bienvenida');
+        await p.goto('/entrar');
+        await expect(p.getByLabel('Usuario')).toBeVisible();
+        await shot(p, 'entrar');
+        await p.context().close();
+        // Hijo: el nombre de la cabecera cabe entero y los objetivos miden 44 px.
+        p = await mk();
+        await login(p, KID.user, KID.pin, true);
+        await expect(p.getByRole('region', { name: 'Mi mesada' })).toBeVisible();
+        const nameBox = p.locator('header p.truncate').first();
+        expect(await nameBox.evaluate((e) => e.scrollWidth <= e.clientWidth), 'nombre truncado en la cabecera').toBe(true);
+        expect(await small(p)).toEqual([]);
+        await shot(p, 'hijo-inicio');
+        await p.goto('/extras');
+        await expect(p.getByRole('heading', { name: 'Trabajos extra' })).toBeVisible();
+        await shot(p, 'hijo-extras');
+        await p.goto('/mesada');
+        await expect(p.getByRole('region', { name: 'Cuenta de dinero' })).toBeVisible();
+        await shot(p, 'hijo-banco');
+        await p.context().close();
+        // Adulto: Validar y la hoja de revisión.
+        p = await mk();
+        await login(p, ADULT.user, ADULT.pass);
+        await expect(p.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+        await p.goto('/validar');
+        await expect(p.getByRole('button', { name: /^Revisar/ }).first()).toBeVisible();
+        expect(await small(p)).toEqual([]);
+        await shot(p, 'validar');
+        await p.getByRole('button', { name: /^Revisar/ }).first().click();
+        await p.getByRole('dialog').getByRole('radio', { name: /Rechazar con penalidad/ }).click();
+        await shot(p, 'validar-hoja', false);
+        await p.context().close();
+      }
+    }
+  });
+
   test('la app es instalable (manifest y service worker)', async () => {
     const res = await adult.request.get('/manifest.webmanifest');
     expect(res.ok()).toBe(true);

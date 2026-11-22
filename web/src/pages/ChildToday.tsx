@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Camera, CalendarCheck, Check, ChevronRight, Database, Flame, Hammer, Hourglass, PartyPopper, Star } from 'lucide-react';
+import { Camera, CalendarCheck, Check, ChevronRight, Database, Flame, Hammer, Hourglass, PartyPopper, Smartphone, Star } from 'lucide-react';
 import { api } from '../lib/api';
 import { addDays, euros, fmtDate, weekdayLong } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
@@ -105,11 +105,11 @@ export default function ChildToday() {
             </span>
             {screenMin != null ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
-                <span aria-hidden>📱</span> {minutesLabel(screenMin)} de pantalla
+                <Smartphone size={16} aria-hidden /> {minutesLabel(screenMin)} de pantalla
               </span>
             ) : null}
             {screenMin != null ? (
-              <button type="button" onClick={() => setLogOpen(true)} className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold underline decoration-dotted underline-offset-4">
+              <button type="button" onClick={() => setLogOpen(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[var(--chip)] px-4 py-1 text-sm font-bold underline decoration-dotted underline-offset-4">
                 Anotar pantalla
               </button>
             ) : null}
@@ -158,10 +158,10 @@ export default function ChildToday() {
 
       {extras.data?.board.length ? (
         <section className="mb-8">
-          <Link to="/extras" className="card flex items-center gap-3 p-3.5 font-bold">
+          <Link to="/extras" className="card flex min-h-14 items-center gap-3 p-3.5 font-bold">
             <Hammer size={22} className="text-tangerine" aria-hidden />
             <span className="flex-1">Trabajos extra{freeExtras ? ` · ${freeExtras} libre${freeExtras === 1 ? '' : 's'}` : ''}</span>
-            <span className="muted" aria-hidden>›</span>
+            <ChevronRight size={20} className="muted" aria-hidden />
           </Link>
         </section>
       ) : null}

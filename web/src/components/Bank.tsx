@@ -102,13 +102,13 @@ export function AccountRail({ bank, wallet }: { bank: Bank; wallet: Wallet }) {
           <small className="text-xl font-bold">€</small>
         </AccountCard>
         <AccountCard tone="points" title="Cuenta de puntos" number={bank.accounts.points} foot={<>≈ {euros(wallet.points_value_cents)} por convertir</>}>
-          <span className={bank.points < 0 ? 'text-berry' : ''}>{bank.points}</span>
+          <span className={bank.points < 0 ? 'text-berry-deep' : ''}>{bank.points}</span>
           <small className="text-xl font-bold">pts</small>
         </AccountCard>
       </div>
       <div className="flex justify-center gap-1 pt-1 md:hidden" role="group" aria-label="Elegir cuenta">
         {cards.map((c, i) => (
-          <button key={c} type="button" aria-label={c} aria-current={index === i} onClick={() => go(i)} className="flex size-6 items-center justify-center rounded-full">
+          <button key={c} type="button" aria-label={c} aria-current={index === i} onClick={() => go(i)} className="flex h-11 w-11 items-center justify-center rounded-full">
             <i className={`block h-1.5 rounded-full transition-all duration-300 ${index === i ? 'w-5 bg-tangerine' : 'w-1.5 bg-[#c3cde0] dark:bg-[#3a4a6e]'}`} />
           </button>
         ))}
@@ -191,7 +191,7 @@ export function BalanceTrend({ history }: { history: BalanceHistory }) {
     <div className="card px-4 pt-3.5 pb-3">
       <header className="mb-2.5 flex items-center justify-between">
         <b className="font-display text-base">Tu saldo</b>
-        <span className={`num inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${delta === 0 ? 'bg-[var(--chip)] text-[var(--fg-2)]' : up ? 'bg-leaf-soft text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]' : 'bg-berry-soft text-berry dark:bg-berry/20 dark:text-[#ff9dbf]'}`}>
+        <span className={`num inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${delta === 0 ? 'bg-[var(--chip)] text-[var(--fg-2)]' : up ? 'bg-leaf-soft text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]' : 'bg-berry-soft text-berry-deep dark:bg-berry/20 dark:text-[#ff9dbf]'}`}>
           {delta === 0 ? null : up ? <TrendingUp size={14} aria-hidden /> : <TrendingDown size={14} aria-hidden />}
           {delta === 0 ? 'Sin cambios en 8 semanas' : `${up ? '+' : '−'}${euros(Math.abs(delta))} en 8 semanas`}
         </span>
@@ -342,7 +342,7 @@ export function GoalProduct({ goal, mine, compact = false, onDeposit, onRemove }
   if (closed) {
     return (
       <li className="card flex flex-wrap items-center gap-2 p-3.5">
-        <Target size={18} className="shrink-0 text-leaf" aria-hidden />
+        <Target size={18} className="shrink-0 text-leaf-text" aria-hidden />
         <span className="min-w-0 flex-1 font-bold">{goal.title}</span>
         <Badge tone="leaf">{goal.status === 'bought' ? `Comprada por ${euros(goal.price_cents ?? 0)}` : 'Pasada a efectivo'}</Badge>
       </li>
@@ -370,7 +370,7 @@ export function GoalProduct({ goal, mine, compact = false, onDeposit, onRemove }
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-leaf-soft text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]"><Target size={22} aria-hidden /></span>
         <h3 className="min-w-0 flex-1 text-[1.05rem]">Mis ahorros · {goal.title}</h3>
         {mine && !goal.pending_request ? (
-          <button type="button" onClick={() => onDeposit?.(goal)} aria-label={`Meter dinero en ${goal.title}`} title="Meter dinero" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-leaf-soft text-leaf-deep transition active:scale-95 dark:bg-leaf/20 dark:text-[#7fe0b2]"><Plus size={20} aria-hidden /></button>
+          <button type="button" onClick={() => onDeposit?.(goal)} aria-label={`Meter dinero en ${goal.title}`} title="Meter dinero" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-leaf-soft text-leaf-deep transition active:scale-95 dark:bg-leaf/20 dark:text-[#7fe0b2]"><Plus size={20} aria-hidden /></button>
         ) : null}
       </div>
       <p className="num mt-3 flex items-baseline gap-2 text-[1.75rem] font-extrabold">
@@ -400,7 +400,7 @@ export function GoalProduct({ goal, mine, compact = false, onDeposit, onRemove }
                 aria-disabled={!goal.reached}
                 disabled={act.isPending}
                 onClick={() => (goal.reached ? act.mutate('redeem') : toast(`Podrás canjearla al llegar a ${euros(goal.target_cents)}`))}
-                className={`inline-flex min-h-9 items-center gap-1.5 font-bold ${goal.reached ? 'text-tangerine' : 'text-[var(--fg-3)]'}`}
+                className={`inline-flex min-h-11 items-center gap-1.5 font-bold ${goal.reached ? 'text-tangerine' : 'text-[var(--fg-3)]'}`}
               >
                 <ShoppingBag size={18} aria-hidden /> Canjear meta
                 {goal.reached ? null : <small className="font-normal">· al llegar a {euros(goal.target_cents)}</small>}
@@ -418,7 +418,7 @@ export function GoalProduct({ goal, mine, compact = false, onDeposit, onRemove }
       ) : null}
       <Sheet open={confirm} onClose={() => setConfirm(false)} title="Sacar mi ahorro" footer={<Button className="w-full" variant="danger" loading={act.isPending} onClick={() => act.mutate('withdraw')}>Sí, sacar mi dinero</Button>}>
         <p>Recuperas <strong className="num">{euros(goal.principal_cents)}</strong> en tu cuenta de dinero.</p>
-        {goal.interest_cents > 0 ? <p className="mt-2 font-bold text-berry">Pierdes los {euros(goal.interest_cents)} de interés que has ganado.</p> : null}
+        {goal.interest_cents > 0 ? <p className="mt-2 font-bold text-berry-deep">Pierdes los {euros(goal.interest_cents)} de interés que has ganado.</p> : null}
         <p className="mt-2 muted">Si esperas a llegar a la meta, conservas el interés.</p>
       </Sheet>
     </li>
@@ -522,7 +522,7 @@ export function Statement({ userId, loan }: { userId: string; loan?: Loan | null
       <div role="tablist" aria-label="Qué ver en el extracto" className="mb-1.5 flex gap-2 overflow-x-auto">
         {TABS.map((t) => (
           <button key={t.value} type="button" role="tab" aria-selected={tab === t.value} onClick={() => setTab(t.value)}
-            className={`h-9 shrink-0 rounded-full px-4 text-sm font-bold transition ${tab === t.value ? 'bg-ink text-white dark:bg-white dark:text-ink' : 'bg-[var(--chip)] text-[var(--fg-2)]'}`}>
+            className={`h-11 shrink-0 rounded-full px-4 text-sm font-bold transition ${tab === t.value ? 'bg-ink text-white dark:bg-white dark:text-ink' : 'bg-[var(--chip)] text-[var(--fg-2)]'}`}>
             {t.label}
           </button>
         ))}
@@ -535,7 +535,7 @@ export function Statement({ userId, loan }: { userId: string; loan?: Loan | null
                 <h3 className="flex items-baseline justify-between pt-3.5 pb-1 text-[0.95rem]">Próximo <small className="font-sans text-[0.8rem] font-normal tracking-normal text-[var(--fg-3)]">{fmtWeekdayShort(planned.next_charge_week!)}</small></h3>
                 <ul>
                   <li className="grid grid-cols-[40px_1fr_auto] items-center gap-3 py-2.5 opacity-90">
-                    <span className="flex size-10 items-center justify-center rounded-full text-sky ring-[1.5px] ring-[var(--line)] ring-inset"><CalendarClock size={20} aria-hidden /></span>
+                    <span className="flex size-10 items-center justify-center rounded-full text-tangerine-deep ring-[1.5px] ring-[var(--line)] ring-inset"><CalendarClock size={20} aria-hidden /></span>
                     <div><b className="block leading-tight">Cuota {planned.installments_paid + 1} de {planned.weeks}</b><small className="text-[0.8rem] text-[var(--fg-3)]">Préstamo · programada</small></div>
                     <div className="text-right"><b className="num block text-[#c0245d] dark:text-[#ff9dbf]">−{euros(planned.installment_cents)}</b>{planned.interest_points ? <small className="text-[0.8rem] text-[var(--fg-3)]">+ {planned.interest_points} pts de interés</small> : null}</div>
                   </li>
@@ -725,9 +725,9 @@ export function LoanSheet({ bank, onClose }: { bank: Bank; onClose: () => void }
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--chip)] px-3 py-2">
             <span className="text-sm font-bold" id="weeks-label">Devuélvelo en</span>
             <div className="flex items-center gap-2" role="group" aria-labelledby="weeks-label">
-              <button type="button" aria-label="Una semana menos" disabled={weeks <= 1} onClick={() => setWeeks(weeks - 1)} className="flex size-9 items-center justify-center rounded-full bg-[var(--card)] text-xl font-bold shadow-[var(--shadow-press)] disabled:opacity-40">−</button>
+              <button type="button" aria-label="Una semana menos" disabled={weeks <= 1} onClick={() => setWeeks(weeks - 1)} className="flex size-11 items-center justify-center rounded-full bg-[var(--card)] text-xl font-bold shadow-[var(--shadow-press)] disabled:opacity-40">−</button>
               <output className="num min-w-[5.5rem] text-center font-bold">{weeks} {weeks === 1 ? 'semana' : 'semanas'}</output>
-              <button type="button" aria-label="Una semana más" disabled={weeks >= a.max_weeks} onClick={() => setWeeks(weeks + 1)} className="flex size-9 items-center justify-center rounded-full bg-[var(--card)] text-xl font-bold shadow-[var(--shadow-press)] disabled:opacity-40">+</button>
+              <button type="button" aria-label="Una semana más" disabled={weeks >= a.max_weeks} onClick={() => setWeeks(weeks + 1)} className="flex size-11 items-center justify-center rounded-full bg-[var(--card)] text-xl font-bold shadow-[var(--shadow-press)] disabled:opacity-40">+</button>
             </div>
           </div>
           <Field label="¿Para qué es? (opcional)">{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} />}</Field>
@@ -773,7 +773,7 @@ export function SaveSheet({ bank, goals, initialGoal, onClose }: { bank: Bank; g
         <div role="radiogroup" aria-label="Meta" className="flex flex-wrap justify-center gap-2">
           {open.map((g) => (
             <button key={g.id} type="button" role="radio" aria-checked={goalId === g.id} onClick={() => setGoalId(g.id)}
-              className={`inline-flex h-10 items-center rounded-full border px-3.5 text-sm font-bold ${goalId === g.id ? 'border-sky bg-sky/15' : 'border-[var(--line)] bg-[var(--chip)] text-[var(--fg-3)]'}`}>{g.title}</button>
+              className={`inline-flex h-11 items-center rounded-full border px-3.5 text-sm font-bold ${goalId === g.id ? 'border-sky bg-sky/15' : 'border-[var(--line)] bg-[var(--chip)] text-[var(--fg-3)]'}`}>{g.title}</button>
           ))}
         </div>
       ) : open[0] ? <p className="text-center font-bold">Meta: {open[0].title}</p> : null}

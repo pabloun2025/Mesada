@@ -54,7 +54,7 @@ function ExtraEditor({ initial, onClose }: { initial: Draft; onClose: () => void
   });
   return (
     <Sheet open onClose={onClose} title={d.id ? 'Editar trabajo extra' : 'Nuevo trabajo extra'}
-      footer={<div className="space-y-2">{error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}<Button className="w-full" loading={save.isPending} onClick={() => save.mutate()}>{d.id ? 'Guardar cambios' : 'Crear trabajo'}</Button></div>}>
+      footer={<div className="space-y-2">{error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}<Button className="w-full" loading={save.isPending} onClick={() => save.mutate()}>{d.id ? 'Guardar cambios' : 'Crear trabajo'}</Button></div>}>
       <div className="space-y-5">
         <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Icono">
           {ICONS.map((i) => (
@@ -96,7 +96,7 @@ function ActivateSheet({ item, onClose }: { item: ExtraCatalogItem; onClose: () 
   });
   return (
     <Sheet open onClose={onClose} title="Poner en el tablón" subtitle={`${item.icon} ${item.title}`}
-      footer={<div className="space-y-2">{error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}<Button className="w-full" loading={go.isPending} onClick={() => go.mutate()}>Poner en el tablón</Button></div>}>
+      footer={<div className="space-y-2">{error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}<Button className="w-full" loading={go.isPending} onClick={() => go.mutate()}>Poner en el tablón</Button></div>}>
       <Field label="Plazo (opcional)" hint="Hasta ese día inclusive. Si nadie la hace, vuelve al catálogo sin más.">
         {(id) => <input id={id} type="date" className="field" value={deadline} onChange={(e) => setDeadline(e.target.value)} />}
       </Field>
@@ -138,7 +138,7 @@ function BoardCard({ it, adult }: { it: ExtraBoardItem; adult: boolean }) {
             {it.status === 'rejected' ? <Badge tone="berry">Necesita repaso</Badge> : null}
             <BonusChip bonus={it.bonus} />
           </div>
-          {it.status === 'rejected' && it.review_note ? <p className="mt-1 text-sm text-berry">«{it.review_note}»</p> : null}
+          {it.status === 'rejected' && it.review_note ? <p className="mt-1 text-sm text-berry-deep">«{it.review_note}»</p> : null}
         </div>
         <PointsPill points={it.points} />
       </div>

@@ -80,7 +80,7 @@ function ReceiptView({ r, onClose }: { r: ReceiptData; onClose: () => void }) {
       <div className="mx-auto flex min-h-full w-full max-w-md flex-col px-4 pb-6">
         <div className="relative flex items-center justify-center py-4">
           <b className="font-display">Recibo</b>
-          <button type="button" aria-label="Cerrar recibo" onClick={onClose} className="absolute right-0 flex size-10 items-center justify-center rounded-full bg-white/15 transition hover:bg-white/25">
+          <button type="button" aria-label="Cerrar recibo" onClick={onClose} className="absolute right-0 flex size-11 items-center justify-center rounded-full bg-white/15 transition hover:bg-white/25">
             <X size={20} aria-hidden />
           </button>
         </div>

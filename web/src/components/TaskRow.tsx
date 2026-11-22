@@ -24,13 +24,13 @@ function Deadline({ inst }: { inst: Instance }) {
   if (left > 0) {
     const soon = left <= 30 * 60_000;
     return (
-      <span className={`inline-flex items-center gap-1 font-bold ${soon ? 'text-berry' : 'muted'}`}>
+      <span className={`inline-flex items-center gap-1 font-bold ${soon ? 'text-berry-deep' : 'muted'}`}>
         <Clock size={14} aria-hidden /> Antes de las {inst.deadline_time}{left < 24 * 3_600_000 ? ` · quedan ${remaining(left)}` : ''}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 font-bold text-berry">
+    <span className="inline-flex items-center gap-1 font-bold text-berry-deep">
       <Clock size={14} aria-hidden /> Pasó la hora de las {inst.deadline_time}{inst.late_percent < 100 ? ` · vale el ${inst.late_percent} %` : ''}
     </span>
   );
@@ -106,10 +106,10 @@ export function TaskRow({
           {inst.requires_photo ? <span className="inline-flex items-center gap-1 muted"><Camera size={14} aria-hidden /> Con foto</span> : null}
         </div>
         {(inst.status === 'rejected' || inst.status === 'declined' || inst.review_outcome === 'partial') && inst.review_note ? (
-          <p className={`mt-1.5 text-sm ${inst.review_outcome === 'partial' ? 'text-sun-ink dark:text-sun' : 'text-berry'}`}>«{inst.review_note}»</p>
+          <p className={`mt-1.5 text-sm ${inst.review_outcome === 'partial' ? 'text-sun-ink dark:text-sun' : 'text-berry-deep'}`}>«{inst.review_note}»</p>
         ) : null}
         {inst.status === 'declined' && (inst.penalty_points || inst.penalty_screen) ? (
-          <p className="mt-1 text-sm font-bold text-berry">
+          <p className="mt-1 text-sm font-bold text-berry-deep">
             Se te ha restado {[inst.penalty_points ? `${inst.penalty_points} puntos` : '', inst.penalty_screen ? `${inst.penalty_screen} min de pantalla` : ''].filter(Boolean).join(' y ')}.
           </p>
         ) : null}

@@ -27,7 +27,7 @@ function Holidays() {
         <h2 className="text-lg font-bold">Festivos y vacaciones</h2>
         <p className="text-sm muted">Esos días, las tareas con hora límite usan la hora del fin de semana.</p>
       </div>
-      <form className="grid grid-cols-[auto_1fr_auto] items-end gap-2" onSubmit={(e) => { e.preventDefault(); if (day) add.mutate(); }}>
+      <form className="grid grid-cols-1 items-end gap-2 min-[480px]:grid-cols-[auto_1fr_auto]" onSubmit={(e) => { e.preventDefault(); if (day) add.mutate(); }}>
         <Field label="Día">{(id) => <input id={id} type="date" className="field" value={day} onChange={(e) => setDay(e.target.value)} required />}</Field>
         <Field label="Nombre">{(id) => <input id={id} className="field" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder="Puente de diciembre" />}</Field>
         <Button type="submit" variant="secondary" loading={add.isPending} disabled={!day}>Añadir</Button>
@@ -110,7 +110,7 @@ function BankSettings({ capOn }: { capOn: boolean }) {
       ) : null}
       <Toggle checked={b.bank_savings_enabled} onChange={(v) => setB({ ...b, bank_savings_enabled: v })} label="Interés del ahorro" description="Cada lunes las metas con dinero ganan interés, que pagáis vosotros. Se redondea al euro de arriba, con 1 € como mínimo." />
       {b.bank_savings_enabled ? <NumField label="Interés semanal" unit="%" step={0.1} value={b.bank_savings_rate_percent} onChange={(v) => setB({ ...b, bank_savings_rate_percent: v })} /> : null}
-      {error ? <p role="alert" className="font-bold text-berry">{error}</p> : null}
+      {error ? <p role="alert" className="font-bold text-berry-deep">{error}</p> : null}
       <Button variant="secondary" loading={save.isPending} onClick={() => save.mutate()}>Guardar ajustes del banco</Button>
     </section>
   );
@@ -176,7 +176,7 @@ export default function Settings() {
         </section>
         <BankSettings capOn={f.capOn} />
         <Holidays />
-        {error ? <p role="alert" className="font-bold text-berry">{error}</p> : null}
+        {error ? <p role="alert" className="font-bold text-berry-deep">{error}</p> : null}
         <Button size="lg" loading={save.isPending} onClick={() => save.mutate()}>Guardar ajustes</Button>
       </div>
     </div>

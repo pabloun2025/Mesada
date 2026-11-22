@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -19,9 +19,26 @@ function useTheme() {
     setDark(next);
     document.documentElement.classList.toggle('dark', next);
     localStorage.setItem('mesada:theme', next ? 'dark' : 'light');
-    document.querySelector('meta[name=theme-color]')?.setAttribute('content', '#1A58A3');
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', next ? '#15213d' : '#cde5f8');
   };
   return { dark, toggle };
+}
+
+/** Aviso fijo si alguna consulta falla (sin conexión o error del servidor), con reintento. */
+function ConnectionBanner() {
+  const qc = useQueryClient();
+  const cache = qc.getQueryCache();
+  const failed = useSyncExternalStore(
+    (cb) => cache.subscribe(cb),
+    () => cache.findAll({ predicate: (q) => q.state.status === 'error' && q.state.fetchStatus === 'idle' }).length,
+  );
+  if (!failed) return null;
+  return (
+    <div role="alert" className="mx-auto mb-4 flex w-full max-w-5xl flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-berry-soft px-4 py-2 text-sm font-bold text-berry-deep dark:bg-berry/20">
+      <span className="min-w-0 flex-1">No se han podido cargar algunos datos. Revisa la conexión.</span>
+      <button type="button" className="min-h-11 rounded-full px-3 underline underline-offset-2" onClick={() => qc.refetchQueries({ predicate: (q) => q.state.status === 'error' })}>Reintentar</button>
+    </div>
+  );
 }
 
 function Notifications() {
@@ -177,12 +194,13 @@ export function Layout() {
       <div className="flex min-h-dvh flex-col">
         {/* Cabecera */}
         {/* En móvil, la cabecera es la franja azul de la marca; en escritorio, una barra neutra. */}
-        <header className="brand-header sticky top-0 z-30 flex items-center gap-2 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 lg:justify-end lg:border-b lg:border-[var(--line)] lg:bg-[var(--bg)]/85 lg:px-8 lg:pt-[max(0.625rem,env(safe-area-inset-top))] lg:pb-2.5 lg:backdrop-blur-md">
-          <div className="flex flex-1 items-center gap-3 lg:hidden">
-            <img src="/brand/logo-white.png" alt="DiploP" width={84} height={40} className="h-9 w-auto" />
-            <div className="min-w-0 border-l border-white/25 pl-3 leading-tight">
-              <p className="truncate font-display font-extrabold text-white">Hola, {user.display_name}</p>
-              <p className="truncate text-xs text-white/75">{family.name}</p>
+        <header className="brand-header sticky top-0 z-30 flex items-center gap-0.5 px-[max(0.75rem,env(safe-area-inset-left))] pt-[max(0.25rem,env(safe-area-inset-top))] pb-1 min-[360px]:gap-1.5 min-[360px]:px-4 lg:justify-end lg:border-b lg:border-[var(--line)] lg:bg-[var(--bg)]/85 lg:px-8 lg:pt-[max(0.625rem,env(safe-area-inset-top))] lg:pb-2.5 lg:backdrop-blur-md">
+          <div className="flex min-w-0 flex-1 items-center gap-2 min-[360px]:gap-3 lg:hidden">
+            <img src="/brand/logo.png" alt="DiploP" width={84} height={40} className="h-8 w-auto shrink-0 min-[360px]:h-9 dark:hidden" />
+            <img src="/brand/logo-white.png" alt="DiploP" width={84} height={40} className="hidden h-8 w-auto shrink-0 min-[360px]:h-9 dark:block" />
+            <div className="min-w-0 border-[var(--line)] leading-tight min-[360px]:border-l min-[360px]:pl-3">
+              <p className="truncate font-display font-extrabold"><span className="max-[359px]:hidden">Hola, </span>{user.display_name}</p>
+              <p className="truncate text-xs text-[var(--fg-3)] max-[399px]:hidden">{family.name}</p>
             </div>
           </div>
           <IconButton label={theme.dark ? 'Modo claro' : 'Modo oscuro'} onClick={theme.toggle}>{theme.dark ? <Sun size={20} /> : <Moon size={20} />}</IconButton>
@@ -190,7 +208,8 @@ export function Layout() {
           <IconButton label="Cerrar sesión" onClick={doLogout} className="lg:hidden"><LogOut size={19} /></IconButton>
         </header>
 
-        <main id="contenido" tabIndex={-1} className="mx-auto w-full max-w-5xl flex-1 px-4 pt-5 pb-28 lg:px-8 lg:pb-12">
+        <main id="contenido" tabIndex={-1} className="mx-auto w-full max-w-5xl flex-1 px-[max(1rem,env(safe-area-inset-left))] pt-5 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:px-8 lg:pb-12">
+          <ConnectionBanner />
           <Outlet />
         </main>
 
