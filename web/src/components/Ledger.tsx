@@ -35,7 +35,7 @@ export function ScreenList({ userId }: { userId: string }) {
               {e.kind === 'usage' && e.log_overflow > 0 ? <Badge tone="berry">Te pasaste {e.log_overflow} min</Badge> : null}
             </p>
           </div>
-          <span className={`num font-extrabold ${e.delta > 0 ? 'text-leaf' : 'text-[var(--fg-2)]'}`}>{e.delta > 0 ? '+' : ''}{e.delta} min</span>
+          <span className={`num font-extrabold ${e.delta > 0 ? 'text-leaf-text' : 'text-[var(--fg-2)]'}`}>{e.delta > 0 ? '+' : ''}{e.delta} min</span>
         </li>
       ))}
     </ul>

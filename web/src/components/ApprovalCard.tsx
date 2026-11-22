@@ -50,7 +50,7 @@ function ReviewSheet({ p, open, onClose }: { p: Pending; open: boolean; onClose:
     <Sheet open={open} onClose={onClose} title="Revisar tarea" subtitle={`«${p.title}» · ${p.display_name} · vale ${p.points} pts`}
       footer={
         <div className="space-y-2">
-          {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+          {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
           <Button className="w-full" variant={choice === 'partial' || choice === 'return' ? 'primary' : 'danger'} disabled={!ok} loading={review.isPending} onClick={submit}>{label}</Button>
         </div>
       }
@@ -90,7 +90,7 @@ function ReviewSheet({ p, open, onClose }: { p: Pending; open: boolean; onClose:
           <div className="flex flex-wrap gap-1.5">
             {REASONS.map((r) => (
               <button key={r} type="button" onClick={() => setNote(r)} aria-pressed={note === r}
-                className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${note === r ? 'bg-ink text-white dark:bg-white dark:text-ink' : 'bg-[var(--chip)]'}`}>{r}</button>
+                className={`min-h-11 rounded-full px-3.5 py-1.5 text-sm font-bold transition ${note === r ? 'bg-ink text-white dark:bg-white dark:text-ink' : 'bg-[var(--chip)]'}`}>{r}</button>
             ))}
           </div>
           <textarea className="field min-h-20" placeholder="O escribe el motivo…" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} aria-label="Motivo" />
@@ -125,9 +125,9 @@ export function ApprovalCard({ p, compact = false }: { p: Pending; compact?: boo
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {!compact ? (
           <div className="flex items-center rounded-full bg-[var(--chip)]" aria-label="Puntos a conceder">
-            <button type="button" className="flex size-9 items-center justify-center rounded-full" aria-label="Menos puntos" onClick={() => setPoints((x) => Math.max(0, x - 5))}><Minus size={16} /></button>
+            <button type="button" className="flex size-11 items-center justify-center rounded-full" aria-label="Menos puntos" onClick={() => setPoints((x) => Math.max(0, x - 5))}><Minus size={16} /></button>
             <span className="num w-14 text-center font-bold">{points} pts</span>
-            <button type="button" className="flex size-9 items-center justify-center rounded-full" aria-label="Más puntos" onClick={() => setPoints((x) => x + 5)}><Plus size={16} /></button>
+            <button type="button" className="flex size-11 items-center justify-center rounded-full" aria-label="Más puntos" onClick={() => setPoints((x) => x + 5)}><Plus size={16} /></button>
           </div>
         ) : null}
         {p.has_photo ? (

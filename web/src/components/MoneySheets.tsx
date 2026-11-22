@@ -21,7 +21,7 @@ function ChipRadio<T extends string>({ label, value, onChange, options }: { labe
           role="radio"
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`inline-flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-bold transition ${value === o.value ? 'border-sky bg-sky/15 text-[var(--fg)]' : 'border-[var(--line)] bg-[var(--chip)] text-[var(--fg-3)]'}`}
+          className={`inline-flex h-11 items-center gap-1.5 rounded-full border px-3.5 text-sm font-bold transition ${value === o.value ? 'border-sky bg-sky/15 text-[var(--fg)]' : 'border-[var(--line)] bg-[var(--chip)] text-[var(--fg-3)]'}`}
         >
           {o.emoji ? <span aria-hidden>{o.emoji}</span> : null}{o.label}
         </button>
@@ -125,7 +125,7 @@ export function GiveScreenSheet({ child, minutes, onClose }: { child: User; minu
         <MinutesField value={value} onChange={setValue} />
         <CategoryPicker value={category} onChange={setCategory} />
         <NoteField value={note} onChange={setNote} />
-        {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
       </div>
     </Sheet>
   );

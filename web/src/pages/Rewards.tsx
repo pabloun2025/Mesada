@@ -33,7 +33,7 @@ function RewardEditor({ initial, onClose }: { initial: Partial<Reward>; onClose:
         <Field label="Recompensa">{(id) => <input id={id} className="field" value={r.title} onChange={(e) => setR({ ...r, title: e.target.value })} placeholder="Elegir la peli del viernes…" maxLength={80} />}</Field>
         <Field label="Detalles (opcional)">{(id) => <input id={id} className="field" value={r.description} onChange={(e) => setR({ ...r, description: e.target.value })} maxLength={500} />}</Field>
         <Field label="Cuesta (puntos)">{(id) => <input id={id} className="field num w-32 font-bold" type="number" min={1} value={r.costPoints} onChange={(e) => setR({ ...r, costPoints: Number(e.target.value) })} />}</Field>
-        {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
       </div>
     </Sheet>
   );
@@ -69,7 +69,7 @@ export default function Rewards() {
         action={isAdult ? <Button onClick={() => setEditing({})}><Plus size={18} /> Nueva</Button> : undefined}
       />
       {list.length ? (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {list.map((r) => {
             const missing = r.cost_points - balance;
             return (

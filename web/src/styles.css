@@ -39,6 +39,9 @@
   --color-sky-soft: #dceaff;
   --color-berry: #d6336c;
   --color-berry-soft: #fde8ef;
+  /* Texto de error y avisos: berry oscuro (≥4,5:1 sobre claro); se aclara en oscuro. */
+  --color-berry-deep: #b0194f;
+  --color-leaf-text: #137a50;
   --color-sun: #ffb800;
   --color-sun-soft: #fff3cc;
   --color-sun-deep: #e3a200;
@@ -82,11 +85,14 @@
   /* El azul de marca se aclara en oscuro para que se lea sobre las tarjetas. */
   --color-tangerine: #6b9fe8;
   --color-tangerine-deep: #9cc0f5;
+  --color-berry-deep: #ff9dbf;
+  --color-leaf-text: #7fe0b2;
 }
 
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
     font-size: 16px;
     touch-action: manipulation;
     scroll-padding-top: 5rem;
@@ -157,13 +163,16 @@
     background: radial-gradient(120% 90% at 0% 0%, #3d8bd0 0%, transparent 55%), linear-gradient(160deg, #1f63ad 0%, #154d93 55%, #0f3c78 100%);
     color: #fff;
   }
-  @media (max-width: 1023.98px) {
-    .brand-header {
-      background: linear-gradient(160deg, #1f63ad 0%, #154d93 100%);
-      box-shadow: 0 6px 18px -12px rgb(15 60 120 / 0.8);
-      --fg-2: #fff;
-      --chip: rgb(255 255 255 / 0.16);
-    }
+  /* Cabecera del móvil: cristal celeste sobre el cielo (claro) o azul noche (oscuro); el logotipo ya trae la marca. */
+  .brand-header {
+    background: rgb(205 229 248 / 0.9);
+    border-bottom: 1px solid rgb(20 42 92 / 0.08);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+  .dark .brand-header {
+    background: rgb(21 33 61 / 0.94);
+    border-bottom-color: var(--line);
   }
   .muted {
     color: var(--fg-3);
@@ -201,7 +210,9 @@
 .anim-sheet { animation: sheet-in 0.22s ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
   .confetti { display: none; }
+  .animate-spin { animation-duration: 1.6s !important; } /* el cargando sigue girando, pero despacio */
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;

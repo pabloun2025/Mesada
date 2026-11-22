@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, CircleCheckBig, X } from 'lucide-react';
+import { Check, CircleCheckBig, Gift, X } from 'lucide-react';
 import { api, post } from '../lib/api';
 import { addDays, fmtDate, relative } from '../lib/format';
 import { useDecideRedemption, useInvalidateAll } from '../lib/hooks';
@@ -45,7 +45,7 @@ function CheckTasks({ today }: { today: string }) {
                 </p>
               </div>
             </div>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <Button variant={i.check_met === false ? 'danger' : 'secondary'} className="flex-1" size="sm" disabled={mark.isPending} onClick={() => mark.mutate({ id: i.id, met: false })}
                 aria-label={`No cumplida: «${i.title}» de ${i.assignee_name}`}>
                 <X size={16} /> No cumplida{i.penalty_minutes ? ` (−${i.penalty_minutes} min)` : ''}
@@ -85,7 +85,7 @@ function PendingGrants() {
           <li key={g.id} className="card flex flex-wrap items-center gap-3 p-3.5">
             <Avatar name={g.display_name} avatar={g.avatar} colorKey={g.color} size={40} />
             <div className="min-w-0 flex-1">
-              <p className="font-bold">{g.surprise ? '🎁 ' : ''}{g.label}</p>
+              <p className="font-bold">{g.surprise ? <Gift size={16} className="mr-1 inline align-[-2px] text-sun-ink dark:text-sun" aria-hidden /> : null}{g.label}</p>
               <p className="text-sm muted">{g.display_name} · por «{g.task_title}» · pendiente de cumplir</p>
             </div>
             <Button size="sm" variant="success" disabled={fulfill.isPending} onClick={() => fulfill.mutate(g.id)}><Check size={16} /> Cumplido</Button>
@@ -127,7 +127,7 @@ function UsageLogs() {
                 </p>
               </div>
             </div>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <Button variant="secondary" size="sm" className="flex-1" disabled={act.isPending} onClick={() => act.mutate({ id: l.id, action: 'void' })} aria-label={`Anular la pantalla de ${l.display_name}`}><X size={16} /> Anular</Button>
               <Button variant="success" size="sm" className="flex-1" disabled={act.isPending} onClick={() => act.mutate({ id: l.id, action: 'confirm' })} aria-label={`Confirmar la pantalla de ${l.display_name}`}><Check size={16} /> Confirmar</Button>
             </div>

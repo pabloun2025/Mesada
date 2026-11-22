@@ -18,7 +18,7 @@ export default function ChildProgress() {
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader title="Tu progreso" subtitle={`${p.lifetimePoints} puntos ganados desde el principio`} />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <section className="panel p-5">
           <p className="text-sm font-bold muted">Nivel</p>
           <p className="mt-1 flex items-baseline gap-2"><span className="num text-5xl font-extrabold">{p.level.level}</span><span className="font-display text-xl font-bold">{p.level.title}</span></p>

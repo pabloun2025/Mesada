@@ -42,7 +42,7 @@ export function Setup() {
         <Field label="Contraseña" hint="Mínimo 8 caracteres.">
           {(id) => <input id={id} className="field" type="password" autoComplete="new-password" value={f.password} onChange={set('password')} required minLength={8} />}
         </Field>
-        {error ? <p role="alert" className="rounded-xl bg-berry-soft px-3 py-2 text-sm font-bold text-berry">{error}</p> : null}
+        {error ? <p role="alert" className="rounded-xl bg-berry-soft px-3 py-2 text-sm font-bold text-berry-deep">{error}</p> : null}
         <Button type="submit" size="lg" className="w-full" loading={loading}>Crear familia</Button>
       </form>
     </AuthShell>

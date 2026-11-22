@@ -30,7 +30,7 @@ export function Forgot() {
           <Button type="submit" size="lg" className="w-full" loading={loading}>Enviar enlace</Button>
         </form>
       )}
-      <p className="mt-6 text-center text-sm"><Link to="/" className="font-bold text-sky">Volver a entrar</Link></p>
+      <p className="mt-6 text-center text-sm"><Link to="/" className="inline-flex min-h-11 items-center font-bold text-tangerine-deep underline underline-offset-2">Volver a entrar</Link></p>
     </AuthShell>
   );
 }
@@ -58,10 +58,10 @@ export function Reset() {
   };
   return (
     <AuthShell title="Nueva contraseña" subtitle="Elige una contraseña de 8 caracteres como mínimo.">
-      {done ? <p role="status" className="font-bold text-leaf">Contraseña cambiada. Ya puedes entrar.</p> : (
+      {done ? <p role="status" className="font-bold text-leaf-text">Contraseña cambiada. Ya puedes entrar.</p> : (
         <form onSubmit={submit} className="space-y-4">
           <Field label="Contraseña nueva">{(id) => <input id={id} className="field" type="password" autoComplete="new-password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />}</Field>
-          {error ? <p role="alert" className="rounded-xl bg-berry-soft px-3 py-2 text-sm font-bold text-berry">{error} <Link to="/recuperar" className="underline">Pedir otro enlace</Link></p> : null}
+          {error ? <p role="alert" className="rounded-xl bg-berry-soft px-3 py-2 text-sm font-bold text-berry-deep">{error} <Link to="/recuperar" className="underline">Pedir otro enlace</Link></p> : null}
           <Button type="submit" size="lg" className="w-full" loading={loading}>Cambiar contraseña</Button>
         </form>
       )}
@@ -96,7 +96,7 @@ export function AcceptInvitation() {
   if (inv.isError) {
     return (
       <AuthShell title="Invitación no válida" subtitle="El enlace ha caducado o ya se ha usado. Pide una nueva invitación.">
-        <Link to="/" className="font-bold text-sky">Ir a entrar</Link>
+        <Link to="/" className="inline-flex min-h-11 items-center font-bold text-tangerine-deep underline underline-offset-2">Ir a entrar</Link>
       </AuthShell>
     );
   }
@@ -106,7 +106,7 @@ export function AcceptInvitation() {
       <form onSubmit={submit} className="space-y-4">
         <Field label="Usuario" hint="Letras, números, punto o guion. Sin espacios.">{(id) => <input id={id} name="username" className="field" autoComplete="username" spellCheck={false} autoCapitalize="none" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} required minLength={3} />}</Field>
         <Field label="Contraseña" hint="Mínimo 8 caracteres.">{(id) => <input id={id} className="field" type="password" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required minLength={8} />}</Field>
-        {error ? <p role="alert" className="rounded-xl bg-berry-soft px-3 py-2 text-sm font-bold text-berry">{error}</p> : null}
+        {error ? <p role="alert" className="rounded-xl bg-berry-soft px-3 py-2 text-sm font-bold text-berry-deep">{error}</p> : null}
         <Button type="submit" size="lg" className="w-full" loading={loading}>Crear mi cuenta</Button>
       </form>
     </AuthShell>

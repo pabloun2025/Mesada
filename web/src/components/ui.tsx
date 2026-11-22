@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { X } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 
 /* ---------- Colores y avatares de miembros ---------- */
 
@@ -51,13 +51,13 @@ const VARIANTS: Record<Variant, string> = {
   primary: 'bg-sun text-ink hover:bg-sun-deep shadow-[0_6px_16px_-8px_rgb(227_162_0/0.9)]',
   secondary: 'bg-[var(--chip)] text-[var(--fg)] hover:brightness-95 dark:hover:brightness-125',
   ghost: 'text-[var(--fg-2)] hover:bg-[var(--chip)]',
-  danger: 'bg-berry-soft text-berry hover:brightness-95 dark:bg-berry/20',
-  success: 'bg-leaf text-white hover:bg-leaf-deep',
+  danger: 'bg-berry-soft text-berry-deep hover:brightness-95 dark:bg-berry/20 dark:text-[#ff9dbf]',
+  success: 'bg-leaf-deep text-white hover:bg-[#0f6341]',
 };
 
 /** Clases de botón para enlaces (<Link>) con el mismo aspecto que <Button>. */
 export const buttonClass = (variant: Variant = 'primary', size: 'sm' | 'md' | 'lg' = 'md') =>
-  `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full font-bold transition active:scale-[0.97] ${({ sm: 'h-9 px-3.5 text-sm', md: 'h-11 px-5', lg: 'h-13 px-6 text-lg' })[size]} ${VARIANTS[variant]}`;
+  `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full font-bold transition active:scale-[0.97] ${({ sm: 'h-11 px-4 text-sm', md: 'h-11 px-5', lg: 'h-13 px-6 text-lg' })[size]} ${VARIANTS[variant]}`;
 
 export function Button({
   variant = 'primary',
@@ -67,7 +67,7 @@ export function Button({
   children,
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' | 'lg'; loading?: boolean }) {
-  const sizes = { sm: 'h-9 px-3.5 text-sm', md: 'h-11 px-5', lg: 'h-13 px-6 text-lg' };
+  const sizes = { sm: 'h-11 px-4 text-sm', md: 'h-11 px-5', lg: 'h-13 px-6 text-lg' };
   return (
     <button
       {...rest}
@@ -86,7 +86,7 @@ export function IconButton({ label, children, className = '', ...rest }: ButtonH
       {...rest}
       aria-label={label}
       title={label}
-      className={`inline-flex size-10 items-center justify-center rounded-full text-[var(--fg-2)] transition hover:bg-[var(--chip)] active:scale-95 ${className}`}
+      className={`inline-flex size-11 shrink-0 items-center justify-center rounded-full text-[var(--fg-2)] transition hover:bg-[var(--chip)] active:scale-95 ${className}`}
     >
       {children}
     </button>
@@ -113,7 +113,7 @@ export function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?
     muted: 'bg-[var(--chip)] text-[var(--fg-2)]',
     sky: 'bg-sky-soft text-[#1d4fb0] dark:bg-sky/20 dark:text-[#a9c7ff]',
     sun: 'bg-sun-soft text-[#7a5600] dark:bg-sun/20 dark:text-[#ffd979]',
-    berry: 'bg-berry-soft text-berry dark:bg-berry/20 dark:text-[#ff9dbf]',
+    berry: 'bg-berry-soft text-berry-deep dark:bg-berry/20 dark:text-[#ff9dbf]',
     leaf: 'bg-leaf-soft text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]',
     tangerine: 'bg-tangerine-soft text-tangerine-deep dark:bg-tangerine/20',
   };
@@ -128,7 +128,7 @@ export function Field({ label, hint, error, children }: { label: string; hint?: 
     <div className="space-y-1.5">
       <label htmlFor={id} className="block text-sm font-bold text-[var(--fg-2)]">{label}</label>
       {children(id)}
-      {error ? <p className="text-sm text-berry">{error}</p> : hint ? <p className="text-sm muted">{hint}</p> : null}
+      {error ? <p role="alert" className="text-sm font-bold text-berry-deep dark:text-[#ff9dbf]">{error}</p> : hint ? <p className="text-sm muted">{hint}</p> : null}
     </div>
   );
 }
@@ -143,7 +143,7 @@ export function Segmented<T extends string>({ value, onChange, options, label }:
           role="radio"
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`h-9 rounded-full px-4 text-sm font-bold transition ${value === o.value ? 'bg-[var(--card)] text-[var(--fg)] shadow-[var(--shadow-press)]' : 'text-[var(--fg-3)]'}`}
+          className={`h-11 rounded-full px-4 text-sm font-bold transition ${value === o.value ? 'bg-[var(--card)] text-[var(--fg)] shadow-[var(--shadow-press)]' : 'text-[var(--fg-3)]'}`}
         >
           {o.label}
         </button>
@@ -174,7 +174,7 @@ export function Disclosure({ title, summary, defaultOpen = false, children }: { 
     <details open={defaultOpen} className="group rounded-2xl border border-[var(--line)]">
       <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-2.5 font-bold [&::-webkit-details-marker]:hidden">
         <span>{title}{summary ? <span className="block text-sm font-normal muted">{summary}</span> : null}</span>
-        <span aria-hidden className="text-[var(--fg-3)] transition group-open:rotate-180">⌄</span>
+        <ChevronDown size={20} aria-hidden className="shrink-0 text-[var(--fg-3)] transition group-open:rotate-180" />
       </summary>
       <div className="space-y-4 px-4 pt-1 pb-4">{children}</div>
     </details>
@@ -208,7 +208,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer }: { op
             </div>
             <IconButton label="Cerrar" onClick={onClose} className="bg-[var(--chip)]"><X size={20} /></IconButton>
           </div>
-          <div className="overflow-y-auto overscroll-contain px-5 pb-5">{children}</div>
+          <div className={`overflow-y-auto overscroll-contain px-5 ${footer ? 'pb-5' : 'pb-[max(1.25rem,env(safe-area-inset-bottom))]'}`}>{children}</div>
           {footer ? <div className="safe-bottom border-t border-[var(--line)] px-5 py-4">{footer}</div> : null}
         </div>
       ) : null}
@@ -232,7 +232,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex flex-col items-center gap-2 px-4 lg:bottom-6">
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-center gap-2 px-4 lg:bottom-6">
         {toasts.map((t) => (
           <div
             key={t.id}

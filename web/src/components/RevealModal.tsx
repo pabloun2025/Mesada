@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Gift } from 'lucide-react';
 import { api, post } from '../lib/api';
 import type { BonusGrant } from '../lib/types';
 import { Button } from './ui';
@@ -35,7 +36,7 @@ export function RevealModal() {
               <span key={i} className="confetti" style={{ left: `${(i * 37) % 100}%`, background: CONFETTI[i % CONFETTI.length], animationDelay: `${(i % 6) * 0.12}s` }} />
             ))}
           </div>
-          <p className="reveal-gift text-6xl" aria-hidden>🎁</p>
+          <p className="reveal-gift flex justify-center text-sun-ink dark:text-sun" aria-hidden><Gift size={64} strokeWidth={1.75} /></p>
           <p className="mt-3 font-display text-sm font-bold uppercase tracking-wide text-sun-ink dark:text-sun">¡Sorpresa!</p>
           <h2 className="mt-1 text-2xl font-extrabold">{grant.label}</h2>
           <p className="mt-2 muted">Por «{grant.task_title}».{grant.kind === 'text' || grant.kind === 'reward' ? ' Un adulto te lo dará.' : ''}</p>

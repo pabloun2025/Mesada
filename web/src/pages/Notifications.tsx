@@ -55,7 +55,7 @@ function ContactSheet({ m, onClose }: { m: Member; onClose: () => void }) {
           label="Consentimiento para WhatsApp"
           description={m.role === 'child' ? 'Confirmas, como adulto responsable, que este número es del menor y que puede recibir avisos. WhatsApp exige 13 años como mínimo.' : 'Aceptas recibir avisos de Mesada en este número.'}
         />
-        {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
       </div>
     </Sheet>
   );
@@ -110,15 +110,17 @@ function MemberPrefs({ m, events }: { m: Member; events: Settings['events'] }) {
                   const on = local[`${e.key}:${c}`] ?? m.prefs[e.key][c];
                   return (
                     <td key={c} className="px-2 py-2.5 text-center">
+                      <label className="mx-auto flex size-11 cursor-pointer items-center justify-center">
                       <input
                         type="checkbox"
-                        className="size-5 accent-[#1E9E6A] disabled:opacity-40"
+                        className="size-6 accent-[#137a50] disabled:opacity-40"
                         checked={on && !blocked}
                         disabled={!m.editable || !!blocked}
                         title={blocked ?? undefined}
                         aria-label={`${e.label} por ${c === 'email' ? 'correo' : 'WhatsApp'} para ${m.display_name}`}
                         onChange={(ev) => toggle.mutate({ event: e.key, channel: c, enabled: ev.target.checked })}
                       />
+                      </label>
                     </td>
                   );
                 })}
@@ -188,7 +190,7 @@ function WhatsAppLine() {
       ) : (
         <div className="space-y-4">
           <p className="muted">Vincula el móvil de la familia. Los avisos saldrán desde su WhatsApp como si los escribiera él. Evita un número de trabajo.</p>
-          {line.error ? <p role="alert" className="text-sm font-bold text-berry">{line.error}</p> : null}
+          {line.error ? <p role="alert" className="text-sm font-bold text-berry-deep">{line.error}</p> : null}
           <div className="flex flex-wrap gap-2">
             <Button variant={mode === 'qr' ? 'primary' : 'secondary'} onClick={() => { setMode('qr'); setLink(null); }}><QrCode size={18} /> Con código QR</Button>
             <Button variant={mode === 'code' ? 'primary' : 'secondary'} onClick={() => { setMode('code'); setLink(null); }}><Smartphone size={18} /> Con mi número</Button>
@@ -218,7 +220,7 @@ function WhatsAppLine() {
               ) : null}
             </div>
           ) : null}
-          {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+          {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
         </div>
       )}
     </section>
@@ -288,7 +290,7 @@ export default function Notifications() {
                 <span className="min-w-0 flex-1 truncate"><strong>{o.display_name ?? 'Invitación'}</strong> · {o.subject}</span>
                 <Badge tone={STATUS[o.status].tone}>{STATUS[o.status].label}</Badge>
                 <span className="w-28 text-right text-xs muted">{fmtDateTime(o.sent_at ?? o.created_at)}</span>
-                {o.last_error ? <span className="w-full text-xs text-berry">{o.last_error}</span> : null}
+                {o.last_error ? <span className="w-full text-xs text-berry-deep">{o.last_error}</span> : null}
               </li>
             ))}
             {!log.data?.entries?.length ? <li className="flex items-center gap-2 p-4 text-sm muted"><Send size={16} aria-hidden /> Todavía no ha salido ningún aviso por correo ni WhatsApp.</li> : null}

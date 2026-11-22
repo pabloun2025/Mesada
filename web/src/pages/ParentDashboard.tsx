@@ -45,7 +45,7 @@ export default function ParentDashboard() {
         </Link>
         <div className="card flex flex-col p-3.5 sm:p-5">
           <span className="text-sm font-bold text-[var(--fg-2)]">Esta semana</span>
-          <span className="num mt-auto pt-2 text-2xl font-extrabold text-leaf sm:text-4xl">{euros(data.totals.weekCents)}</span>
+          <span className="num mt-auto pt-2 text-2xl font-extrabold text-leaf-text sm:text-4xl">{euros(data.totals.weekCents)}</span>
         </div>
         <Link to="/mesada" className="card flex flex-col p-3.5 sm:p-5">
           <span className="text-sm font-bold text-[var(--fg-2)]">Pendiente de pagar</span>
@@ -57,7 +57,7 @@ export default function ParentDashboard() {
       <section className="mb-8">
         <SectionTitle>Cómo va cada uno</SectionTitle>
         {data.kids.length ? (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {data.kids.map((k: any) => {
               const c = color(k.color);
               const doneToday = k.today.approved + k.today.submitted;
@@ -110,13 +110,13 @@ export default function ParentDashboard() {
             })}
           </div>
         ) : (
-          <div className="card"><Empty mascot icon={<PartyPopper />} title="Añade a tus hijos">Ve a <Link to="/familia" className="font-bold text-sky">Familia</Link> para crear sus perfiles.</Empty></div>
+          <div className="card"><Empty mascot icon={<PartyPopper />} title="Añade a tus hijos">Ve a <Link to="/familia" className="inline-flex min-h-11 items-center font-bold text-tangerine-deep underline underline-offset-2">Familia</Link> para crear sus perfiles.</Empty></div>
         )}
       </section>
 
-      <div className="grid gap-8 lg:grid-cols-[1.2fr_1fr]">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1.2fr_1fr]">
         <section>
-          <SectionTitle action={pending > 3 ? <Link to="/validar" className="text-sm font-bold text-sky">Ver las {pending}</Link> : undefined}>Para validar</SectionTitle>
+          <SectionTitle action={pending > 3 ? <Link to="/validar" className="inline-flex min-h-11 items-center text-sm font-bold text-tangerine-deep underline underline-offset-2">Ver las {pending}</Link> : undefined}>Para validar</SectionTitle>
           {pending ? (
             <ul className="space-y-2.5">
               {data.pendingApprovals.slice(0, 3).map((p: any) => <ApprovalCard key={p.id} p={p} compact />)}
@@ -158,7 +158,7 @@ export default function ParentDashboard() {
         </section>
 
         <section>
-          <SectionTitle action={<Link to="/actividad" className="text-sm font-bold text-sky">Historial</Link>}>Actividad reciente</SectionTitle>
+          <SectionTitle action={<Link to="/actividad" className="inline-flex min-h-11 items-center text-sm font-bold text-tangerine-deep underline underline-offset-2">Historial</Link>}>Actividad reciente</SectionTitle>
           <ol className="card divide-y divide-[var(--line)]">
             {data.activity.slice(0, 8).map((a: any) => (
               <li key={a.id} className="flex items-start gap-3 p-3.5">

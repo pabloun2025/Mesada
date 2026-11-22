@@ -7,23 +7,28 @@ import { useSession } from '../lib/session';
 import type { User } from '../lib/types';
 import { AVATARS, Avatar, Badge, Button, Field, IconButton, Loading, MEMBER_COLORS, PageHeader, Segmented, Sheet, Toggle, useToast } from '../components/ui';
 
+const COLOR_NAMES: Record<string, string> = { tangerine: 'Naranja', leaf: 'Verde', sky: 'Azul claro', indigo: 'Índigo', berry: 'Frambuesa', sun: 'Amarillo', teal: 'Turquesa', slate: 'Gris' };
+const AVATAR_NAMES: Record<string, string> = { fox: 'Zorro', cat: 'Gato', owl: 'Búho', bear: 'Oso', panda: 'Panda', tiger: 'Tigre', frog: 'Rana', octopus: 'Pulpo', rocket: 'Cohete', bolt: 'Rayo', star: 'Estrella', planet: 'Planeta', guitar: 'Guitarra', ball: 'Balón', controller: 'Mando', palette: 'Paleta' };
+
 export function AvatarPicker({ avatar, colorKey, onChange, name }: { avatar: string; colorKey: string; onChange: (a: string, c: string) => void; name: string }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Avatar">
-        <button type="button" role="radio" aria-checked={avatar === 'initial'} onClick={() => onChange('initial', colorKey)} className={`rounded-full p-0.5 ${avatar === 'initial' ? 'ring-2 ring-tangerine' : ''}`}>
+        <button type="button" role="radio" aria-checked={avatar === 'initial'} aria-label="Inicial del nombre" onClick={() => onChange('initial', colorKey)} className={`rounded-full p-0.5 ${avatar === 'initial' ? 'ring-2 ring-tangerine' : ''}`}>
           <Avatar name={name || '?'} colorKey={colorKey} size={40} />
         </button>
         {Object.keys(AVATARS).map((a) => (
-          <button key={a} type="button" role="radio" aria-checked={avatar === a} aria-label={a} onClick={() => onChange(a, colorKey)} className={`rounded-full p-0.5 ${avatar === a ? 'ring-2 ring-tangerine' : ''}`}>
+          <button key={a} type="button" role="radio" aria-checked={avatar === a} aria-label={AVATAR_NAMES[a] ?? a} onClick={() => onChange(a, colorKey)} className={`rounded-full p-0.5 ${avatar === a ? 'ring-2 ring-tangerine' : ''}`}>
             <Avatar name={name} avatar={a} colorKey={colorKey} size={40} />
           </button>
         ))}
       </div>
-      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Color">
+      <div className="flex flex-wrap gap-0.5" role="radiogroup" aria-label="Color">
         {Object.entries(MEMBER_COLORS).map(([k, c]) => (
-          <button key={k} type="button" role="radio" aria-checked={colorKey === k} aria-label={k} onClick={() => onChange(avatar, k)}
-            className={`size-8 rounded-full ${colorKey === k ? 'ring-2 ring-offset-2 ring-offset-[var(--card)]' : ''}`} style={{ background: c.bg, ['--tw-ring-color' as any]: c.bg }} />
+          <button key={k} type="button" role="radio" aria-checked={colorKey === k} aria-label={COLOR_NAMES[k] ?? k} onClick={() => onChange(avatar, k)}
+            className="flex size-11 items-center justify-center rounded-full">
+            <span className={`block size-8 rounded-full ${colorKey === k ? 'ring-2 ring-offset-2 ring-offset-[var(--card)]' : ''}`} style={{ background: c.bg, ['--tw-ring-color' as any]: c.bg }} />
+          </button>
         ))}
       </div>
     </div>
@@ -100,7 +105,7 @@ function MemberEditor({ member, onClose }: { member: User | null; onClose: () =>
           <p className="text-sm muted">{member.id === me.id ? 'Tu WhatsApp se cambia en Mi perfil.' : `${member.display_name} pone su WhatsApp en su propio perfil.`}{member.phone ? ` Ahora: ${member.phone}.` : ' Aún no tiene.'}</p>
         ) : null}
         {!isNew ? <Toggle checked={m.active} onChange={(v) => setM({ ...m, active: v })} label="Cuenta activa" description="Si la desactivas, no podrá entrar y se quitará de las tareas." /> : null}
-        {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
       </div>
     </Sheet>
   );
@@ -122,7 +127,7 @@ function InviteSheet({ onClose }: { onClose: () => void }) {
       <div className="space-y-4">
         <Field label="Nombre">{(id) => <input id={id} className="field" value={f.displayName} onChange={(e) => setF({ ...f, displayName: e.target.value })} />}</Field>
         <Field label="Correo">{(id) => <input id={id} className="field" type="email" spellCheck={false} autoComplete="off" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />}</Field>
-        {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
       </div>
     </Sheet>
   );
