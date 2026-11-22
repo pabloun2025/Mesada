@@ -87,7 +87,7 @@ case "${1:-estado}" in
     echo "--- Docker (imágenes, contenedores, volúmenes, caché de construcción) ---"; docker system df
     echo "--- Carpetas en /home/ubuntu ---"; du -sh /home/ubuntu/*/ 2>/dev/null | sort -rh | head -15
     echo "--- Copias de seguridad por proyecto ---"
-    for d in /home/ubuntu/*/backups; do [ -d "$d" ] && echo "$(du -sh "$d" 2>/dev/null | cut -f1)  $d ($(find "$d" -type f | wc -l) ficheros)"; done
+    for d in /home/ubuntu/*/backups; do if [ -d "$d" ]; then echo "$(du -sh "$d" 2>/dev/null | cut -f1)  $d ($(find "$d" -type f 2>/dev/null | wc -l) ficheros)"; fi; done
     echo "--- Registros ---"
     sudo -n journalctl --disk-usage 2>/dev/null || echo "journal: sin permiso para medirlo"
     sudo -n sh -c 'du -sh /var/lib/docker/containers 2>/dev/null' | sed 's/^/registros de contenedores: /' || echo "registros de contenedores: sin permiso para medirlo"
