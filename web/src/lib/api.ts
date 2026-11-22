@@ -1,5 +1,5 @@
 export class ApiError extends Error {
-  constructor(public status: number, message: string, public code: string) {
+  constructor(public status: number, message: string, public code: string, /** Código del error del servidor (5xx), para dictarlo a quien da soporte. */ public errorId?: string) {
     super(message);
   }
 }
@@ -22,7 +22,11 @@ export async function api<T = any>(path: string, opts: Opts = {}): Promise<T> {
     credentials: 'same-origin',
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, data.message ?? 'No se ha podido completar la acción', data.error ?? 'error');
+  if (!res.ok) {
+    // Un 5xx sin cuerpo de la app (proxy caído, etc.) también merece un mensaje claro.
+    const fallback = res.status >= 500 ? 'El servidor no responde bien ahora mismo. Inténtalo de nuevo en un momento.' : 'No se ha podido completar la acción';
+    throw new ApiError(res.status, data.message ?? fallback, data.error ?? 'error', data.errorId);
+  }
   return data as T;
 }
 

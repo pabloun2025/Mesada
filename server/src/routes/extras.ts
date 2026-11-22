@@ -34,7 +34,7 @@ const CATALOG_SELECT = `
 
 const BOARD_SELECT = `
   SELECT i.id, i.task_id, i.status, i.points, i.due_date, i.extra_deadline, i.reserved_at, i.assignee_id, i.completed_by,
-         (i.photo_path IS NOT NULL) AS has_photo, i.review_note, i.completed_at, (i.reviewed_by IS NOT NULL) AS adult_reviewed,
+         (i.photo_path IS NOT NULL) AS has_photo, (i.photo_deleted_at IS NOT NULL) AS photo_deleted, i.review_note, i.completed_at, (i.reviewed_by IS NOT NULL) AS adult_reviewed,
          t.title, t.icon, t.description, t.requires_photo, t.requires_approval, t.points AS task_points,
          t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise, t.bonus_on_time_only,
          rw.title AS bonus_reward_title,

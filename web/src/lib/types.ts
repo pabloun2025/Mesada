@@ -15,6 +15,8 @@ export interface User {
   phone?: string | null;
   whatsapp_consent_at?: string | null;
   is_superadmin?: boolean;
+  terms_version?: string | null;
+  terms_accepted_at?: string | null;
 }
 
 export interface Family {
@@ -58,6 +60,7 @@ export interface Instance {
   completed_at: string | null;
   child_note: string | null;
   has_photo: boolean;
+  photo_deleted?: boolean;
   review_note: string | null;
   review_outcome: ReviewOutcome | null;
   penalty_points: number;
@@ -355,6 +358,7 @@ export interface ExtraBoardItem {
   assignee_id: string | null;
   completed_by: string | null;
   has_photo: boolean;
+  photo_deleted?: boolean;
   review_note: string | null;
   title: string;
   icon: string;

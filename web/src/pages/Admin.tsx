@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
-import { Ban, Copy, KeyRound, Lock, LogOut, ShieldCheck, UserX } from 'lucide-react';
+import { Ban, Copy, HardDrive, KeyRound, Lock, LogOut, ShieldCheck, Trash2, TriangleAlert, UserX } from 'lucide-react';
 import { api, post, put } from '../lib/api';
 import { relative } from '../lib/format';
 import { Badge, Button, Field, Loading, PageHeader, Segmented, Sheet, Toggle, useToast } from '../components/ui';
@@ -13,7 +13,7 @@ import { Badge, Button, Field, Loading, PageHeader, Segmented, Sheet, Toggle, us
 
 type Status = { eligible: boolean; totpEnabled: boolean; verified: boolean; deviceTrusted?: boolean };
 
-const fmtBytes = (n: number) => (n > 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
+const fmtBytes = (n: number) => (n > 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n > 1e6 ? `${Math.round(n / 1e6)} MB` : `${Math.max(0, Math.round(n / 1e3))} kB`);
 const fmtUptime = (s: number) => (s > 86400 ? `${Math.floor(s / 86400)} d` : s > 3600 ? `${Math.floor(s / 3600)} h` : `${Math.floor(s / 60)} min`);
 const ACTIONS: Record<string, string> = {
   'admin.2fa_enabled': 'Activó la verificación en dos pasos',
@@ -31,6 +31,9 @@ const ACTIONS: Record<string, string> = {
   'user.logout_all': 'Cerró las sesiones de una cuenta',
   'settings.registration': 'Cambió el registro de familias',
   'settings.notify': 'Cambió la pausa de envíos',
+  'maintenance.cleanup': 'Limpieza de datos caducados',
+  'family.erase_inactive': 'Borró una familia inactiva',
+  'family.erased': 'Una familia se borró a sí misma',
   'admin.2fa_reset_ssh': 'Se quitó la verificación en dos pasos desde el servidor',
 };
 
@@ -325,7 +328,132 @@ function Audit() {
   );
 }
 
-type Tab = 'resumen' | 'familias' | 'ajustes' | 'registro';
+
+const fmtDay = (iso: string) => new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+const fmtStamp = (iso: string) => new Date(iso).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+function Row({ label, children, tone }: { label: string; children: React.ReactNode; tone?: 'berry' }) {
+  return <div className="flex justify-between gap-3"><dt className="muted">{label}</dt><dd className={`text-right font-bold ${tone === 'berry' ? 'text-berry-deep dark:text-[#ff9dbf]' : ''}`}>{children}</dd></div>;
+}
+
+/** Disco, fotos y copias (solo lectura) y limpieza de datos caducados. */
+function Storage() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { data } = useQuery({ queryKey: ['admin', 'storage'], queryFn: () => api('/admin/storage') });
+  const clean = useMutation({
+    mutationFn: () => post('/admin/cleanup'),
+    onSuccess: (r: any) => { toast(`Limpieza hecha: ${fmtBytes(r.report.freedBytes)} liberados`); qc.invalidateQueries({ queryKey: ['admin'] }); },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  if (!data) return <Loading />;
+  const { storage: st, backups: b, lastCleanup: lc } = data;
+  const pct = st.disk ? Math.round((st.disk.usedBytes / st.disk.totalBytes) * 100) : null;
+  const list = (files: { name: string; bytes: number; at: string }[]) => (
+    <ul className="divide-y divide-[var(--line)] text-sm">
+      {files.slice(0, 6).map((f) => <li key={f.name} className="flex items-baseline justify-between gap-3 py-2"><span className="min-w-0 break-all">{f.name}</span><span className="shrink-0 text-right muted">{fmtBytes(f.bytes)} · {fmtStamp(f.at)}</span></li>)}
+    </ul>
+  );
+  return (
+    <div className="space-y-5">
+      <section className="panel space-y-3 p-5" aria-labelledby="adm-disco">
+        <h2 id="adm-disco" className="flex items-center gap-2 text-lg font-bold"><HardDrive size={20} aria-hidden /> Disco y datos</h2>
+        <dl className="space-y-1.5 text-sm">
+          {st.disk ? <>
+            <Row label="Volumen de datos">{fmtBytes(st.disk.usedBytes)} de {fmtBytes(st.disk.totalBytes)} ({pct} %)</Row>
+            <Row label="Libre" tone={st.disk.freeBytes < 2e9 ? 'berry' : undefined}>{fmtBytes(st.disk.freeBytes)}</Row>
+          </> : <Row label="Volumen de datos">Sin datos</Row>}
+          <Row label="Fotos de evidencia">{st.photos.count} · {fmtBytes(st.photos.bytes)}</Row>
+          <Row label="Base de datos">{fmtBytes(st.dbBytes)}</Row>
+        </dl>
+      </section>
+
+      <section className="panel space-y-3 p-5" aria-labelledby="adm-copias">
+        <h2 id="adm-copias" className="text-lg font-bold">Copias de seguridad</h2>
+        {!b ? <p className="font-bold text-berry-deep dark:text-[#ff9dbf]">No se encuentra la carpeta de copias.</p> : <>
+          {b.localStale || b.r2Stale || !b.newestLocalAt ? (
+            <p role="alert" className="flex items-start gap-2 rounded-2xl bg-berry-soft p-3 text-sm font-bold text-berry-deep dark:bg-berry/20 dark:text-[#ff9dbf]">
+              <TriangleAlert size={18} className="mt-0.5 shrink-0" aria-hidden />
+              <span>{!b.newestLocalAt ? 'No hay ninguna copia en el servidor.' : b.localStale ? `La última copia del servidor es de ${relative(b.newestLocalAt)}: tiene más de ${b.staleHours} horas.` : `La última subida a R2 es de ${b.r2.lastOkAt ? relative(b.r2.lastOkAt) : 'nunca'}: tiene más de ${b.staleHours} horas.`}</span>
+            </p>
+          ) : <p className="text-sm font-bold text-leaf-text">Al día: la última copia tiene menos de {b.staleHours} horas.</p>}
+          <h3 className="font-bold">En el servidor</h3>
+          {b.local.length ? list(b.local) : <p className="text-sm muted">Sin copias.</p>}
+          <h3 className="font-bold">En Cloudflare R2 (cifradas)</h3>
+          {!b.r2.configured ? <p className="text-sm muted">No está configurada.</p> : <>
+            <p className="text-sm muted">{b.r2.lastOkAt ? `Última subida correcta: ${fmtStamp(b.r2.lastOkAt)}` : 'Aún sin subidas correctas.'}</p>
+            {b.r2.files.length ? list(b.r2.files) : null}
+          </>}
+        </>}
+      </section>
+
+      <section className="panel space-y-3 p-5" aria-labelledby="adm-limpieza">
+        <h2 id="adm-limpieza" className="text-lg font-bold">Limpieza</h2>
+        <p className="text-sm muted">Cada noche se borran las fotos de tareas validadas hace más de 7 días, las huérfanas, las sesiones, avisos y envíos antiguos y los enlaces e invitaciones caducados. Aquí puedes hacerlo ahora.</p>
+        {lc ? (
+          <dl className="space-y-1.5 text-sm">
+            <Row label={`Última (${lc.trigger}) · ${fmtStamp(lc.at)}`}>{fmtBytes(lc.freedBytes)} liberados</Row>
+            <Row label="Fotos caducadas / huérfanas / sin archivo">{lc.expiredPhotos} / {lc.orphanFiles} / {lc.missingFileRows}</Row>
+            <Row label="Sesiones y dispositivos caducados">{lc.sessions + lc.trustedDevices}</Row>
+            <Row label="Avisos / envíos antiguos">{lc.notifications} / {lc.outbox}</Row>
+            <Row label="Enlaces e invitaciones caducados">{lc.resets + lc.invitations}</Row>
+          </dl>
+        ) : <p className="text-sm muted">Todavía no se ha ejecutado.</p>}
+        <Button variant="secondary" loading={clean.isPending} onClick={() => clean.mutate()}><Trash2 size={18} aria-hidden /> Limpiar basura</Button>
+        {clean.data ? <p role="status" className="text-sm font-bold text-leaf-text">Borrado: {clean.data.report.expiredPhotos + clean.data.report.orphanFiles + clean.data.report.missingFileRows} fotos, {clean.data.report.sessions + clean.data.report.trustedDevices} sesiones, {clean.data.report.notifications + clean.data.report.outbox} avisos y envíos, {clean.data.report.resets + clean.data.report.invitations} enlaces e invitaciones. Liberado: {fmtBytes(clean.data.report.freedBytes)}.</p> : null}
+      </section>
+
+      <Inactive />
+    </div>
+  );
+}
+
+function Inactive() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { data } = useQuery({ queryKey: ['admin', 'inactive'], queryFn: () => api('/admin/inactive-families') });
+  const [target, setTarget] = useState<{ id: string; name: string; members: number; last_use: string } | null>(null);
+  const [name, setName] = useState('');
+  const [phrase, setPhrase] = useState('');
+  const [error, setError] = useState('');
+  const erase = useMutation({
+    mutationFn: () => post(`/admin/inactive-families/${target!.id}/erase`, { confirmName: name, phrase }),
+    onSuccess: () => { toast('Familia borrada'); setTarget(null); qc.invalidateQueries({ queryKey: ['admin'] }); },
+    onError: (e: Error) => setError(e.message),
+  });
+  const close = () => { setTarget(null); setName(''); setPhrase(''); setError(''); };
+  return (
+    <section className="panel space-y-3 p-5" aria-labelledby="adm-inactivas">
+      <h2 id="adm-inactivas" className="text-lg font-bold">Familias inactivas</h2>
+      <p className="text-sm muted">Sin sesión ni actividad en {data?.months ?? 6} meses. Solo se ve el nombre, cuántas personas son y las fechas.</p>
+      {!data ? <Loading /> : !data.families.length ? <p className="text-sm font-bold">Ninguna familia inactiva.</p> : (
+        <ul className="divide-y divide-[var(--line)]">
+          {data.families.map((f: any) => (
+            <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-bold break-words">{f.name}</p>
+                <p className="text-sm muted">{f.members} {f.members === 1 ? 'persona' : 'personas'} · creada {fmtDay(f.created_at)} · último uso {fmtDay(f.last_use)}</p>
+              </div>
+              <Button variant="danger" size="sm" onClick={() => setTarget(f)} aria-label={`Borrar la familia ${f.name}`}><Trash2 size={16} aria-hidden /> Borrar…</Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {target ? (
+        <Sheet open onClose={close} title="Borrar una familia inactiva" footer={<Button variant="danger" className="w-full" loading={erase.isPending} disabled={name.trim() !== target.name || phrase.trim().replace(/\s+/g, ' ').toUpperCase() !== 'BORRAR FAMILIA INACTIVA'} onClick={() => erase.mutate()}>Borrar para siempre</Button>}>
+          <div className="space-y-4">
+            <p className="rounded-2xl bg-berry-soft p-3 text-sm font-bold text-berry-deep dark:bg-berry/20 dark:text-[#ff9dbf]">Se borran al momento las {target.members} cuentas, todos sus datos y sus fotos. No se puede deshacer. Último uso: {fmtDay(target.last_use)}.</p>
+            <Field label="Escribe el nombre exacto de la familia" hint={target.name}>{(id) => <input id={id} className="field" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />}</Field>
+            <Field label="Escribe BORRAR FAMILIA INACTIVA">{(id) => <input id={id} className="field" autoComplete="off" autoCapitalize="characters" spellCheck={false} value={phrase} onChange={(e) => setPhrase(e.target.value)} />}</Field>
+            {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
+          </div>
+        </Sheet>
+      ) : null}
+    </section>
+  );
+}
+
+type Tab = 'resumen' | 'familias' | 'sistema' | 'ajustes' | 'registro';
 
 export default function Admin() {
   const qc = useQueryClient();
@@ -347,14 +475,15 @@ export default function Admin() {
         subtitle={<span className="inline-flex items-center gap-1.5"><ShieldCheck size={16} className="text-leaf-text" aria-hidden /> {s.deviceTrusted ? 'Dispositivo recordado: no se pide el código.' : 'Verificada. Se vuelve a pedir el código a las 12 horas.'}</span>}
       />
       <div className="mb-5">
-        <Segmented label="Sección" value={tab} onChange={setTab} options={[
+        <Segmented wrap label="Sección" value={tab} onChange={setTab} options={[
           { value: 'resumen', label: 'Resumen' },
           { value: 'familias', label: 'Familias' },
+          { value: 'sistema', label: 'Sistema' },
           { value: 'ajustes', label: 'Ajustes' },
           { value: 'registro', label: 'Registro' },
         ]} />
       </div>
-      {tab === 'resumen' ? <Overview /> : tab === 'familias' ? <Families /> : tab === 'ajustes' ? <AdminSettings onLock={() => lock.mutate()} onForget={() => forget.mutate()} deviceTrusted={!!s.deviceTrusted} /> : <Audit />}
+      {tab === 'resumen' ? <Overview /> : tab === 'familias' ? <Families /> : tab === 'sistema' ? <Storage /> : tab === 'ajustes' ? <AdminSettings onLock={() => lock.mutate()} onForget={() => forget.mutate()} deviceTrusted={!!s.deviceTrusted} /> : <Audit />}
     </div>
   );
 }

@@ -9,6 +9,8 @@ import { badRequest, forbidden, HttpError, unauthorized } from '../lib/errors.js
 import { audit } from '../lib/audit.js';
 import { getFamily } from '../lib/family.js';
 import { getSetting } from '../lib/settings.js';
+import { LEGAL_VERSION } from '../lib/legal.js';
+import { enforceLimit } from '../lib/limits.js';
 
 export const usernameSchema = z.string().trim().min(3).max(32).regex(/^[a-zA-Z0-9._-]+$/, 'solo letras, números, punto, guion y guion bajo');
 export const adultPassword = z.string().min(8, 'mínimo 8 caracteres').max(200);
@@ -40,7 +42,7 @@ export function resetLoginFailures() {
 export async function publicUser(userId: string) {
   return one(
     getPool(),
-    `SELECT id, family_id, role, display_name, username, avatar, color, birth_year, weekly_goal_points, active, email, phone, whatsapp_consent_at, is_superadmin FROM users WHERE id = $1`,
+    `SELECT id, family_id, role, display_name, username, avatar, color, birth_year, weekly_goal_points, active, email, phone, whatsapp_consent_at, is_superadmin, terms_version, terms_accepted_at FROM users WHERE id = $1`,
     [userId],
   );
 }
@@ -48,33 +50,42 @@ export async function publicUser(userId: string) {
 export default async function authRoutes(app: FastifyInstance) {
   app.get('/api/setup/status', async () => {
     const r = await one(getPool(), 'SELECT count(*)::int AS n FROM families');
-    return { needsSetup: r.n === 0, registrationOpen: r.n === 0 || (await getSetting('registration_open')) };
+    return { needsSetup: r.n === 0, registrationOpen: r.n === 0 || (await getSetting('registration_open')), legalVersion: LEGAL_VERSION };
   });
 
   app.post('/api/setup', { config: { rateLimit: { max: config.authRateLimit, timeWindow: '1 minute' } } }, async (req, reply) => {
-    const body = z
+    const b = z
       .object({
         familyName: z.string().trim().min(1).max(80),
         displayName: z.string().trim().min(1).max(60),
         username: usernameSchema,
         password: adultPassword,
         email: z.string().trim().toLowerCase().email('correo no válido').max(200),
+        /** Casilla obligatoria: acepta la política de privacidad y las condiciones, también en nombre de los menores a su cargo. */
+        acceptTerms: z.literal(true, { error: 'Debes aceptar la política de privacidad y las condiciones' }),
+        termsVersion: z.string().max(40),
+        /** Campo trampa: lo rellenan los robots, nunca una persona (está oculto). */
+        website: z.string().max(200).optional(),
       })
       .parse(req.body);
+    enforceLimit(req, 'setup', config.limits.setupPerHour);
+    if (b.website) return { user: null }; // robot: se hace como que ha ido bien y no se crea nada
+    if (b.termsVersion !== LEGAL_VERSION) throw new HttpError(409, 'Los textos legales han cambiado. Recarga la página para leerlos y aceptarlos.', 'terms_outdated');
     const created = await tx(async (db) => {
       // Bloqueo para que dos peticiones simultáneas no creen dos familias "iniciales".
       await db.query('LOCK TABLE families IN EXCLUSIVE MODE');
       const n = (await one(db, 'SELECT count(*)::int AS n FROM families')).n;
       if (n > 0 && !(await getSetting('registration_open', db))) throw forbidden('El registro de nuevas familias está cerrado');
-      if (await one(db, 'SELECT 1 FROM users WHERE lower(username) = lower($1)', [body.username])) {
+      if (await one(db, 'SELECT 1 FROM users WHERE lower(username) = lower($1)', [b.username])) {
         throw badRequest('Ese nombre de usuario ya existe', 'username_taken');
       }
-      const fam = await one(db, 'INSERT INTO families(name) VALUES ($1) RETURNING id', [body.familyName]);
+      const fam = await one(db, 'INSERT INTO families(name) VALUES ($1) RETURNING id', [b.familyName]);
       const u = await one(
         db,
-        `INSERT INTO users(family_id, role, display_name, username, password_hash, avatar, color, email, is_superadmin) VALUES ($1,'adult',$2,$3,$4,'owl','indigo',$5,$6) RETURNING id`,
+        `INSERT INTO users(family_id, role, display_name, username, password_hash, avatar, color, email, is_superadmin, terms_version, terms_accepted_at)
+         VALUES ($1,'adult',$2,$3,$4,'owl','indigo',$5,$6,$7, now()) RETURNING id`,
         // Quien crea la primera familia administra la instalación.
-        [fam.id, body.displayName, body.username, await hashPassword(body.password), body.email, n === 0],
+        [fam.id, b.displayName, b.username, await hashPassword(b.password), b.email, n === 0, LEGAL_VERSION],
       );
       await audit(db, fam.id, u.id, 'family.create', 'family', fam.id, {});
       const s = await createSession(db, u.id, req.headers['user-agent']);

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { LegalLinks } from '../components/LegalLinks';
 
 const ALT = 'DiploP: una familia sonriente con su osito; el logotipo y la tarjeta «Mi mesada»';
 
@@ -35,6 +36,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
           <p className="mt-1.5 mb-7 muted">{subtitle}</p>
           {children}
           <p className="mt-10 text-sm muted">Tareas de casa, puntos y mesada para toda la familia.</p>
+          <LegalLinks className="mt-2 -ml-2" />
         </div>
       </section>
     </div>

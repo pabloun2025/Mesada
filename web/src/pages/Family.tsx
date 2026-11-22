@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Mail, Pencil, UserPlus } from 'lucide-react';
+import { Mail, Pencil, Trash2, UserPlus } from 'lucide-react';
 import { api, patch, post, put } from '../lib/api';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import type { User } from '../lib/types';
+import { EraseChildSheet } from '../components/PrivacyData';
 import { AVATARS, Avatar, Badge, Button, Field, IconButton, Loading, MEMBER_COLORS, PageHeader, Segmented, Sheet, Toggle, useToast } from '../components/ui';
 
 const COLOR_NAMES: Record<string, string> = { tangerine: 'Naranja', leaf: 'Verde', sky: 'Azul claro', indigo: 'Índigo', berry: 'Frambuesa', sun: 'Amarillo', teal: 'Turquesa', slate: 'Gris' };
@@ -51,6 +52,7 @@ function MemberEditor({ member, onClose }: { member: User | null; onClose: () =>
     whatsapp: !!member?.whatsapp_consent_at,
   });
   const [error, setError] = useState('');
+  const [erasing, setErasing] = useState(false);
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const save = useMutation({
@@ -106,7 +108,16 @@ function MemberEditor({ member, onClose }: { member: User | null; onClose: () =>
         ) : null}
         {!isNew ? <Toggle checked={m.active} onChange={(v) => setM({ ...m, active: v })} label="Cuenta activa" description="Si la desactivas, no podrá entrar y se quitará de las tareas." /> : null}
         {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
+        {!isNew && child ? (
+          <div className="rounded-2xl border border-berry/40 p-3.5">
+            <p className="mb-2 text-sm muted">¿Ya no usa la app? Puedes borrar todos sus datos, fotos incluidas.</p>
+            <Button variant="danger" size="sm" onClick={() => setErasing(true)}><Trash2 size={16} aria-hidden /> Borrar los datos de {member.display_name}…</Button>
+          </div>
+        ) : null}
       </div>
+      {erasing && member ? (
+        <EraseChildSheet id={member.id} name={member.display_name} onClose={() => setErasing(false)} onDone={() => { toast(`Se han borrado los datos de ${member.display_name}`); invalidate(); setErasing(false); onClose(); }} />
+      ) : null}
     </Sheet>
   );
 }

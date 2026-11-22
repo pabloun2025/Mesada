@@ -7,7 +7,8 @@ import { addPoints, lockUser } from './ledger.js';
 import { addScreen } from './screen.js';
 import { audit } from './audit.js';
 import { notify, notifyAdults } from './notify/dispatch.js';
-import { evaluateBadges } from './gamification.js';
+import { removePhotoFile } from './photos.js';
+import { evaluateBadges, revokeBadgesFrom } from './gamification.js';
 import { dayEnd, deadlineAt, isHoliday, reducedPoints } from './deadline.js';
 import { grantBonus, voidBonus } from './bonus.js';
 import { applyRecovery, reverseRecovery } from './screen-adjust.js';
@@ -91,10 +92,13 @@ export async function completeInstance(
   opts: { note?: string; photoPath?: string | null; now?: Date },
 ) {
   const now = opts.now ?? new Date();
-  return tx(async (db) => {
+  let replaced: string | null = null;
+  const result = await tx(async (db) => {
     const fam = await getFamily(db, user.familyId);
     const today = familyToday(fam, now);
     const inst = await loadInstance(db, instanceId, user.familyId, true);
+    // Si sustituye una foto anterior (tarea devuelta y reenviada), el archivo viejo se borra al confirmar.
+    if (opts.photoPath && inst.photo_path && inst.photo_path !== opts.photoPath) replaced = inst.photo_path;
     if (!(await canComplete(db, inst, user))) {
       if (inst.is_extra) throw forbidden(inst.assignee_id ? 'Este trabajo lo tiene otra persona' : 'Primero pulsa «Me la pido»');
       throw forbidden('Esta tarea no está asignada a ti');
@@ -142,7 +146,7 @@ export async function completeInstance(
     await db.query(
       `UPDATE task_instances
           SET status = $2, completed_by = $3, completed_at = $6, first_submitted_at = COALESCE(first_submitted_at, $6), child_note = $4,
-              photo_path = COALESCE($5, photo_path),
+              photo_path = COALESCE($5, photo_path), photo_deleted_at = CASE WHEN $5::text IS NOT NULL THEN NULL ELSE photo_deleted_at END,
               reviewed_at = CASE WHEN $2 = 'approved' THEN $6::timestamptz END,
               review_note = NULL, review_outcome = NULL, points = $7, deadline_at = $8, on_time = $9
         WHERE id = $1`,
@@ -152,7 +156,7 @@ export async function completeInstance(
       await award(db, inst, user.id, points, null);
       await grantBonus(db, { instanceId: inst.id, userId: user.id, familyId: user.familyId, actorId: null, onTime, seq: inst.unmark_count + 1 });
       if (inst.is_extra) await applyRecovery(db, inst, user.id, today, null);
-      await evaluateBadges(db, user.id, today, fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [user.id]))!.weekly_goal_points);
+      await evaluateBadges(db, user.id, today, fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [user.id]))!.weekly_goal_points, inst.id);
     } else {
       await notifyAdults(db, user.familyId, { event: 'task_submitted', title: `${user.displayName} ha terminado «${inst.title}»`, body: 'Pendiente de validar', link: '/validar', dedupeKey: `submitted:${inst.id}:${Date.now()}` });
     }
@@ -160,6 +164,8 @@ export async function completeInstance(
     await audit(db, user.familyId, user.id, 'task.complete', 'task_instance', inst.id, { status });
     return { id: inst.id, status, points: autoApprove ? points : 0, onTime, potentialPoints: points };
   });
+  removePhotoFile(replaced);
+  return result;
 }
 
 export type ReviewAction = 'approve' | 'partial' | 'return' | 'reject' | 'reject_penalty';
@@ -206,7 +212,7 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
         await audit(db, adult.familyId, adult.id, 'task.points_changed', 'task_instance', inst.id, { from: inst.points, to: points });
       }
       await notify(db, { userId: beneficiary, event: 'task_approved', title: `«${inst.title}» aprobada`, body: `+${points} puntos${grant ? (grant.surprise ? ' · 🎁 ¡y una sorpresa!' : ` · ${grant.label}`) : ''}`, link: '/progreso', dedupeKey: `approved:${inst.id}` });
-      await evaluateBadges(db, beneficiary, familyToday(fam), fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [beneficiary]))!.weekly_goal_points);
+      await evaluateBadges(db, beneficiary, familyToday(fam), fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [beneficiary]))!.weekly_goal_points, inst.id);
       await audit(db, adult.familyId, adult.id, 'task.approve', 'task_instance', inst.id, { points, note: note ?? null });
       return { id: inst.id, status: 'approved' };
     }
@@ -227,7 +233,7 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
       if (inst.is_extra) await applyRecovery(db, inst, beneficiary, familyToday(fam), adult.id);
       // Sin bono: ni el visible ni la sorpresa (que no se revela ni se gasta) se conceden con un premio parcial.
       await notify(db, { userId: beneficiary, event: 'task_approved', title: `«${inst.title}»: premio parcial`, body: `+${points} de ${inst.points} puntos · ${note}`, link: '/', dedupeKey: `approved:${inst.id}` });
-      await evaluateBadges(db, beneficiary, familyToday(fam), fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [beneficiary]))!.weekly_goal_points);
+      await evaluateBadges(db, beneficiary, familyToday(fam), fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [beneficiary]))!.weekly_goal_points, inst.id);
       await audit(db, adult.familyId, adult.id, 'task.partial', 'task_instance', inst.id, { points, of: inst.points, note: note ?? null });
       return { id: inst.id, status: 'approved', outcome: 'partial', points };
     }
@@ -336,10 +342,12 @@ export async function unmarkInstance(user: AuthUser, instanceId: string, opts: {
         [inst.task_id, inst.due_date, inst.assignee_id, inst.id],
       );
     }
+    // Insignias que dio esta tarea y que ya no se cumplen: se retiran (D55).
+    const badgesRevoked = await revokeBadgesFrom(db, user.id, inst.id, today, fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [user.id]))!.weekly_goal_points);
     // Sin aviso a los adultos: solo queda en el historial.
-    await audit(db, user.familyId, user.id, 'task.unmark', 'task_instance', inst.id, { title: inst.title, wasStatus: inst.status, pointsBack });
-    return { id: inst.id, status: inst.returned_at ? 'rejected' : 'pending', pointsBack, photo: inst.photo_path };
+    await audit(db, user.familyId, user.id, 'task.unmark', 'task_instance', inst.id, { title: inst.title, wasStatus: inst.status, pointsBack, badgesRevoked });
+    return { id: inst.id, status: inst.returned_at ? 'rejected' : 'pending', pointsBack, badgesRevoked, photo: inst.photo_path };
   });
-  if (out.photo) fs.rmSync(path.join(config.uploadDir, out.photo), { force: true });
-  return { id: out.id, status: out.status, pointsBack: out.pointsBack };
+  removePhotoFile(out.photo);
+  return { id: out.id, status: out.status, pointsBack: out.pointsBack, badgesRevoked: out.badgesRevoked };
 }

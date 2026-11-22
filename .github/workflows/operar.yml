@@ -7,7 +7,7 @@ on:
       accion:
         required: true
         type: choice
-        options: [estado, preparar-whatsapp, activar-envios, desactivar-envios]
+        options: [estado, preparar-whatsapp, activar-envios, desactivar-envios, copia-r2-probar]
 
 permissions:
   contents: read

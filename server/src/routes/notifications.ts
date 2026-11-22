@@ -3,7 +3,9 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { getPool, many, one, tx } from '../lib/db.js';
 import { createSession, hashPassword, requireAdult, requireUser, setSessionCookie, type AuthUser } from '../lib/auth.js';
-import { badRequest, forbidden, notFound } from '../lib/errors.js';
+import { badRequest, conflict, forbidden, HttpError, notFound } from '../lib/errors.js';
+import { LEGAL_VERSION } from '../lib/legal.js';
+import { enforceLimit } from '../lib/limits.js';
 import { audit } from '../lib/audit.js';
 import { CHANNELS, EVENTS, isEventKey } from '../lib/notify/events.js';
 import { absoluteLink, channelBlockReason, sendSystemEmail } from '../lib/notify/dispatch.js';
@@ -169,6 +171,7 @@ export default async function notificationRoutes(app: FastifyInstance) {
   // --- Recuperación de contraseña (adultos con correo). Respuesta siempre igual, para no revelar cuentas. ---
   app.post('/api/auth/forgot', { config: { rateLimit: { max: Math.min(config.authRateLimit, 5), timeWindow: '1 minute' } } }, async (req) => {
     const b = z.object({ login: z.string().trim().min(1).max(200) }).parse(req.body);
+    enforceLimit(req, 'recovery', config.limits.recoveryPerHour);
     const user = await one<{ id: string; family_id: string; email: string; display_name: string }>(
       getPool(),
       `SELECT id, family_id, email, display_name FROM users
@@ -199,6 +202,7 @@ export default async function notificationRoutes(app: FastifyInstance) {
 
   app.post('/api/auth/reset', { config: { rateLimit: { max: Math.min(config.authRateLimit, 10), timeWindow: '1 minute' } } }, async (req) => {
     const b = z.object({ token: z.string().min(20).max(200), password: adultPassword }).parse(req.body);
+    enforceLimit(req, 'reset', config.limits.resetPerHour);
     await tx(async (db) => {
       const r = await one(
         db,
@@ -219,7 +223,12 @@ export default async function notificationRoutes(app: FastifyInstance) {
   app.post('/api/invitations', async (req) => {
     const u = requireAdult(req);
     const b = z.object({ email: z.string().trim().toLowerCase().email('correo no válido').max(200), displayName: z.string().trim().min(1).max(60) }).parse(req.body);
+    enforceLimit(req, 'invite', config.limits.invitePerHour);
     if (await one(getPool(), 'SELECT 1 FROM users WHERE lower(email) = $1', [b.email])) throw badRequest('Ese correo ya tiene una cuenta');
+    const open = (await one<{ n: number }>(getPool(), `SELECT count(*)::int AS n FROM invitations WHERE family_id = $1 AND accepted_at IS NULL AND expires_at > now()`, [u.familyId]))!.n;
+    if (open >= config.caps.maxPendingInvitations) throw conflict('Ya tienes muchas invitaciones sin usar. Espera a que caduquen (7 días).', 'too_many_invitations');
+    const members = (await one<{ n: number }>(getPool(), 'SELECT count(*)::int AS n FROM users WHERE family_id = $1', [u.familyId]))!.n;
+    if (members >= config.caps.maxMembers) throw conflict(`Una familia puede tener hasta ${config.caps.maxMembers} personas.`, 'too_many_members');
     const token = crypto.randomBytes(32).toString('base64url');
     const fam = await one(getPool(), 'SELECT name FROM families WHERE id = $1', [u.familyId]);
     await tx(async (db) => {
@@ -255,6 +264,7 @@ export default async function notificationRoutes(app: FastifyInstance) {
 
   app.post('/api/invitations/lookup', async (req) => {
     const b = z.object({ token: z.string().min(20).max(200) }).parse(req.body);
+    enforceLimit(req, 'invite-lookup', config.limits.inviteAcceptPerHour * 2);
     const inv = await one(
       getPool(),
       `SELECT i.email, i.display_name, f.name AS family_name FROM invitations i JOIN families f ON f.id = i.family_id
@@ -266,16 +276,26 @@ export default async function notificationRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/invitations/accept', { config: { rateLimit: { max: Math.min(config.authRateLimit, 10), timeWindow: '1 minute' } } }, async (req, reply) => {
-    const b = z.object({ token: z.string().min(20).max(200), username: usernameSchema, password: adultPassword }).parse(req.body);
+    const b = z
+      .object({
+        token: z.string().min(20).max(200), username: usernameSchema, password: adultPassword,
+        acceptTerms: z.literal(true, { error: 'Debes aceptar la política de privacidad y las condiciones' }),
+        termsVersion: z.string().max(40),
+      })
+      .parse(req.body);
+    enforceLimit(req, 'invite-accept', config.limits.inviteAcceptPerHour);
+    if (b.termsVersion !== LEGAL_VERSION) throw new HttpError(409, 'Los textos legales han cambiado. Recarga la página para leerlos y aceptarlos.', 'terms_outdated');
     const created = await tx(async (db) => {
       const inv = await one(db, `SELECT * FROM invitations WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > now() FOR UPDATE`, [sha256(b.token)]);
       if (!inv) throw notFound('La invitación no es válida o ha caducado');
       if (await one(db, 'SELECT 1 FROM users WHERE lower(username) = lower($1)', [b.username])) throw badRequest('Ese nombre de usuario ya existe', 'username_taken');
       if (await one(db, 'SELECT 1 FROM users WHERE lower(email) = lower($1)', [inv.email])) throw badRequest('Ese correo ya tiene una cuenta');
+      const members = (await one<{ n: number }>(db, 'SELECT count(*)::int AS n FROM users WHERE family_id = $1', [inv.family_id]))!.n;
+      if (members >= config.caps.maxMembers) throw conflict('La familia ya tiene el máximo de personas.', 'too_many_members');
       const user = await one(
         db,
-        `INSERT INTO users(family_id, role, display_name, username, password_hash, email, avatar, color) VALUES ($1,'adult',$2,$3,$4,$5,'bear','sky') RETURNING id`,
-        [inv.family_id, inv.display_name, b.username, await hashPassword(b.password), inv.email],
+        `INSERT INTO users(family_id, role, display_name, username, password_hash, email, avatar, color, terms_version, terms_accepted_at) VALUES ($1,'adult',$2,$3,$4,$5,'bear','sky',$6, now()) RETURNING id`,
+        [inv.family_id, inv.display_name, b.username, await hashPassword(b.password), inv.email, LEGAL_VERSION],
       );
       await db.query('UPDATE invitations SET accepted_at = now(), accepted_user_id = $2 WHERE id = $1', [inv.id, user.id]);
       await audit(db, inv.family_id, user.id, 'invitation.accept', 'invitation', inv.id, { displayName: inv.display_name });

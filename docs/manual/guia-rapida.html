@@ -1,0 +1,94 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>DiploP · Guía rápida</title><style>
+@font-face{font-family:Atk;src:url(fonts/atk400.woff2);font-weight:400}
+@font-face{font-family:Atk;src:url(fonts/atk700.woff2);font-weight:700}
+@font-face{font-family:Brico;src:url(fonts/bricolage.woff2);font-weight:200 800}
+@page{size:A4;margin:18mm 16mm 20mm 16mm}
+@page:first{margin:0}
+:root{--ink:#142a5c;--ink2:#3b4b70;--brand:#1d5fae;--sky:#dcebfa;--sky2:#eaf3fc;--sun:#ffb800;--sunsoft:#fff3cc;--leaf:#137a50;--leafsoft:#e3f6ec;--line:#cfe0f0}
+*{box-sizing:border-box}
+html{font-family:Atk,system-ui,sans-serif;color:var(--ink);font-size:10.6pt;line-height:1.5}
+body{margin:0}
+h1,h2,h3{font-family:Brico,Atk,sans-serif;color:var(--ink);line-height:1.15;margin:0}
+h2{font-size:23pt;margin:0 0 4mm;padding-bottom:2.5mm;border-bottom:3px solid var(--sun);break-after:avoid}
+h3{font-size:13.5pt;margin:6mm 0 2mm;break-after:avoid;color:var(--brand)}
+p{margin:0 0 2.6mm}
+ul,ol{margin:0 0 3mm;padding-left:5.5mm}li{margin-bottom:1.2mm}
+.lead{font-size:12.5pt;color:var(--ink2)}
+section.cap{break-before:page}
+.cover{height:297mm;position:relative;background:linear-gradient(#bcdcf8,#eaf3fc 70%);overflow:hidden;break-after:page;text-align:center}
+.cover .hero{width:100%;height:150mm;object-fit:cover;object-position:center 30%;display:block;-webkit-mask-image:linear-gradient(#000 80%,transparent)}
+.cover img.logo{width:92mm;margin-top:8mm}
+.cover h1{font-size:34pt;margin:8mm 20mm 3mm}
+.cover p{font-size:14pt;color:var(--ink2);margin:0 25mm}
+.cover .tag{position:absolute;bottom:14mm;left:0;right:0;font-size:10pt;color:var(--ink2)}
+.toc{break-after:page}.toc li{font-size:12pt;margin-bottom:2mm}
+.toc ol{columns:2;column-gap:12mm}
+.step{display:grid;grid-template-columns:1fr auto;gap:7mm;align-items:start;margin:0 0 5mm;break-inside:avoid}
+.step.rev{grid-template-columns:auto 1fr}
+.step.rev .figs{order:-1}
+.figs{display:flex;gap:4mm}
+.fig{margin:0;width:46mm}
+.fig img{width:100%;display:block;border-radius:5mm;border:1.2px solid #9fbfdf;box-shadow:0 2mm 5mm -2mm rgba(20,42,92,.28)}
+.fig figcaption{font-size:8.2pt;color:var(--ink2);text-align:center;margin-top:1.6mm;line-height:1.3}
+.row{display:flex;gap:4mm;justify-content:center;margin:2mm 0 5mm;break-inside:avoid}
+.row .fig{width:41mm}
+.tip,.warn,.ok{border-radius:3mm;padding:3mm 4mm;margin:3mm 0 4mm;break-inside:avoid;font-size:10pt}
+.tip{background:var(--sky);border-left:1.6mm solid var(--brand)}
+.warn{background:var(--sunsoft);border-left:1.6mm solid var(--sun)}
+.ok{background:var(--leafsoft);border-left:1.6mm solid var(--leaf)}
+.tip b:first-child,.warn b:first-child,.ok b:first-child{font-family:Brico,Atk}
+table{border-collapse:collapse;width:100%;margin:2mm 0 4mm;font-size:9.8pt;break-inside:avoid}
+th,td{border:1px solid var(--line);padding:1.8mm 2.6mm;text-align:left;vertical-align:top}
+th{background:var(--sky);font-family:Brico,Atk}
+.num{display:inline-flex;width:6.2mm;height:6.2mm;border-radius:50%;background:var(--sun);color:var(--ink);font-weight:700;align-items:center;justify-content:center;font-size:9pt;margin-right:1.5mm}
+dl{margin:0}dt{font-family:Brico,Atk;font-weight:700;color:var(--brand);margin-top:3.5mm}dd{margin:0.6mm 0 0}
+.pill{display:inline-block;background:var(--sky);border-radius:99px;padding:0 2.4mm;font-weight:700;font-size:9.6pt}
+.foot{margin-top:8mm;text-align:center;color:var(--ink2);font-size:9.5pt}
+
+@page{size:A4;margin:12mm 13mm 12mm 13mm}
+@page:first{margin:12mm 13mm 12mm 13mm}
+html{font-size:10pt;line-height:1.42}
+.top{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid var(--sun);padding-bottom:3mm;margin-bottom:4mm}
+.top img{height:15mm}.top h1{font-size:21pt;text-align:right}.top small{display:block;font-family:Atk;font-size:10pt;color:var(--ink2);font-weight:400}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:4mm}
+.card{background:var(--sky2);border:1px solid var(--line);border-radius:4mm;padding:3mm 4mm;break-inside:avoid}
+.card h3{margin:0 0 1.5mm;font-size:12pt;display:flex;align-items:center;gap:2mm}
+.card p,.card ul{margin:0 0 1.2mm;font-size:9.4pt}.card ul{padding-left:4.5mm}.card li{margin-bottom:.6mm}
+.shots{display:flex;gap:4mm;justify-content:center;margin:4mm 0}
+.shots .fig{width:37mm}
+h2{font-size:15pt;margin:4mm 0 2.5mm;padding:0;border:0}
+.page2{break-before:page}
+table{font-size:9.4pt}
+.bar{margin-top:4mm;text-align:center;background:var(--ink);color:#fff;border-radius:3mm;padding:2.4mm;font-size:10pt}
+</style></head><body>
+<div class="top"><img src="brand/logo.png" alt="DiploP"><h1>Guía rápida<small>Tareas, puntos y mesada en familia</small></h1></div>
+<h2>Tus primeros 5 pasos</h2>
+<div class="cols">
+<div class="card"><h3><span class="num">1</span>Crea la familia</h3><p>Pulsa <b>Crear familia</b>. Escribe el nombre de la familia, tu nombre, usuario, correo y una contraseña de 8 caracteres o más. Marca la casilla de privacidad y condiciones (también las aceptas por tus hijos).</p></div>
+<div class="card"><h3><span class="num">2</span>Añade a tus hijos</h3><p>En <b>Más &gt; Familia</b> pulsa <b>Añadir</b>. Cada hijo tiene un <b>usuario</b> y un <b>PIN</b> de 4 cifras o más. Puedes invitar a otro adulto.</p></div>
+<div class="card"><h3><span class="num">3</span>Crea las primeras tareas</h3><p>En <b>Tareas</b> pulsa <b>Nueva</b>. Elige nombre, puntos, cuándo se repite y a quién va.</p><ul><li>Empieza con 3 o 4 tareas diarias y sencillas.</li><li><b>Cuando haga falta</b> sirve para sacar la basura.</li></ul></div>
+<div class="card"><h3><span class="num">4</span>Ajusta la mesada</h3><p>En <b>Ajustes</b> elige cuánto vale un punto (por ejemplo, 100 puntos = 5 €) y si cierras por semana o por mes.</p></div>
+<div class="card"><h3><span class="num">5</span>Instala la app en el móvil</h3><p><b>iPhone (Safari):</b> Compartir &gt; Añadir a pantalla de inicio.</p><p><b>Android (Chrome):</b> menú de tres puntos &gt; Instalar aplicación.</p><p>Que cada hijo entre con su usuario y PIN.</p></div>
+<div class="card"><h3><span class="num">★</span>Premios y pantalla (opcional)</h3><p>Crea premios en <b>Premios</b>. En <b>Ajustes</b>, pon un plan semanal de minutos de pantalla para cada hijo.</p></div>
+</div>
+<div class="shots"><figure class="fig"><img src="img/06-nueva-tarea.jpg" alt=""><figcaption>Crear una tarea</figcaption></figure><figure class="fig"><img src="img/05-familia.jpg" alt=""><figcaption>La familia</figcaption></figure><figure class="fig"><img src="img/16-hijo-hoy.jpg" alt=""><figcaption>Lo que ve tu hijo</figcaption></figure><figure class="fig"><img src="img/19-validar.jpg" alt=""><figcaption>Validar</figcaption></figure></div>
+<div class="page2"></div>
+<h2>El día a día</h2>
+<div class="cols">
+<div class="card"><h3><span class="num">1</span>El hijo marca la tarea</h3><p>Abre DiploP, pulsa el círculo de la tarea. Si se equivoca, tiene unos segundos para <b>Deshacer</b>.</p></div>
+<div class="card"><h3><span class="num">2</span>Tú la validas</h3><p>Te llega un aviso. En <b>Validar</b>:</p><ul><li><b>Aprobar</b>: puntos completos.</li><li><b>Otras opciones</b>: parte del premio (75, 50 o 25 %), devolver para que la arregle o rechazar. El motivo es obligatorio.</li></ul></div>
+<div class="card"><h3><span class="num">3</span>Los puntos se acumulan</h3><p>Cada hijo ve sus puntos, su nivel, su racha y cuánto valen en euros. Los premios se canjean en <b>Premios</b> y tú los apruebas.</p></div>
+<div class="card"><h3><span class="num">4</span>Cierra la semana y paga</h3><p>En <b>Mesada</b>: <b>Cerrar semana</b> convierte los puntos en euros. Luego pulsa <b>Pagar</b>, elige efectivo, Bizum o transferencia y confirma.</p></div>
+</div>
+<h2>Cada semana, de un vistazo</h2>
+<table><tr><th>Cuándo</th><th>Qué haces</th></tr>
+<tr><td><b>Cada día</b></td><td>Mira <b>Validar</b>. El número rojo te dice cuántas tareas esperan.</td></tr>
+<tr><td><b>Cuando pidan</b></td><td>Aprueba premios, retiros o minutos de pantalla.</td></tr>
+<tr><td><b>Cada lunes</b></td><td>Cierra la semana en <b>Mesada</b> y paga. La pantalla se recarga sola a las 00:00 y lo que sobró caduca.</td></tr>
+<tr><td><b>Si hace falta</b></td><td>Pon un <b>Ajuste de pantalla</b> (quitar minutos o una pausa) con un motivo en positivo.</td></tr></table>
+<div class="cols">
+<div class="card"><h3>Trucos</h3><ul><li>Devuelve una tarea con una frase amable antes de rechazarla.</li><li>Marca los festivos en <b>Ajustes</b> para que usen la hora del fin de semana.</li><li>Los trabajos extra sirven para ganar puntos o recuperar minutos.</li></ul></div>
+<div class="card"><h3>Si algo falla</h3><ul><li><b>PIN olvidado:</b> un adulto lo cambia en Familia.</li><li><b>Contraseña olvidada:</b> «¿Has olvidado la contraseña?» en la entrada.</li><li><b>Sin WhatsApp:</b> faltan teléfono, consentimiento o tener 13 años.</li><li><b>Tus datos:</b> en <b>Ajustes &gt; Privacidad y datos</b> puedes descargarlos o borrar la familia.</li></ul></div>
+</div>
+<div class="bar">DiploP · mesada.veryfacil.org · Manual completo: manual-padres.pdf</div>
+</body></html>

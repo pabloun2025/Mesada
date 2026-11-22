@@ -46,13 +46,13 @@ export function AccountCard({ tone, title, number, children, foot }: { tone: 'mo
   const money = tone === 'money';
   return (
     <section aria-label={title} className={`acct ${money ? 'acct-money' : 'acct-pts'}`}>
-      {money ? <Rays color="#ffb800" opacity={0.35} /> : <Rays color="#fff" opacity={0.5} />}
+      {money ? <Rays color="#ffb800" opacity={0.25} /> : <Rays color="#fff" opacity={0.5} />}
       {money ? <GoldCoins size={70} className="pointer-events-none absolute right-3 bottom-3 opacity-90" /> : null}
       <div className="flex items-center justify-between text-sm font-bold">
         <span className="flex items-center gap-2"><Landmark size={18} aria-hidden /> DiploP · {title}</span>
         <Nfc size={22} aria-hidden className="opacity-80" />
       </div>
-      <p className="num mt-3 text-sm font-medium tracking-[0.14em] opacity-85" aria-label={`Número de cuenta ${number}`}>{number}</p>
+      <p className="num mt-3 text-sm font-medium tracking-[0.14em]" aria-label={`Número de cuenta ${number}`}>{number}</p>
       <p className="num mt-auto flex items-baseline gap-1.5 text-[2.75rem] leading-none font-extrabold">{children}</p>
       <p className="mt-2.5 flex min-h-6 items-center gap-1.5 text-[0.8rem] opacity-95">{foot}</p>
     </section>

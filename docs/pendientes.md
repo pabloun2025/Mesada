@@ -53,5 +53,22 @@ Estado: ✅ hecho y probado · 🟡 parcial · ⬜ pendiente
 ## Pendiente tras I16 e I17 (22/11)
 
 - ⬜ Revisar en una prueba de uso real si «Pausa» debe bloquear también que el hijo anote su uso (hoy no, ver D44).
-- ⬜ Las insignias concedidas por una tarea que luego se desmarca no se retiran (D42).
-- ⬜ Auditoría de contraste automática de las tarjetas del banco en el carrusel (la tarjeta de puntos queda fuera de pantalla al medirla); revisada a mano.
+- ✅ Las insignias concedidas por una tarea que luego se desmarca se retiran (D55; cambia D42).
+- ✅ Auditoría de contraste automática de las tarjetas del banco en el carrusel, dentro de la prueba E2E de calidad (D53).
+
+## Uso masivo: privacidad, abusos, vigilancia y copias (22/11)
+
+- ✅ Páginas públicas de privacidad, aviso legal y condiciones; casilla obligatoria con versión y fecha (D48).
+- ✅ Descargar todos los datos de la familia y borrar un hijo o la familia entera (D49).
+- ✅ Límites por IP, campo trampa y topes (D50).
+- ✅ `/api/health` con la base, aviso de caída cada 15 min y errores con código (D51).
+- ✅ Copia cifrada en Cloudflare R2 con retención y restauración (D52): **falta que el dueño la active** (despliegue.md §0.b).
+- ✅ Vídeos y manual al día (D54).
+- ✅ Fotos reducidas, sin EXIF/GPS y con caducidad de 7 días tras validar (D56); limpieza nocturna y manual (D57); Administración › Sistema con disco, copias y familias inactivas (D58).
+- 👤 **Del dueño (a mano):** activar R2 y la contraseña de cifrado (§0.b), notificaciones de Actions por correo, buzón `privacidad@veryfacil.org`, confirmar la región del servidor de Oracle y las garantías de Resend y Cloudflare citadas en la política, y completar el aviso legal con nombre, domicilio y NIF si el servicio llega a tener actividad económica.
+- ⬜ Pedir de nuevo la aceptación a las cuentas anteriores y a todas cuando suba `LEGAL_VERSION`.
+- ⬜ Borrado automático (con aviso previo) de familias inactivas; hoy la administración las ve y las borra a mano.
+- ⬜ Límites compartidos entre instancias (hoy en memoria, una sola instancia; ver P10).
+- ⬜ Pantalla en Administración para consultar los errores con código (hoy: `GET /api/admin/errors?id=` o el registro del contenedor).
+- ⬜ La app no avisa por correo si las copias llevan más de 26 h sin hacerse (hoy solo se ve en Administración › Sistema).
+- ⬜ Alta de adultos añadidos por otro adulto (no por invitación): hoy no aceptan los textos ellos mismos; usar la invitación por correo lo resuelve.

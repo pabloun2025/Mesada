@@ -9,6 +9,9 @@ import { ZodError } from 'zod';
 import { config } from './lib/config.js';
 import { HttpError } from './lib/errors.js';
 import { loadUser } from './lib/auth.js';
+import { clientIp } from './lib/limits.js';
+import { newErrorId, recordServerError } from './lib/errorlog.js';
+import { getPool } from './lib/db.js';
 import authRoutes from './routes/auth.js';
 import familyRoutes from './routes/family.js';
 import taskRoutes from './routes/tasks.js';
@@ -23,6 +26,7 @@ import holidayRoutes from './routes/holidays.js';
 import bonusRoutes from './routes/bonus.js';
 import bankRoutes from './routes/bank.js';
 import extraRoutes from './routes/extras.js';
+import privacyRoutes from './routes/privacy.js';
 
 export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({
@@ -33,7 +37,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
 
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: config.maxUploadBytes, files: 1, fields: 10 } });
-  await app.register(rateLimit, { global: false });
+  await app.register(rateLimit, { global: false, keyGenerator: (req) => clientIp(req) });
 
   // Cabeceras de seguridad básicas.
   app.addHook('onSend', async (_req, reply) => {
@@ -62,11 +66,24 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     if (err.code === 'FST_REQ_FILE_TOO_LARGE') return reply.status(413).send({ error: 'too_large', message: 'La foto es demasiado grande' });
     if (err.code === '23505') return reply.status(409).send({ error: 'duplicate', message: 'Ya existe un registro igual' });
     if (err.statusCode && err.statusCode < 500) return reply.status(err.statusCode).send({ error: 'bad_request', message: err.message });
-    req.log.error(err);
-    return reply.status(500).send({ error: 'internal', message: 'Error interno del servidor' });
+    // Error del servidor: se anota con un código que la persona puede dictarnos (D51).
+    const errorId = newErrorId();
+    req.log.error({ errorId, err }, 'error del servidor');
+    void recordServerError(errorId, req, err, 500);
+    return reply.status(500).send({ error: 'internal', errorId, message: `Algo ha fallado por nuestra parte. Inténtalo de nuevo en un momento. Si sigue pasando, indica este código: ${errorId}` });
   });
 
-  app.get('/api/health', async () => ({ ok: true }));
+  // Salud: comprueba que la base responde. No devuelve datos ni detalles del fallo (están en el registro del servidor).
+  app.get('/api/health', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      await Promise.race([getPool().query('SELECT 1'), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))]);
+      return { ok: true, db: 'up' };
+    } catch (e) {
+      req.log.error({ err: e }, 'health: la base de datos no responde');
+      return reply.status(503).send({ ok: false, db: 'down' });
+    }
+  });
 
   await app.register(authRoutes);
   await app.register(familyRoutes);
@@ -82,6 +99,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(bonusRoutes);
   await app.register(bankRoutes);
   await app.register(extraRoutes);
+  await app.register(privacyRoutes);
 
   // En producción el servidor puede servir también la PWA compilada.
   if (config.staticDir && fs.existsSync(config.staticDir)) {

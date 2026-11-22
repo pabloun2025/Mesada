@@ -17,6 +17,13 @@ Instaladas a mano (copia de la carpeta oficial), solo las necesarias:
 - La red sale por un proxy con lista de hosts permitidos. Si un host devuelve `403 agent proxy`, no es un problema de DNS: hay que permitirlo en el entorno.
 - PostgreSQL 16 local para desarrollo y pruebas: `postgres://postgres:postgres@127.0.0.1:5432/mesada` (y `mesada_test`).
 
+## Privacidad, abusos y copias (D48–D55)
+- Textos legales: la fuente es `docs/legal/*.md`; `cd web && npm run legal` los vuelca a `web/src/legal/content.ts` (versionado; CI lo comprueba). Al cambiarlos de fondo, sube `LEGAL_VERSION` (`server/src/lib/legal.ts`) y la «Versión» de los `.md`.
+- Borrar familia o hijo (`server/src/lib/privacy.ts`) usa `set_config('mesada.erasure','on',true)`: es lo único que permite borrar libros e historial (disparadores de la migración 013). No lo uses para nada más.
+- Límites por IP (`lib/limits.ts`, variables `RATE_*`) y topes (`MAX_*`) están documentados en `docs/despliegue.md`. Datos y secretos: nunca en registros ni en el repositorio (es público).
+- Copias externas cifradas en R2: `deploy/backup.sh`, `deploy/r2.sh`; prueba local sin red con `sh deploy/test-backup.sh`.
+- Vídeos y manual: scripts en `e2e/media/` (ver `docs/video/guion.md`); tras cambiar la interfaz hay que regenerar capturas, vídeos y PDF.
+
 ## Comandos
 - API: `cd server && npm run dev` · pruebas `npm test` · tipos `npm run typecheck`
 - Web: `cd web && npm run dev` (proxy de /api a :3000) · `npm run build`

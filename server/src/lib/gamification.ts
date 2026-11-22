@@ -82,8 +82,11 @@ export async function computeStreak(db: Db, userId: string, today: string): Prom
   return streak;
 }
 
-/** Evalúa y concede insignias nuevas. Devuelve las concedidas. */
-export async function evaluateBadges(db: Db, userId: string, today: string, tz: string, weeklyGoal: number): Promise<string[]> {
+/** Insignias que se ganan con tareas hechas: son las únicas que se retiran al desmarcar una tarea (D55). */
+const TASK_BADGES = ['first_task', 'tasks_10', 'tasks_50', 'tasks_100', 'streak_3', 'streak_7', 'streak_30', 'weekly_goal'];
+
+/** Insignias que se cumplen ahora mismo. */
+async function currentBadges(db: Db, userId: string, today: string, tz: string, weeklyGoal: number): Promise<string[]> {
   const stats = await one<{ approved: number; redemptions: number; savings: number }>(
     db,
     `SELECT
@@ -106,14 +109,47 @@ export async function evaluateBadges(db: Db, userId: string, today: string, tz: 
   if (weeklyGoal > 0 && weekPts >= weeklyGoal) earned.push('weekly_goal');
   if (s.redemptions >= 1) earned.push('first_reward');
   if (s.savings >= 1000) earned.push('saver');
+  return earned;
+}
+
+/**
+ * Evalúa y concede insignias nuevas. Devuelve las concedidas.
+ * `sourceInstanceId`: la tarea que las provoca; se anota para poder retirarlas si esa tarea se desmarca.
+ */
+export async function evaluateBadges(db: Db, userId: string, today: string, tz: string, weeklyGoal: number, sourceInstanceId: string | null = null): Promise<string[]> {
+  const earned = await currentBadges(db, userId, today, tz, weeklyGoal);
   if (!earned.length) return [];
   const r = await db.query(
-    `INSERT INTO user_badges(user_id, badge) SELECT $1, unnest($2::text[]) ON CONFLICT DO NOTHING RETURNING badge`,
-    [userId, earned],
+    `INSERT INTO user_badges(user_id, badge, source_instance_id) SELECT $1, unnest($2::text[]), $3 ON CONFLICT DO NOTHING RETURNING badge`,
+    [userId, earned, sourceInstanceId],
   );
   const fresh = r.rows.map((x) => x.badge as string);
   for (const b of fresh) {
     await notify(db, { userId, event: 'badge', title: `Nueva insignia: ${BADGES[b].title}`, body: BADGES[b].description, link: '/progreso', dedupeKey: `badge:${userId}:${b}` });
   }
   return fresh;
+}
+
+/**
+ * Al desmarcar una tarea: retira las insignias que ESA tarea concedió y que, sin ella, ya no se cumplen.
+ * Las que se ganaron antes con otras tareas (o por otro motivo, como canjear o ahorrar) no se tocan,
+ * y las que siguen cumpliéndose gracias a otras tareas se quedan. Devuelve las retiradas.
+ */
+export async function revokeBadgesFrom(db: Db, userId: string, instanceId: string, today: string, tz: string, weeklyGoal: number): Promise<string[]> {
+  const still = await currentBadges(db, userId, today, tz, weeklyGoal);
+  const r = await db.query(
+    `DELETE FROM user_badges WHERE user_id = $1 AND source_instance_id = $2 AND badge = ANY($3::text[]) AND badge <> ALL($4::text[]) RETURNING badge`,
+    [userId, instanceId, TASK_BADGES, still],
+  );
+  const revoked = r.rows.map((x) => x.badge as string);
+  // Las que siguen cumpliéndose pasan a apoyarse en otra tarea hecha (si no, al desmarcar esa quedarían sin sostén).
+  await db.query(
+    `UPDATE user_badges SET source_instance_id = (
+       SELECT id FROM task_instances WHERE id <> $2 AND status = 'approved' AND (assignee_id = $1 OR completed_by = $1) ORDER BY completed_at DESC NULLS LAST LIMIT 1)
+      WHERE user_id = $1 AND source_instance_id = $2 AND badge = ANY($3::text[])`,
+    [userId, instanceId, TASK_BADGES],
+  );
+  // El aviso de «Nueva insignia» ya no es verdad: se quita (si la vuelve a ganar, se avisa de nuevo).
+  if (revoked.length) await db.query('DELETE FROM notifications WHERE user_id = $1 AND dedupe_key = ANY($2::text[])', [userId, revoked.map((b) => `badge:${userId}:${b}`)]);
+  return revoked;
 }

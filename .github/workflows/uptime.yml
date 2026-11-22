@@ -1,0 +1,39 @@
+name: Vigilancia
+
+# Cada 15 minutos pregunta a https://mesada.veryfacil.org/api/health. Si no responde 200, el trabajo falla y
+# GitHub avisa por correo a quien tenga activadas las notificaciones de Actions (Settings › Notifications).
+# No usa secretos ni envía datos: /api/health es público y solo dice «ok» y si la base responde.
+# Nota: GitHub puede retrasar unos minutos las ejecuciones programadas y desactiva las programaciones de repositorios
+# sin actividad durante 60 días; basta con reactivarla en la pestaña Actions.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: uptime
+  cancel-in-progress: true
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Comprobar /api/health
+        run: |
+          set -u
+          url='https://mesada.veryfacil.org/api/health'
+          # Tres intentos con pausa, para no avisar por un parpadeo de red.
+          for i in 1 2 3; do
+            code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 20 "$url" || true)
+            if [ "$code" = "200" ] && grep -q '"ok":true' /tmp/health.json; then
+              echo "Todo bien: HTTP $code"
+              exit 0
+            fi
+            echo "Intento $i: HTTP ${code:-sin respuesta}"
+            sleep 20
+          done
+          echo "::error title=DiploP no responde::GET /api/health no ha dado 200 en tres intentos (último: HTTP ${code:-sin respuesta})"
+          exit 1

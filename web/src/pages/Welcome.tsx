@@ -3,6 +3,7 @@ import { Check, ClipboardList, Coins, Flame, Gift, Landmark, PiggyBank, ShieldCh
 import type { ReactNode } from 'react';
 import { buttonClass } from '../components/ui';
 import { HeroImage } from './AuthShell';
+import { LegalLinks } from '../components/LegalLinks';
 
 const STEPS = [
   { icon: ClipboardList, title: 'Tareas', text: 'Los padres reparten las tareas de casa y cada hijo ve las suyas.' },
@@ -94,6 +95,10 @@ export function Welcome({ canRegister }: { canRegister: boolean }) {
           <div className="flex justify-center"><Cta canRegister={canRegister} where="bottom" /></div>
         </section>
       </main>
+      <footer className="mx-auto max-w-5xl px-4 pb-10 text-center">
+        <LegalLinks className="justify-center" />
+        <p className="mt-1 text-sm muted">DiploP · Tareas de casa, puntos y mesada para toda la familia</p>
+      </footer>
     </div>
   );
 }

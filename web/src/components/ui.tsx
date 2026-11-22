@@ -147,9 +147,9 @@ export function Field({ label, hint, error, children }: { label: string; hint?: 
   );
 }
 
-export function Segmented<T extends string>({ value, onChange, options, label }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[]; label: string }) {
+export function Segmented<T extends string>({ value, onChange, options, label, wrap = false }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[]; label: string; wrap?: boolean }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-full bg-[var(--chip)] p-1">
+    <div role="radiogroup" aria-label={label} className={`inline-flex bg-[var(--chip)] p-1 ${wrap ? "flex-wrap rounded-3xl" : "rounded-full"}`}>
       {options.map((o) => (
         <button
           key={o.value}

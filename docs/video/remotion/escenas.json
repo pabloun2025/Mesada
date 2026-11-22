@@ -1,0 +1,176 @@
+{
+  "presentacion": [
+    {
+      "title": "Organizarse en familia",
+      "source": null,
+      "start": 0,
+      "clip": 0,
+      "voice": "¿Qué toca hacer hoy? ¿Ya se hizo? Cuando cada tarea se apunta en un sitio distinto, es fácil perder la cuenta.",
+      "guide": "Tareas, puntos y paga en familia"
+    },
+    {
+      "title": "Conoce Mesada",
+      "source": null,
+      "start": 0,
+      "clip": 0,
+      "voice": "Con Mesada, toda la familia tiene un sitio para organizar las tareas de casa y seguir la paga.",
+      "guide": "Una lista clara para cada persona"
+    },
+    {
+      "title": "Marcar una tarea",
+      "source": "presentacion",
+      "start": 3.8,
+      "clip": 4.6,
+      "voice": "Nora abre su lista de hoy. Cuando termina de poner el lavavajillas, marca la tarea desde su móvil.",
+      "guide": "Hoy · Poner el lavavajillas"
+    },
+    {
+      "title": "Revisar y aprobar",
+      "source": "presentacion",
+      "start": 8.7,
+      "clip": 4,
+      "voice": "Marta ve la tarea pendiente en Validar. Al aprobarla, los puntos se suman al progreso de Nora.",
+      "guide": "Validar · Aprobar"
+    },
+    {
+      "title": "De puntos a euros",
+      "source": "presentacion",
+      "start": 13.6,
+      "clip": 2.45,
+      "voice": "Cada familia decide cuánto valen los puntos. Al cerrar el periodo, la aplicación registra la conversión a euros.",
+      "guide": "Mesada · Conversión del periodo"
+    },
+    {
+      "title": "Empieza por una tarea",
+      "source": null,
+      "start": 0,
+      "clip": 0,
+      "voice": "Crea tu familia, añade una primera tarea y probad juntos el recorrido completo. Empieza en Mesada.",
+      "guide": "mesada.veryfacil.org"
+    }
+  ],
+  "tutorial": [
+    {
+      "title": "Tu primera semana con Mesada",
+      "source": null,
+      "start": 0,
+      "clip": 0,
+      "voice": "Vamos a configurar una familia de ejemplo. Verás cómo asignar una tarea, aprobarla y convertir sus puntos en paga. Al final veremos también dónde consultar el tiempo de pantalla.",
+      "guide": "De la primera tarea a la primera paga"
+    },
+    {
+      "title": "Crear la familia",
+      "source": "tutorial",
+      "start": 6.0,
+      "clip": 5.2,
+      "voice": "En el primer arranque, abre Crea tu familia. Escribe el nombre de la familia y tu nombre. Elige un usuario de adulto, añade el correo y establece una contraseña. Pulsa Crear familia para entrar en el panel. Guarda tus datos de acceso en un sitio seguro.",
+      "guide": "Nombre de la familia → cuenta adulta"
+    },
+    {
+      "title": "Añadir a un hijo",
+      "source": "tutorial",
+      "start": 14.0,
+      "clip": 7.2,
+      "voice": "En Familia, pulsa Añadir. Elige el perfil de hijo, escribe su nombre y crea un usuario que pueda recordar. Dale un PIN de acceso y pulsa Añadir. Desde ese momento tendrá su propia vista, con las tareas que le corresponden.",
+      "guide": "Familia → Añadir"
+    },
+    {
+      "title": "Crear y asignar la tarea",
+      "source": "tutorial",
+      "start": 22.5,
+      "clip": 10.4,
+      "voice": "Abre Tareas y pulsa Nueva. Dale un nombre concreto. En el ejemplo escribimos Poner el lavavajillas. Elige cuántos puntos vale, cuándo se repite y quién se encarga. Selecciona a Nora y guarda con Crear tarea. Comprueba que aparece en el listado.",
+      "guide": "Tareas → Nueva"
+    },
+    {
+      "title": "Marcar la tarea terminada",
+      "source": "tutorial",
+      "start": 36.0,
+      "clip": 7.7,
+      "voice": "En el móvil de Nora, elige Soy hijo o hija y entra con su usuario y su PIN. En Hoy aparecen las tareas asignadas. Cuando termine, pulsa el círculo al lado de la tarea. Verá que queda esperando validación. Desde el aviso puede deshacer el toque si se equivoca.",
+      "guide": "Hoy → Marcar como hecha"
+    },
+    {
+      "title": "Revisar lo que se ha hecho",
+      "source": "tutorial",
+      "start": 44.2,
+      "clip": 11.3,
+      "voice": "Vuelve a la cuenta adulta y abre Validar. Busca la tarea que envió Nora. Si está bien hecha, pulsa Aprobar. En Otras opciones puedes reconocer solo una parte, devolver la tarea o rechazarla. Una vez aprobada, Nora puede ver los puntos en su progreso.",
+      "guide": "Validar → Aprobar"
+    },
+    {
+      "title": "Cerrar el periodo",
+      "source": "tutorial",
+      "start": 64.0,
+      "clip": 7.45,
+      "voice": "Abre Mesada en la cuenta adulta. Comprueba la equivalencia de puntos y euros que tiene tu familia. Pulsa Cerrar semana y revisa el resumen antes de confirmar. El importe convertido queda pendiente de pago. Así puedes distinguir los puntos ganados del dinero que queda por entregar.",
+      "guide": "Mesada → Cerrar semana"
+    },
+    {
+      "title": "Registrar el pago",
+      "source": "tutorial",
+      "start": 73.0,
+      "clip": 6.0,
+      "voice": "Cuando entregues la paga, abre el registro de pago, indica el importe y el método que usaste. Aquí se registra un pago de ejemplo. Al confirmar, Mesada guarda el movimiento y muestra un recibo que puedes volver a consultar en el historial.",
+      "guide": "Mesada → Registrar pago"
+    },
+    {
+      "title": "Planificar tiempo de pantalla",
+      "source": "tutorial",
+      "start": 82.0,
+      "clip": 7.8,
+      "voice": "Si queréis organizar también el tiempo de pantalla, abre Ajustes y busca el plan semanal. Activa el plan para Nora, escribe los minutos y guarda. En este ejemplo, trescientos minutos son cinco horas. El plan carga sus minutos cada lunes. Nora puede consultar lo que le queda desde su cuenta.",
+      "guide": "Ajustes → Plan semanal"
+    },
+    {
+      "title": "Pruébalo en familia",
+      "source": null,
+      "start": 0,
+      "clip": 0,
+      "voice": "Para empezar, basta con una tarea y un acuerdo claro sobre cuándo se da por hecha. Probad un ciclo completo juntos. Después podréis ajustar los puntos y la frecuencia a vuestra rutina. Entra en Mesada para crear tu familia.",
+      "guide": "mesada.veryfacil.org"
+    }
+  ],
+  "vertical": [
+    {
+      "title": "¿Qué toca hacer hoy?",
+      "source": null,
+      "start": 0,
+      "clip": 0,
+      "voice": "¿Qué toca hacer hoy? Con Mesada, cada persona tiene sus tareas a mano.",
+      "guide": "Tareas · Puntos · Paga"
+    },
+    {
+      "title": "Marca la tarea",
+      "source": "presentacion",
+      "start": 3.8,
+      "clip": 4.5,
+      "voice": "Nora pone el lavavajillas y marca la tarea como hecha.",
+      "guide": "Hoy → Marcar"
+    },
+    {
+      "title": "Revisa y aprueba",
+      "source": "presentacion",
+      "start": 8.7,
+      "clip": 4,
+      "voice": "Marta la revisa y aprueba. Los puntos se suman al progreso.",
+      "guide": "Validar → Aprobar"
+    },
+    {
+      "title": "Organiza la paga",
+      "source": "presentacion",
+      "start": 13.6,
+      "clip": 2.45,
+      "voice": "Al cerrar la semana, los puntos se pueden convertir en euros.",
+      "guide": "Puntos → Euros"
+    },
+    {
+      "title": "Crea tu familia",
+      "source": null,
+      "start": 0,
+      "clip": 0,
+      "voice": "Crea tu familia y apunta la primera tarea en Mesada.",
+      "guide": "mesada.veryfacil.org"
+    }
+  ]
+}
