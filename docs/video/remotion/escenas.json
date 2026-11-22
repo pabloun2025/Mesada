@@ -61,64 +61,64 @@
     {
       "title": "Crear la familia",
       "source": "tutorial",
-      "start": 2.7,
-      "clip": 3.8,
+      "start": 6.0,
+      "clip": 5.2,
       "voice": "En el primer arranque, abre Crea tu familia. Escribe el nombre de la familia y tu nombre. Elige un usuario de adulto, añade el correo y establece una contraseña. Pulsa Crear familia para entrar en el panel. Guarda tus datos de acceso en un sitio seguro.",
       "guide": "Nombre de la familia → cuenta adulta"
     },
     {
       "title": "Añadir a un hijo",
       "source": "tutorial",
-      "start": 11.2,
-      "clip": 4.5,
+      "start": 14.0,
+      "clip": 7.2,
       "voice": "En Familia, pulsa Añadir. Elige el perfil de hijo, escribe su nombre y crea un usuario que pueda recordar. Dale un PIN de acceso y pulsa Añadir. Desde ese momento tendrá su propia vista, con las tareas que le corresponden.",
       "guide": "Familia → Añadir"
     },
     {
       "title": "Crear y asignar la tarea",
       "source": "tutorial",
-      "start": 20,
-      "clip": 9,
+      "start": 22.5,
+      "clip": 10.4,
       "voice": "Abre Tareas y pulsa Nueva. Dale un nombre concreto. En el ejemplo escribimos Poner el lavavajillas. Elige cuántos puntos vale, cuándo se repite y quién se encarga. Selecciona a Nora y guarda con Crear tarea. Comprueba que aparece en el listado.",
       "guide": "Tareas → Nueva"
     },
     {
       "title": "Marcar la tarea terminada",
       "source": "tutorial",
-      "start": 32,
-      "clip": 5.8,
+      "start": 36.0,
+      "clip": 7.7,
       "voice": "En el móvil de Nora, elige Soy hijo o hija y entra con su usuario y su PIN. En Hoy aparecen las tareas asignadas. Cuando termine, pulsa el círculo al lado de la tarea. Verá que queda esperando validación. Desde el aviso puede deshacer el toque si se equivoca.",
       "guide": "Hoy → Marcar como hecha"
     },
     {
       "title": "Revisar lo que se ha hecho",
       "source": "tutorial",
-      "start": 39.8,
-      "clip": 8.4,
+      "start": 44.2,
+      "clip": 11.3,
       "voice": "Vuelve a la cuenta adulta y abre Validar. Busca la tarea que envió Nora. Si está bien hecha, pulsa Aprobar. En Otras opciones puedes reconocer solo una parte, devolver la tarea o rechazarla. Una vez aprobada, Nora puede ver los puntos en su progreso.",
       "guide": "Validar → Aprobar"
     },
     {
       "title": "Cerrar el periodo",
       "source": "tutorial",
-      "start": 58,
-      "clip": 9,
+      "start": 64.0,
+      "clip": 7.45,
       "voice": "Abre Mesada en la cuenta adulta. Comprueba la equivalencia de puntos y euros que tiene tu familia. Pulsa Cerrar semana y revisa el resumen antes de confirmar. El importe convertido queda pendiente de pago. Así puedes distinguir los puntos ganados del dinero que queda por entregar.",
       "guide": "Mesada → Cerrar semana"
     },
     {
       "title": "Registrar el pago",
       "source": "tutorial",
-      "start": 68.5,
-      "clip": 5,
+      "start": 73.0,
+      "clip": 6.0,
       "voice": "Cuando entregues la paga, abre el registro de pago, indica el importe y el método que usaste. Aquí se registra un pago de ejemplo. Al confirmar, Mesada guarda el movimiento y muestra un recibo que puedes volver a consultar en el historial.",
       "guide": "Mesada → Registrar pago"
     },
     {
       "title": "Planificar tiempo de pantalla",
       "source": "tutorial",
-      "start": 78,
-      "clip": 9,
+      "start": 82.0,
+      "clip": 7.8,
       "voice": "Si queréis organizar también el tiempo de pantalla, abre Ajustes y busca el plan semanal. Activa el plan para Nora, escribe los minutos y guarda. En este ejemplo, trescientos minutos son cinco horas. El plan carga sus minutos cada lunes. Nora puede consultar lo que le queda desde su cuenta.",
       "guide": "Ajustes → Plan semanal"
     },
