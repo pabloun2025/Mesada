@@ -83,7 +83,7 @@ export function Countdown({ state, session, children }: { state: ScreenState; se
   );
 }
 
-const END_TEXT: Record<string, string> = { stopped: 'Parada', expired: 'Se acabó el tiempo', charge: 'Minutos dados', blocked: 'Parada por un bloqueo' };
+const END_TEXT: Record<string, string> = { stopped: 'Parada', expired: 'Se acabó el tiempo', charge: 'Minutos dados', blocked: 'Parada por un descanso' };
 
 function sessionTitle(s: ScreenSession) {
   const cat = s.category ? ` · ${categoryInfo(s.category)?.emoji ?? ''} ${categoryInfo(s.category)?.label ?? ''}` : '';
@@ -179,7 +179,7 @@ export function ChallengeReviewCard({ b, showName = true }: { b: { id: string; d
   const [note, setNote] = useState('');
   const act = useMutation({
     mutationFn: (approve: boolean) => post(`/screen/blocks/${b.id}/challenge/review`, { approve, note: approve ? undefined : note || undefined }),
-    onSuccess: (r) => { toast(r.result === 'lifted' ? 'Reto validado: bloqueo levantado' : r.result === 'shortened' ? 'Reto validado: bloqueo acortado' : 'Le pides repetirlo'); invalidate(); },
+    onSuccess: (r) => { toast(r.result === 'lifted' ? 'Reto validado: descanso terminado' : r.result === 'shortened' ? 'Reto validado: descanso acortado' : 'Le pides repetirlo'); invalidate(); },
     onError: (e: Error) => toast(e.message, 'error'),
   });
   return (
@@ -189,7 +189,7 @@ export function ChallengeReviewCard({ b, showName = true }: { b: { id: string; d
         <div className="min-w-0 flex-1">
           <p className="font-bold">{showName && b.display_name ? `${b.display_name} dice que ha cumplido su reto` : 'Reto cumplido'}</p>
           <p className="text-sm">«{b.challenge_text}»</p>
-          <p className="text-sm muted">Bloqueo: {b.reason} · {b.challenge_effect === 'lift' ? 'al validarlo se levanta' : `al validarlo se acorta ${b.challenge_days} ${b.challenge_days === 1 ? 'día' : 'días'}`}.{b.challenge_note ? ` Dice: «${b.challenge_note}»` : ''}</p>
+          <p className="text-sm muted">Descanso: {b.reason} · {b.challenge_effect === 'lift' ? 'al validarlo termina' : `al validarlo se acorta ${b.challenge_days} ${b.challenge_days === 1 ? 'día' : 'días'}`}.{b.challenge_note ? ` Dice: «${b.challenge_note}»` : ''}</p>
         </div>
       </div>
       {b.has_photo ? <img src={`/api/screen/blocks/${b.id}/photo`} alt="Foto del reto cumplido" className="max-h-60 w-full rounded-2xl object-cover" /> : null}

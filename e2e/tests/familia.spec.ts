@@ -1720,32 +1720,32 @@ test.describe.serial('Familia completa', () => {
     await ap.context().close();
   });
 
-  test('pantalla (I21): castigo con reto con foto; el hijo lo cumple, un adulto lo valida y el bloqueo se levanta', async ({ browser }) => {
+  test('pantalla (I21): descanso de pantalla con reto con foto; el hijo lo cumple, un adulto lo valida y el descanso termina', async ({ browser }) => {
     test.setTimeout(120_000);
     const me = (await api(kid, 'get', '/me')).body.user;
     const ap = await newAdultPhone(browser);
     await ap.goto(`/pantalla?hijo=${me.id}`);
-    await ap.getByRole('button', { name: /Bloquear pantalla/ }).click();
+    await ap.getByRole('button', { name: /Programar descanso/ }).click();
     const d = ap.getByRole('dialog');
     await d.getByRole('button', { name: 'Hasta mañana' }).click();
     await d.getByLabel('Motivo').fill('Notas del cole');
     await d.getByLabel('Añadir un reto').check({ force: true });
     await d.getByLabel('El reto').fill('Ordena tu cuarto');
     await d.getByLabel('Pedir una foto como prueba').check({ force: true });
-    await shot(ap, '119-padre-bloquear-con-reto-375');
-    await d.getByRole('button', { name: 'Poner el bloqueo' }).click();
+    await shot(ap, '119-padre-descanso-con-reto-375');
+    await d.getByRole('button', { name: 'Programar el descanso' }).click();
     await expect(ap.getByText('Sin pantalla hasta mañana (incluido)').first()).toBeVisible();
 
     // El hijo lo ve con su motivo y su reto; el botón no arranca.
     await kid.goto('/pantalla');
-    const block = kid.getByRole('region', { name: 'Bloqueos de pantalla' });
+    const block = kid.getByRole('region', { name: 'Descansos de pantalla' });
     await expect(block).toContainText('Sin pantalla hasta mañana (incluido)');
     await expect(block).toContainText('Motivo: Notas del cole');
     await expect(block).toContainText('Reto: Ordena tu cuarto');
     await expect(kid.getByRole('button', { name: 'Usar pantalla' })).toBeDisabled();
     await expect(kid.getByTestId('start-reason')).toContainText('Notas del cole');
     expect((await api(kid, 'get', '/notifications')).body.notifications.some((n: any) => n.kind === 'screen_block' && /Sin pantalla hasta mañana/.test(n.title))).toBe(true);
-    await shot(kid, '120-hijo-bloqueo-con-reto-375', { fullPage: true });
+    await shot(kid, '120-hijo-descanso-con-reto-375', { fullPage: true });
 
     // Sin foto no se puede enviar; con foto, sí.
     await kid.getByRole('button', { name: 'Ya lo he hecho' }).click();
@@ -1766,10 +1766,10 @@ test.describe.serial('Familia completa', () => {
     await expect(card.getByRole('img', { name: 'Foto del reto cumplido' })).toBeVisible();
     await shot(ap, '121-validar-reto-375', { fullPage: true });
     await card.getByRole('button', { name: 'Validar' }).click();
-    await expect(ap.getByText('Reto validado: bloqueo levantado')).toBeVisible();
+    await expect(ap.getByText('Reto validado: descanso terminado')).toBeVisible();
     await kid.reload();
     await expect(kid.getByRole('button', { name: 'Usar pantalla' })).toBeEnabled();
-    await expect(kid.getByRole('region', { name: 'Bloqueos de pantalla' })).toHaveCount(0);
+    await expect(kid.getByRole('region', { name: 'Descansos de pantalla' })).toHaveCount(0);
     expect((await api(kid, 'get', '/notifications')).body.notifications.some((n: any) => /Reto cumplido/.test(n.title))).toBe(true);
 
     // Una franja horaria que no toca ahora no bloquea, y se ve con sus horas.
@@ -1779,7 +1779,7 @@ test.describe.serial('Familia completa', () => {
     expect(w.status).toBe(200);
     expect(w.body.label).toContain(`Sin pantalla de ${away[0]} a ${away[1]}`);
     await kid.reload();
-    await expect(kid.getByRole('region', { name: 'Bloqueos de pantalla' })).toContainText(`Sin pantalla de ${away[0]} a ${away[1]}`);
+    await expect(kid.getByRole('region', { name: 'Descansos de pantalla' })).toContainText(`Sin pantalla de ${away[0]} a ${away[1]}`);
     await api(adult, 'post', `/screen/blocks/${w.body.id}/lift`, {});
     // Un bloqueo con reto que acorta, y que se repite si no vale.
     const b2 = (await api(adult, 'post', '/screen/blocks', { userId: me.id, kind: 'days', reason: 'Gritos', endsOn: new Date(Date.now() + 4 * 86400000).toISOString().slice(0, 10), challenge: { text: 'Lee 20 min', effect: 'shorten', days: 2 } })).body;

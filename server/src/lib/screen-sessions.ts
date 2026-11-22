@@ -153,7 +153,7 @@ export function canStart(a: Access, own: boolean): { ok: boolean; code: string |
     if (a.capLeft != null) max = Math.min(max, a.capLeft);
   }
   if (a.untilBlockMin != null) max = Math.min(max, a.untilBlockMin);
-  if (max < 1) return fail('window', 'Enseguida empieza un bloqueo de pantalla.');
+  if (max < 1) return fail('window', 'Enseguida empieza un descanso de pantalla.');
   return { ok: true, code: null, reason: '', maxMinutes: max };
 }
 
@@ -348,7 +348,7 @@ export async function startSession(actor: AuthUser, p: StartInput, opts: { now?:
     if (!extra && p.minutes > can.maxMinutes) {
       throw conflict(access.capLeft != null && can.maxMinutes === access.capLeft ? `Hoy solo te quedan ${can.maxMinutes} min según tu plan.` : `Ahora puedes usar como mucho ${can.maxMinutes} min.`, 'too_long');
     }
-    if (extra && !charge && access.untilBlockMin != null && p.minutes > access.untilBlockMin) throw conflict(`Enseguida empieza un bloqueo: solo caben ${access.untilBlockMin} min.`, 'too_long');
+    if (extra && !charge && access.untilBlockMin != null && p.minutes > access.untilBlockMin) throw conflict(`Enseguida empieza un descanso: solo caben ${access.untilBlockMin} min.`, 'too_long');
 
     // Lo que las baterías no cubren y cómo se paga.
     const short = extra ? Math.max(0, p.minutes - access.balance) : 0;
@@ -452,7 +452,7 @@ export async function approveSession(adult: AuthUser, id: string, opts: { now?: 
     // La propia petición es la sesión abierta: solo importan la pausa y los bloqueos.
     const can = canStart({ ...a, open: false }, false);
     if (!can.ok && can.code !== 'no_balance' && can.code !== 'day' && can.code !== 'cap') throw conflict(can.reason, can.code ?? 'blocked');
-    if (a.untilBlockMin != null && s.requested_minutes > a.untilBlockMin) throw conflict(`Enseguida empieza un bloqueo: solo caben ${a.untilBlockMin} min.`, 'too_long');
+    if (a.untilBlockMin != null && s.requested_minutes > a.untilBlockMin) throw conflict(`Enseguida empieza un descanso: solo caben ${a.untilBlockMin} min.`, 'too_long');
     if (s.kind === 'charge') {
       // Tiempo extra: se descuenta al aprobarlo, sin temporizador.
       await db.query(`UPDATE screen_sessions SET started_at = $2, planned_end_at = $2, decided_by = $3, decided_at = $2 WHERE id = $1`, [id, now, adult.id]);
@@ -563,7 +563,7 @@ export async function createBlock(adult: AuthUser, p: NewBlock, opts: { now?: Da
     const fam = await getFamily(db, adult.familyId);
     const today = todayIn(fam.timezone, now);
     if (p.endsOn < today) throw badRequest('El último día no puede ser anterior a hoy');
-    if (p.endsOn > addDays(today, 90)) throw badRequest('Un bloqueo puede durar 90 días como máximo');
+    if (p.endsOn > addDays(today, 90)) throw badRequest('Un descanso puede durar 90 días como máximo');
     const ch = p.challenge?.text?.trim() ? p.challenge : null;
     if (ch && ch.effect === 'shorten' && !(ch.days && ch.days >= 1)) throw badRequest('Indica cuántos días acorta el reto');
     const b = (await one<{ id: string }>(
@@ -596,7 +596,7 @@ export async function createBlock(adult: AuthUser, p: NewBlock, opts: { now?: Da
 
 async function loadBlock(db: Db, familyId: string, id: string) {
   const b = await one<BlockRow & { family_id: string }>(db, 'SELECT * FROM screen_blocks WHERE id = $1 AND family_id = $2 FOR UPDATE', [id, familyId]);
-  if (!b) throw notFound('Bloqueo no encontrado');
+  if (!b) throw notFound('Descanso no encontrado');
   return b;
 }
 
@@ -606,7 +606,7 @@ export async function liftBlock(adult: AuthUser, id: string) {
     if (b.status === 'lifted') return { ok: true, duplicate: true };
     await db.query(`UPDATE screen_blocks SET status = 'lifted', lifted_at = now(), lifted_by = $2 WHERE id = $1`, [id, adult.id]);
     await audit(db, adult.familyId, adult.id, 'screen_block.lift', 'screen_block', id, { for: b.user_id });
-    await notify(db, { userId: b.user_id, event: 'screen_block', title: `${adult.displayName} ha levantado el bloqueo de pantalla`, body: b.reason, link: '/pantalla', dedupeKey: `screen-lift:${id}` });
+    await notify(db, { userId: b.user_id, event: 'screen_block', title: `${adult.displayName} ha terminado tu descanso de pantalla`, body: b.reason, link: '/pantalla', dedupeKey: `screen-lift:${id}` });
     return { ok: true, duplicate: false };
   });
 }
@@ -617,8 +617,8 @@ export async function submitChallenge(child: AuthUser, id: string, o: { note?: s
     const b = await loadBlock(db, child.familyId, id);
     if (b.user_id !== child.id) throw forbidden();
     const fam = await getFamily(db, child.familyId);
-    if (b.status !== 'active' || b.ends_on < todayIn(fam.timezone)) throw conflict('Este bloqueo ya no está activo', 'not_active');
-    if (!b.challenge_text) throw conflict('Este bloqueo no tiene reto', 'no_challenge');
+    if (b.status !== 'active' || b.ends_on < todayIn(fam.timezone)) throw conflict('Este descanso ya no está activo', 'not_active');
+    if (!b.challenge_text) throw conflict('Este descanso no tiene reto', 'no_challenge');
     if (b.challenge_status === 'submitted') throw conflict('El reto ya está enviado: espera a que lo valide un adulto', 'already_submitted');
     if (b.challenge_status === 'approved') throw conflict('El reto ya está validado', 'already_decided');
     if (b.challenge_photo && !o.photoPath) throw badRequest('Este reto necesita una foto como prueba', 'photo_required');
@@ -628,7 +628,7 @@ export async function submitChallenge(child: AuthUser, id: string, o: { note?: s
       [id, (o.note ?? '').slice(0, 300), o.photoPath ?? null],
     );
     await audit(db, child.familyId, child.id, 'screen_block.challenge_done', 'screen_block', id, { for: child.id });
-    await notifyAdults(db, child.familyId, { event: 'screen_challenge', title: `${child.displayName} ha cumplido su reto: «${b.challenge_text}»`, body: 'Valídalo para quitar o acortar el bloqueo de pantalla.', link: '/validar', dedupeKey: `screen-chal:${id}:${Date.now()}` });
+    await notifyAdults(db, child.familyId, { event: 'screen_challenge', title: `${child.displayName} ha cumplido su reto: «${b.challenge_text}»`, body: 'Valídalo para terminar o acortar su descanso de pantalla.', link: '/validar', dedupeKey: `screen-chal:${id}:${Date.now()}` });
     if (o.photoPath && old && old !== o.photoPath) removePhotoFile(old);
     return { ok: true };
   });
@@ -659,8 +659,8 @@ export async function reviewChallenge(adult: AuthUser, id: string, approve: bool
       await db.query(`UPDATE screen_blocks SET challenge_status = 'rejected', challenge_note = $2, challenge_decided_at = now(), challenge_decided_by = $3 WHERE id = $1`, [id, note.trim().slice(0, 300), adult.id]);
     }
     await audit(db, adult.familyId, adult.id, 'screen_block.challenge_review', 'screen_block', id, { for: b.user_id, approve, result });
-    const title = result === 'lifted' ? `¡Reto cumplido! ${adult.displayName} ha levantado el bloqueo de pantalla`
-      : result === 'shortened' ? `¡Reto cumplido! El bloqueo se acorta ${b.challenge_days} ${b.challenge_days === 1 ? 'día' : 'días'}`
+    const title = result === 'lifted' ? `¡Reto cumplido! ${adult.displayName} ha terminado tu descanso de pantalla`
+      : result === 'shortened' ? `¡Reto cumplido! Tu descanso se acorta ${b.challenge_days} ${b.challenge_days === 1 ? 'día' : 'días'}`
       : `${adult.displayName} te pide repetir el reto «${b.challenge_text}»`;
     await notify(db, { userId: b.user_id, event: 'screen_block', title, body: approve ? '' : note.trim(), link: '/pantalla', dedupeKey: `screen-chal-dec:${id}:${Date.now()}` });
     return { ok: true, result };
@@ -750,7 +750,7 @@ export async function saveRules(adult: AuthUser, userId: string, r: Rules) {
   return tx(async (db) => {
     await childOf(db, adult.familyId, userId);
     const days = [...new Set(r.allowedDays)].sort((a, b) => a - b);
-    if (!days.length) throw badRequest('Deja al menos un día permitido (o bloquea la pantalla con un castigo)');
+    if (!days.length) throw badRequest('Deja al menos un día permitido (o programa un descanso de pantalla)');
     const max: Record<string, number> = {};
     for (const [k, v] of Object.entries(r.dayMax)) if (days.includes(Number(k)) && v > 0) max[k] = v;
     await db.query(

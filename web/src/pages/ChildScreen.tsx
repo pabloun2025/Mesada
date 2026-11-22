@@ -23,7 +23,7 @@ function BlockCard({ b, onDone }: { b: ScreenBlock; onDone: (b: ScreenBlock) => 
       {c ? (
         <div className="rounded-2xl bg-[var(--chip)] p-3 text-sm">
           <p className="font-bold">Reto: {c.text}</p>
-          <p className="muted">{c.effect === 'lift' ? 'Si lo cumples, se levanta el bloqueo.' : `Si lo cumples, el bloqueo se acorta ${c.days} ${c.days === 1 ? 'día' : 'días'}.`}{c.photo_required ? ' Hay que mandar una foto.' : ''}</p>
+          <p className="muted">{c.effect === 'lift' ? 'Si lo cumples, el descanso termina.' : `Si lo cumples, el descanso se acorta ${c.days} ${c.days === 1 ? 'día' : 'días'}.`}{c.photo_required ? ' Hay que mandar una foto.' : ''}</p>
           {c.status === 'submitted' ? <p className="mt-2"><Badge tone="sun">Esperando a que un adulto lo valide</Badge></p> : null}
           {c.status === 'rejected' ? <p className="mt-2 font-bold text-berry-deep dark:text-[#ff9dbf]">Hay que repetirlo{c.note ? `: «${c.note}»` : ''}</p> : null}
           {c.status === 'open' || c.status === 'rejected' ? <Button size="sm" className="mt-2" onClick={() => onDone(b)}>Ya lo he hecho</Button> : null}
@@ -106,8 +106,8 @@ export default function ChildScreen() {
       ) : null}
 
       {blocks.length ? (
-        <section aria-label="Bloqueos de pantalla">
-          <SectionTitle>Bloqueos</SectionTitle>
+        <section aria-label="Descansos de pantalla">
+          <SectionTitle>Descansos de pantalla</SectionTitle>
           <ul className="space-y-3">{blocks.map((b) => <BlockCard key={b.id} b={b} onDone={setChallenge} />)}</ul>
         </section>
       ) : null}
