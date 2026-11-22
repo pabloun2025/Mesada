@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getPool, many, one } from '../lib/db.js';
 import { requireAdult, requireUser, type AuthUser } from '../lib/auth.js';
 import { conflict, forbidden, notFound } from '../lib/errors.js';
-import { createGoal, goalAmounts, listGoals } from '../lib/savings.js';
+import { cancelGoal, createGoal, listGoals, updateGoal } from '../lib/savings.js';
 import { familyToday, getFamily } from '../lib/family.js';
 import { previousPeriod, isValidDate } from '../lib/dates.js';
 import {
@@ -125,15 +125,22 @@ export default async function moneyRoutes(app: FastifyInstance) {
     return { goal: await createGoal(u, b) };
   });
 
+  // Un adulto cambia nombre, precio o emoji de una meta activa.
+  app.patch('/api/goals/:id', async (req) => {
+    const u = requireAdult(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({
+      title: z.string().trim().min(1).max(80).optional(), targetCents: z.number().int().positive().max(100000000).optional(),
+      emoji: z.string().trim().max(16).nullable().optional(),
+    }).parse(req.body ?? {});
+    return updateGoal(u, id, b);
+  });
+
+  // Cancelar una meta: si tenía dinero, lo ahorrado vuelve a la cuenta de dinero del banco.
   app.delete('/api/goals/:id', async (req) => {
     const u = requireUser(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
-    const g = await one(getPool(), 'SELECT user_id FROM savings_goals WHERE id = $1 AND family_id = $2', [id, u.familyId]);
-    if (!g) throw notFound();
-    await assertCanView(u, g.user_id);
-    // Con dinero dentro no se quita: antes hay que sacarlo o canjearlo.
-    if ((await goalAmounts(getPool(), id)).balance !== 0) throw conflict('Esta meta tiene dinero ahorrado. Sácalo o canjéala antes de quitarla', 'goal_not_empty');
-    await getPool().query('UPDATE savings_goals SET archived = true, closed_at = COALESCE(closed_at, now()) WHERE id = $1', [id]);
-    return { ok: true };
+    const b = z.object({ reason: z.string().trim().max(300).optional() }).parse(req.body ?? {});
+    return { ok: true, ...(await cancelGoal(u, id, b.reason)) };
   });
 }

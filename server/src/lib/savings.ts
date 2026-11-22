@@ -583,3 +583,52 @@ export async function setGoalPhoto(actor: AuthUser, goalId: string, photoPath: s
     return { ok: true };
   });
 }
+
+/** Un adulto cambia nombre, precio o emoji de una meta ya activa; el hijo recibe un aviso con lo nuevo. */
+export async function updateGoal(adult: AuthUser, goalId: string, o: { title?: string; targetCents?: number; emoji?: string | null }) {
+  return tx(async (db) => {
+    const g = await loadGoal(db, adult.familyId, goalId);
+    if (g.status !== 'active') throw conflict('Solo se pueden cambiar metas activas', 'goal_closed');
+    const title = o.title?.trim() || g.title;
+    const target = o.targetCents ?? g.target_cents;
+    const emoji = o.emoji === undefined ? g.emoji : o.emoji || null;
+    if (title === g.title && target === g.target_cents && emoji === g.emoji) return { goal: g, changed: false };
+    const upd = await one(db, 'UPDATE savings_goals SET title = $2, target_cents = $3, emoji = $4 WHERE id = $1 RETURNING *', [goalId, title, target, emoji]);
+    await audit(db, adult.familyId, adult.id, 'goal.update', 'savings_goal', goalId, { before: { title: g.title, targetCents: g.target_cents }, after: { title, targetCents: target }, for: g.user_id });
+    const cur = (await getFamily(db, adult.familyId)).currency;
+    await notify(db, {
+      userId: g.user_id, event: 'goal_decided', title: `${goalWho(adult)} ha cambiado tu meta «${g.title}»`,
+      body: `Ahora es «${title}» y cuesta ${fmtMoney(target, cur)}.`, link: '/mesada', dedupeKey: `goal-update:${goalId}:${randomUUID()}`,
+    });
+    return { goal: upd, changed: true };
+  });
+}
+
+/**
+ * Cancelar una meta (el hijo la suya, o un adulto cualquiera). Si tenía dinero, lo ahorrado vuelve a la cuenta de dinero
+ * del banco; interés y aportes se pierden, igual que al sacar el ahorro antes de tiempo, para que cancelar no sea un atajo.
+ */
+export async function cancelGoal(actor: AuthUser, goalId: string, reason?: string) {
+  return tx(async (db) => {
+    const g = await loadGoal(db, actor.familyId, goalId);
+    assertOwnerOrAdult(actor, g);
+    if (await hasPendingRequest(db, goalId)) throw conflict('Esta meta tiene una petición esperando a un adulto. Resuélvela antes de cancelarla', 'goal_pending');
+    await lockUser(db, g.user_id);
+    const a = await goalAmounts(db, goalId);
+    if (a.balance > 0) await moveOut(db, actor, g, a, `gcancel:${goalId}`, `Meta cancelada: ${g.title}`);
+    await db.query(`UPDATE savings_goals SET archived = true, closed_at = COALESCE(closed_at, now()) WHERE id = $1`, [goalId]);
+    const returned = Math.max(0, a.balance > 0 ? a.principal : 0);
+    const forfeited = a.balance > 0 ? a.interest + a.gifts : 0;
+    await audit(db, actor.familyId, actor.id, 'goal.cancel', 'savings_goal', goalId, { title: g.title, returned, forfeited, reason: reason?.trim() || null, for: g.user_id });
+    if (actor.id !== g.user_id) {
+      const cur = (await getFamily(db, actor.familyId)).currency;
+      const why = reason?.trim() ? ` Motivo: ${reason.trim()}` : '';
+      await notify(db, {
+        userId: g.user_id, event: 'goal_decided', title: `${goalWho(actor)} ha cancelado tu meta «${g.title}»`,
+        body: (returned > 0 ? `Tus ${fmtMoney(returned, cur)} ahorrados han vuelto a Mi banco.` : 'No tenía dinero ahorrado.') + why,
+        link: '/mesada', dedupeKey: `goal-cancel:${goalId}`,
+      });
+    }
+    return { returned_cents: returned, forfeited_cents: forfeited };
+  });
+}

@@ -59,7 +59,7 @@ export class Client {
   post = (u: string, b?: unknown, h?: Record<string, string>) => this.req('POST', u, b ?? {}, h);
   put = (u: string, b?: unknown) => this.req('PUT', u, b);
   patch = (u: string, b?: unknown) => this.req('PATCH', u, b);
-  del = (u: string) => this.req('DELETE', u);
+  del = (u: string, b?: unknown) => this.req('DELETE', u, b);
 }
 
 /** Crea una familia con 2 adultos y 2 hijos y devuelve clientes autenticados. */
