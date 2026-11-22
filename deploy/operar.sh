@@ -110,7 +110,9 @@ case "${1:-estado}" in
     disk="/dev/$(lsblk -no PKNAME "$src")"; part=$(echo "$src" | grep -oE '[0-9]+$')
     echo "Antes:"; df -h / | tail -1 | awk '{print "  total " $2 " · usado " $3 " (" $5 ") · libre " $4}'
     # Que el sistema vea el tamaño nuevo del volumen (lo que Oracle llama «rescan»).
+    sudo -n dd iflag=direct if=/dev/oracleoci/oraclevda of=/dev/null count=1 2>/dev/null || true
     sudo -n sh -c "echo 1 > /sys/class/block/$(basename "$disk")/device/rescan" 2>/dev/null || true
+    sleep 3
     lsblk -o NAME,SIZE,TYPE,MOUNTPOINT "$disk"
     sudo -n growpart "$disk" "$part" || echo "(growpart: no hay espacio nuevo en el volumen o la partición ya ocupa todo)"
     case "$fstype" in
