@@ -40,3 +40,12 @@ Estado: ✅ hecho y probado · 🟡 parcial · ⬜ pendiente
 | P12 | ⬜ Inspeccionar por dentro play.nipto.app y la app web de KidTask con una cuenta autorizada | No había cuenta autorizada; ver `research/investigacion.md` |
 | P13 | ⬜ Pruebas E2E en Firefox/WebKit y de accesibilidad automatizada (axe) | Hoy solo Chromium |
 | P14 | ⬜ Traducciones (la base ya usa `Intl`) | Fuera del alcance inicial |
+
+## Pendiente tras las ideas I9–I15 y el repaso de calidad (22/11)
+
+- ⬜ Botones de los días de la semana en el formulario de tareas: a 320 px miden unos 40 px de ancho (el resto cumple 44 px).
+- ⬜ Aviso propio cuando una pantalla falla al dibujarse (límite de errores de React).
+- ⬜ `Field`: enlazar pistas y errores con `aria-describedby` para lectores de pantalla.
+- ⬜ Revisar a mano el modo oscuro sobre fondos con degradado (tarjeta grande del hijo y tarjetas de cuenta), que la auditoría automática no mide.
+- ⬜ Captura del recibo de canje con las monedas doradas.
+- ⬜ Pendientes anteriores: la hoja «Dar pantalla» y la tabla «Cierres anteriores» con el estilo viejo; la actividad sin las operaciones del banco; los puntos de toda la vida no bajan al anular los de honestidad.
