@@ -1,6 +1,6 @@
 # Condiciones de uso
 
-_Versión 2026-11-23 · Última actualización: 23 de noviembre de 2026_
+_Versión 2026-11-24 · Última actualización: 24 de noviembre de 2026_
 
 Estas condiciones regulan el uso de DiploP, un servicio que ofrece **el responsable de DiploP**. Al crear tu familia marcas la casilla y las aceptas, junto con la [Política de privacidad](/privacidad).
 

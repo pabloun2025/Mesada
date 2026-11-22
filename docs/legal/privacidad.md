@@ -1,6 +1,6 @@
 # Política de privacidad
 
-_Versión 2026-11-23 · Última actualización: 23 de noviembre de 2026_
+_Versión 2026-11-24 · Última actualización: 24 de noviembre de 2026_
 
 DiploP es una aplicación para que las familias reparta tareas, puntos y mesada. Aquí te contamos, con frases cortas, qué datos guardamos, para qué, cuánto tiempo, dónde y cómo ejercer tus derechos.
 
@@ -25,9 +25,11 @@ DiploP guarda datos de niños y niñas. Por eso:
 
 **De los hijos:** nombre o apodo, usuario, PIN (solo su huella), año de nacimiento si lo indicas, avatar, color, objetivo semanal y, si un adulto lo configura y el menor tiene 13 años o más, un teléfono para avisos por WhatsApp.
 
-**Lo que se hace en la familia:** tareas y cuándo se hacen, notas y motivos de revisión, puntos, dinero de la mesada y pagos, minutos de pantalla, recompensas y canjes, metas de ahorro (con su emoji o foto opcional, el ahorro automático y los aportes de padres y parientes) y préstamos, las felicitaciones (mensajes cortos de hasta 140 caracteres que un adulto o pariente envía a un niño), la moneda elegida (euro o dólar: solo cambia el símbolo, no convierte importes), insignias, avisos y el historial de acciones de la familia.
+**Lo que se hace en la familia:** tareas y cuándo se hacen, notas y motivos de revisión, puntos, dinero de la mesada y pagos, minutos de pantalla (con las sesiones del temporizador: quién las enciende, cuándo y cuánto duran; los días de uso, los bloqueos con su motivo y los retos para levantarlos), recompensas y canjes, metas de ahorro (con su emoji o foto opcional, el ahorro automático y los aportes de padres y parientes) y préstamos, las felicitaciones (mensajes cortos de hasta 140 caracteres que un adulto o pariente envía a un niño), la moneda elegida (euro o dólar: solo cambia el símbolo, no convierte importes), insignias, avisos y el historial de acciones de la familia.
 
 **Fotos de evidencia:** solo si una tarea las pide, el hijo puede subir una foto. Antes de guardarla se **reduce de tamaño** (1280 píxeles como máximo) y se le **quitan los datos ocultos** de la cámara, como la ubicación (GPS), el modelo del móvil y la fecha. Se guarda en una carpeta privada del servidor y solo la ven los adultos de la familia y quien la subió. **Se borra sola 7 días después de que un adulto valide la tarea** (aceptada, parcial o rechazada). Te pedimos que no salgan personas ni datos que no hagan falta.
+
+**Fotos de retos de pantalla:** si un adulto bloquea la pantalla con un reto que pide foto como prueba, el hijo puede subirla (se reduce y se le quitan los datos ocultos, como en las demás). La ven los adultos de la familia y el propio hijo, y **se borra 7 días después de que un adulto valide el reto o levante el bloqueo**.
 
 **Fotos de metas de ahorro:** el hijo puede poner una foto del objetivo (se reduce y se le quitan los datos ocultos, igual que las de evidencia). **Se conserva mientras la meta siga abierta** y se borra 7 días después de que la meta se compre, se pase a efectivo, se rechace o se quite.
 
@@ -48,6 +50,7 @@ DiploP guarda datos de niños y niñas. Por eso:
 ## Cuánto tiempo los guardamos
 
 - **Mientras la familia use DiploP.** No borramos nada por inactividad: si dejas de usarla, borra tu familia desde Ajustes.
+- **Fotos de retos de pantalla:** 7 días después de validar el reto o levantar el bloqueo.
 - **Fotos de evidencia:** 7 días después de validar la tarea. Si el hijo desmarca la tarea o sube otra foto, la anterior se borra en el momento.
 - **Cuando borras** un hijo o la familia, los datos y las fotos se eliminan **al momento** del servidor y de la base de datos.
 - **Copias de seguridad:** las copias antiguas se van destruyendo solas. Un dato borrado puede seguir en una copia cifrada hasta **30 días**, y desaparece cuando esa copia caduca. No se usa para nada más.

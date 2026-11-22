@@ -9,7 +9,7 @@ import { useSession } from '../lib/session';
 import type { ExtraBoardItem, Goal, Instance, Progress, ScreenView, Wallet, BonusGrant } from '../lib/types';
 import { minutesLabel } from '../lib/deadline';
 import { Button, Empty, Loading, SectionTitle, Sheet, useToast } from '../components/ui';
-import { LogScreenSheet } from '../components/MoneySheets';
+import { useScreenState, useRemainingMs, clock } from '../lib/screen-state';
 import { WeekRing } from '../components/Ring';
 import { GoldCoins } from '../components/Coins';
 import { TaskRow } from '../components/TaskRow';
@@ -33,7 +33,9 @@ export default function ChildToday() {
   const progress = useQuery({ queryKey: ['progress', user.id], queryFn: () => api<Progress>(`/progress/${user.id}`) });
   const screen = useQuery({ queryKey: ['screen', user.id], queryFn: () => api<ScreenView>(`/screen/${user.id}`) });
   const extras = useQuery({ queryKey: ['extras'], queryFn: () => api<{ board: ExtraBoardItem[] }>('/extras') });
-  const [logOpen, setLogOpen] = useState(false);
+  const screenState = useScreenState(user.id);
+  const running = screenState.data?.session?.status === 'running' ? screenState.data.session : null;
+  const runningMs = useRemainingMs(screenState.data, running);
   const [photoFor, setPhotoFor] = useState<Instance | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -108,9 +110,9 @@ export default function ChildToday() {
               <Flame size={16} className={p?.streak ? 'text-sun' : 'text-[var(--fg-3)]'} aria-hidden /> {p?.streak ?? 0} {p?.streak === 1 ? 'día' : 'días'} de racha
             </span>
             {screenMin != null ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
+              <Link to="/pantalla" data-minutes-target className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
                 <Smartphone size={16} aria-hidden /> {minutesLabel(screenMin)} de pantalla
-              </span>
+              </Link>
             ) : null}
             {screen.data?.pause ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-sun px-3 py-1 text-sm font-bold text-ink">
@@ -118,9 +120,9 @@ export default function ChildToday() {
               </span>
             ) : null}
             {screenMin != null ? (
-              <button type="button" onClick={() => setLogOpen(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[var(--chip)] px-4 py-1 text-sm font-bold underline decoration-dotted underline-offset-4">
-                Anotar pantalla
-              </button>
+              <Link to="/pantalla" className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-sun px-4 py-1 text-sm font-bold text-ink">
+                {running && runningMs != null ? <>Pantalla en marcha · <span className="num">{clock(runningMs)}</span></> : 'Usar pantalla'}
+              </Link>
             ) : null}
             {p ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
@@ -220,7 +222,6 @@ export default function ChildToday() {
         ) : null}
         <Button variant="secondary" className="w-full" onClick={() => fileRef.current?.click()}><Camera size={18} /> {file ? 'Hacer otra' : 'Hacer foto'}</Button>
       </Sheet>
-      {logOpen && screenMin != null ? <LogScreenSheet balance={screenMin} onClose={() => setLogOpen(false)} /> : null}
       {firsts.length > 0 && open.length === 0 ? <p className="mt-6 flex items-center justify-center gap-2 text-sm muted"><CalendarCheck size={16} aria-hidden /> Mañana más.</p> : null}
     </div>
   );

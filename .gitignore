@@ -10,3 +10,4 @@ playwright-report/
 .playwright-cli/
 web/dev-dist/
 __pycache__/
+e2e/.data/

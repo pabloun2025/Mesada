@@ -145,14 +145,14 @@ export function AmountSheet(p: AmountSheetProps) {
         <AmountDisplay raw={raw} unit={unit} over={over} />
         <div className="mt-2 min-h-6 text-center text-sm text-[var(--fg-2)]" aria-live="polite">{value > 0 && !over ? p.after?.(value) : null}</div>
         {!p.locked && chips.length ? (
-          <div className="mt-3 flex justify-center gap-2">
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
             {chips.map((c) => (
               <button
                 key={c.label}
                 type="button"
                 aria-pressed={value === c.value}
                 onClick={() => setRaw(valueToRaw(c.value, unit))}
-                className={`num h-11 rounded-full border-[1.5px] px-[1.1rem] font-semibold transition ${value === c.value ? 'border-tangerine bg-tangerine-soft text-tangerine-deep dark:bg-tangerine/20' : 'border-transparent bg-[var(--chip)]'}`}
+                className={`num h-11 whitespace-nowrap rounded-full border-[1.5px] px-3.5 font-semibold transition ${value === c.value ? 'border-tangerine bg-tangerine-soft text-tangerine-deep dark:bg-tangerine/20' : 'border-transparent bg-[var(--chip)]'}`}
               >
                 {c.label}
               </button>

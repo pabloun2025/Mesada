@@ -4,35 +4,69 @@ import { Archive, Pencil, Plus } from 'lucide-react';
 import { api, del, post, put } from '../lib/api';
 import { useInvalidateAll } from '../lib/hooks';
 import { minutesHM } from '../lib/deadline';
+import { currencySymbol, decimalSep, euros, parseEuros } from '../lib/format';
 import type { ScreenPlanRow, ScreenReason } from '../lib/types';
-import { Avatar, Button, Field, IconButton, Segmented, Sheet, Toggle, useToast } from './ui';
+import { DAY_LETTERS, DAY_NAMES } from '../lib/screen-state';
+import { Avatar, Button, Disclosure, Field, IconButton, Segmented, Sheet, Toggle, useToast } from './ui';
 import { reasonEffect } from './ScreenAdjustSheet';
 
-function PlanRow({ row }: { row: ScreenPlanRow }) {
+/** Plan de un hijo: minutos por semana, días de uso con tope opcional por día y si hace falta aprobación. */
+export function PlanRow({ row, compact = false }: { row: ScreenPlanRow; compact?: boolean }) {
   const [minutes, setMinutes] = useState(String(row.minutes_per_week));
   const [enabled, setEnabled] = useState(row.enabled);
+  const [days, setDays] = useState<number[]>(row.allowed_days ?? [1, 2, 3, 4, 5, 6, 7]);
+  const [caps, setCaps] = useState<Record<string, string>>(Object.fromEntries(Object.entries(row.day_max ?? {}).map(([k, v]) => [k, String(v)])));
+  const [approval, setApproval] = useState(row.require_approval ?? false);
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const n = Number(minutes);
-  const valid = Number.isInteger(n) && n >= 0 && n <= 10080;
+  const valid = Number.isInteger(n) && n >= 0 && n <= 10080 && days.length > 0;
+  const toggleDay = (d: number) => setDays((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].sort()));
   const save = useMutation({
-    mutationFn: () => put(`/screen/plans/${row.user_id}`, { minutesPerWeek: n, enabled }),
+    mutationFn: async () => {
+      const dayMax: Record<string, number> = {};
+      for (const d of days) { const v = Number(caps[String(d)]); if (Number.isInteger(v) && v > 0) dayMax[String(d)] = v; }
+      await put(`/screen/plans/${row.user_id}`, { minutesPerWeek: n, enabled });
+      await put(`/screen/rules/${row.user_id}`, { allowedDays: days, dayMax, requireApproval: approval });
+    },
     onSuccess: () => { toast(`Plan de ${row.display_name} guardado`); invalidate(); },
     onError: (e: Error) => toast(e.message, 'error'),
   });
   return (
     <li className="space-y-1 rounded-2xl border border-[var(--line)] p-3.5">
-      <div className="flex items-center gap-3">
-        <Avatar name={row.display_name} avatar={row.avatar} colorKey={row.color} size={36} />
-        <h3 className="min-w-0 flex-1 truncate font-bold">{row.display_name}</h3>
-      </div>
+      {compact ? null : (
+        <div className="flex items-center gap-3">
+          <Avatar name={row.display_name} avatar={row.avatar} colorKey={row.color} size={36} />
+          <h3 className="min-w-0 flex-1 truncate font-bold">{row.display_name}</h3>
+        </div>
+      )}
       <Toggle checked={enabled} onChange={setEnabled} label="Plan semanal activo" description={enabled ? 'Se carga cada lunes a las 00:00.' : 'Apagado: no recibe minutos del plan.'} />
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Minutos por semana" hint={valid ? `= ${minutesHM(n)} cada semana` : 'Entre 0 y 10 080'}>
           {(id) => <input id={id} className="field num w-32 font-bold" inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value.replace(/\D/g, ''))} />}
         </Field>
-        <Button variant="secondary" loading={save.isPending} disabled={!valid} onClick={() => save.mutate()} aria-label={`Guardar el plan de ${row.display_name}`}>Guardar</Button>
       </div>
+      <div className="pt-2">
+        <p className="mb-1.5 text-sm font-bold text-[var(--fg-2)]">Días en que puede usar la pantalla</p>
+        <div role="group" aria-label={`Días de uso de ${row.display_name}`} className="grid grid-cols-7 gap-1">
+          {DAY_LETTERS.map((l, i) => (
+            <button key={l + i} type="button" aria-pressed={days.includes(i + 1)} aria-label={DAY_NAMES[i]} onClick={() => toggleDay(i + 1)}
+              className={`h-11 rounded-xl border text-sm font-bold transition ${days.includes(i + 1) ? 'border-sky bg-sky/15' : 'border-[var(--line)] bg-[var(--chip)] text-[var(--fg-3)]'}`}>{l}</button>
+          ))}
+        </div>
+        {days.length === 0 ? <p role="alert" className="mt-1 text-sm font-bold text-berry-deep">Deja al menos un día.</p> : null}
+        <Disclosure title="Máximo por día" summary="Opcional: p. ej. 30 min entre semana y 2 h el fin de semana">
+          <div className="grid grid-cols-2 gap-x-3">
+            {days.map((d) => (
+              <Field key={d} label={DAY_NAMES[d - 1]}>
+                {(id) => <input id={id} className="field num font-bold" inputMode="numeric" placeholder="Sin tope" value={caps[String(d)] ?? ''} onChange={(e) => setCaps((c) => ({ ...c, [String(d)]: e.target.value.replace(/\D/g, '') }))} />}
+              </Field>
+            ))}
+          </div>
+        </Disclosure>
+      </div>
+      <Toggle checked={approval} onChange={setApproval} label="Un adulto aprueba cada vez" description={approval ? 'Al pulsar «Usar pantalla», espera a que lo apruebes.' : 'Empieza al momento, sin pedir permiso.'} />
+      <Button variant="secondary" loading={save.isPending} disabled={!valid} onClick={() => save.mutate()} aria-label={`Guardar el plan de ${row.display_name}`}>Guardar</Button>
     </li>
   );
 }
@@ -46,7 +80,7 @@ export function PlanSettings() {
         <h2 id="screen-plan" className="text-lg font-bold">Plan semanal de pantalla</h2>
         <p className="text-sm muted">Cada lunes a las 00:00 cada hijo recibe sus minutos. Lo que no use caduca el lunes siguiente, así que vale todo el fin de semana. Los minutos que gana con tareas caducan entre 30 y 36 días después.</p>
       </div>
-      {q.data?.plans.length ? <ul className="space-y-3">{q.data.plans.map((r) => <PlanRow key={`${r.user_id}-${r.minutes_per_week}-${r.enabled}`} row={r} />)}</ul> : <p className="muted">Todavía no hay hijos.</p>}
+      {q.data?.plans.length ? <ul className="space-y-3">{q.data.plans.map((r) => <PlanRow key={`${r.user_id}-${r.minutes_per_week}-${r.enabled}-${(r.allowed_days ?? []).join('')}-${JSON.stringify(r.day_max)}-${r.require_approval}`} row={r} />)}</ul> : <p className="muted">Todavía no hay hijos.</p>}
     </section>
   );
 }
@@ -115,6 +149,36 @@ export function ReasonsSettings() {
         ))}
       </ul>
       {editing ? <ReasonEditor initial={editing} onClose={() => setEditing(null)} /> : null}
+    </section>
+  );
+}
+
+/** Cuánto cuesta cada 15 minutos de tiempo extra cuando no llegan los minutos: en puntos o en dinero (por familia). */
+export function RatesSettings() {
+  const q = useQuery({ queryKey: ['screen-rates'], queryFn: () => api<{ pointsPer15: number; centsPer15: number }>('/screen/rates') });
+  const [pts, setPts] = useState('');
+  const [cents, setCents] = useState('');
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const p = Number(pts === '' ? q.data?.pointsPer15 : pts);
+  const c = parseEuros(cents === '' ? euros(q.data?.centsPer15 ?? 0) : cents);
+  const valid = Number.isInteger(p) && p >= 1 && p <= 1000 && c != null && c >= 1 && c <= 10000;
+  const save = useMutation({
+    mutationFn: () => put('/screen/rates', { pointsPer15: p, centsPer15: c }),
+    onSuccess: () => { toast('Precio del tiempo extra guardado'); invalidate(); },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  return (
+    <section className="panel space-y-3 p-5" aria-labelledby="screen-rates">
+      <div>
+        <h2 id="screen-rates" className="text-lg font-bold">Precio del tiempo extra</h2>
+        <p className="text-sm muted">Si a un hijo no le llegan los minutos, puede pagar lo que falta con puntos o con dinero de su banco. Este es el precio de cada 15 minutos.</p>
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="Puntos por cada 15 min">{(id) => <input id={id} className="field num w-28 font-bold" inputMode="numeric" value={pts === '' ? String(q.data?.pointsPer15 ?? '') : pts} onChange={(e) => setPts(e.target.value.replace(/\D/g, '') || '0')} />}</Field>
+        <Field label={`Dinero por cada 15 min (${currencySymbol()})`}>{(id) => <input id={id} className="field num w-28 font-bold" inputMode="decimal" value={cents === '' ? (q.data ? (q.data.centsPer15 / 100).toFixed(2).replace('.', decimalSep()) : '') : cents} onChange={(e) => setCents(e.target.value)} />}</Field>
+        <Button variant="secondary" loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>Guardar precio</Button>
+      </div>
     </section>
   );
 }

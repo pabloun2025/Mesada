@@ -205,6 +205,8 @@
   0% { transform: translateY(0) rotate(0); opacity: 1; }
   100% { transform: translateY(420px) rotate(540deg); opacity: 0; }
 }
+@keyframes alarm-ring { 0%, 70%, 100% { transform: rotate(0); } 10%, 30%, 50% { transform: rotate(-14deg); } 20%, 40%, 60% { transform: rotate(14deg); } }
+.alarm-ring { display: inline-block; transform-origin: 50% 20%; animation: alarm-ring 1.4s ease-in-out infinite; }
 .anim-pop { animation: pop 0.35s var(--ease-snap); }
 .anim-rise { animation: rise 1.1s ease-out forwards; }
 .anim-sheet { animation: sheet-in 0.22s ease-out; }

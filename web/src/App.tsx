@@ -24,6 +24,8 @@ const RelativeHome = lazy(() => import('./pages/RelativeHome'));
 const ChildToday = lazy(() => import('./pages/ChildToday'));
 const ChildProgress = lazy(() => import('./pages/ChildProgress'));
 const ChildMoney = lazy(() => import('./pages/ChildMoney'));
+const ChildScreen = lazy(() => import('./pages/ChildScreen'));
+const ScreenAdult = lazy(() => import('./pages/ScreenAdult'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Extras = lazy(() => import('./pages/Extras'));
@@ -93,6 +95,7 @@ function AppRoutes() {
               <Route path="tareas" element={<Tasks />} />
               <Route path="extras" element={<Extras />} />
               <Route path="mesada" element={<Allowance />} />
+              <Route path="pantalla" element={<ScreenAdult />} />
               <Route path="premios" element={<Rewards />} />
               <Route path="familia" element={<Family />} />
               <Route path="estadisticas" element={<Stats />} />
@@ -110,6 +113,7 @@ function AppRoutes() {
               <Route path="extras" element={<Extras />} />
               <Route path="premios" element={<Rewards />} />
               <Route path="mesada" element={<ChildMoney />} />
+              <Route path="pantalla" element={<ChildScreen />} />
               <Route path="avisos" element={<Notifications />} />
               <Route path="perfil" element={<Profile />} />
             </>

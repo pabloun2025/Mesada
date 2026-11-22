@@ -94,6 +94,8 @@ export interface Instance {
   check_met: boolean | null;
   penalty_minutes: number;
   success_minutes: number;
+  /** Minutos de pantalla que da la tarea (comprobación cumplida o bono visible): se ven junto a puntos y euros. */
+  minutes_reward?: number;
   bonus: Bonus | null;
   assignee_name: string | null;
   assignee_avatar: string | null;
@@ -449,4 +451,31 @@ export interface ScreenView {
   pauses: ScreenPauseRow[];
 }
 export interface ScreenReason { id: string; title: string; effect: 'minutes' | 'pause'; minutes: number | null; pause_days: number | null; archived: boolean }
-export interface ScreenPlanRow { user_id: string; display_name: string; avatar: string | null; color: string | null; minutes_per_week: number; enabled: boolean }
+export interface ScreenPlanRow { user_id: string; display_name: string; avatar: string | null; color: string | null; minutes_per_week: number; enabled: boolean; allowed_days?: number[]; day_max?: Record<string, number>; require_approval?: boolean }
+
+/* ---------- I21: sesiones de pantalla, castigos y retos ---------- */
+export interface ScreenSession {
+  id: string; user_id: string; kind: 'timer' | 'charge'; status: 'pending' | 'running' | 'finished' | 'rejected' | 'cancelled'; category: ScreenCategory | null; note: string;
+  requested_minutes: number; extended_minutes: number; extra: boolean; started_at: string | null; planned_end_at: string | null; ended_at: string | null;
+  started_by: string | null; started_by_name: string | null; stopped_by_name: string | null; end_reason: 'stopped' | 'expired' | 'charge' | 'blocked' | null;
+  used_minutes: number; charged_minutes: number; shortfall_mode: 'debt' | 'points' | 'money'; shortfall_minutes: number; paid_points: number; paid_cents: number; overrun_minutes: number;
+  decided_by: string | null; decision_note: string; created_at: string;
+  display_name?: string; avatar?: string | null; color?: string | null; balance_minutes?: number; rates?: { pointsPer15: number; centsPer15: number };
+}
+export interface ScreenChallenge { text: string; photo_required: boolean; effect: 'lift' | 'shorten'; days: number | null; status: 'open' | 'submitted' | 'approved' | 'rejected'; note: string; has_photo: boolean; done_at: string | null }
+export interface ScreenBlock {
+  id: string; kind: 'days' | 'window'; reason: string; starts_on: string; ends_on: string; window_start: string | null; window_end: string | null;
+  state: 'active' | 'ended' | 'lifted'; label: string; blocked_now: boolean; challenge: ScreenChallenge | null; created_at: string;
+}
+export interface ScreenState {
+  now: string; timezone: string; balance: number;
+  buckets: { plan: { minutes: number; amount: number; expires_at: string | null }; earned: { minutes: number; amount: number; first_expires_at: string | null; lots: { minutes: number; expires_at: string }[] } };
+  plan: { enabled: boolean; minutes_per_week: number; allowed_days: number[]; day_max: Record<string, number>; require_approval: boolean };
+  today: { date: string; allowed: boolean; cap: number | null; used: number; cap_left: number | null };
+  can_start: boolean; reason: string; reason_code: string | null; max_minutes: number;
+  session: ScreenSession | null; pending_extra: ScreenSession | null; last_session: ScreenSession | null;
+  blocks: ScreenBlock[]; pause: { label: string } | null; debt_minutes: number; expiring: { minutes: number; expires_at: string } | null;
+  rates: { pointsPer15: number; centsPer15: number }; wallet: { points: number; cents: number };
+  /** Hora local en el momento de recibirlo (para la cuenta atrás sin depender del reloj del móvil). */
+  _recv?: number;
+}

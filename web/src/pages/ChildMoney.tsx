@@ -1,17 +1,16 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { MonitorPlay, NotebookPen, Plus } from 'lucide-react';
+import { ChevronRight, MonitorPlay, Plus } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api, del, post } from '../lib/api';
 import { euros, relative } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import type { Bank, Goal, PayoutRequest, Wallet } from '../lib/types';
 import { screenPhrase } from '../lib/screen';
-import { LogScreenSheet, RequestScreenSheet } from '../components/MoneySheets';
+import { minutesHM } from '../lib/deadline';
 import { AccountRail, AdvanceSheet, AtmButtons, BalanceTrend, ExchangeSheet, GoalProduct, LoanProduct, LoanSheet, NewGoalSheet, SaveSheet, Statement, WithdrawSheet, type AtmKey } from '../components/Bank';
 import { Badge, Button, Loading, PageHeader, SectionTitle, useToast } from '../components/ui';
-import { ScreenList } from '../components/Ledger';
-import { ScreenBalance } from '../components/ScreenPanel';
 import type { ScreenView } from '../lib/types';
 
 /** «Mi banco»: tarjetas de cuenta, acciones redondas, gráfica del saldo, productos (préstamo y ahorros) y extracto. */
@@ -22,7 +21,7 @@ export default function ChildMoney() {
   const goalsQ = useQuery({ queryKey: ['goals', user.id], queryFn: () => api<{ goals: Goal[] }>(`/goals/${user.id}`) });
   const screenQ = useQuery({ queryKey: ['screen', user.id], queryFn: () => api<ScreenView>(`/screen/${user.id}`) });
   const requests = useQuery({ queryKey: ['payout-requests', 'mine'], queryFn: () => api<{ requests: PayoutRequest[] }>('/payout-requests') });
-  const [sheet, setSheet] = useState<AtmKey | 'screen' | 'log' | 'goal' | null>(null);
+  const [sheet, setSheet] = useState<AtmKey | 'goal' | null>(null);
   const [depositGoal, setDepositGoal] = useState<string | undefined>();
   const toast = useToast();
   const invalidate = useInvalidateAll();
@@ -40,7 +39,6 @@ export default function ChildMoney() {
   const activeGoals = goals.filter((g) => g.status === 'active');
   const doneGoals = goals.filter((g) => g.status !== 'active');
   const reqs = (requests.data?.requests ?? []).slice(0, 6);
-  const hasPending = (kind: string) => reqs.some((r) => r.kind === kind && r.status === 'pending');
   const negative = bank.money_cents < 0;
 
   return (
@@ -111,15 +109,11 @@ export default function ChildMoney() {
       </section>
 
       <section className="mt-7">
-        <SectionTitle>Mi tiempo de pantalla</SectionTitle>
-        <div className="card p-4">
-          <ScreenBalance userId={user.id} view={screenQ.data} />
-          <div className="my-4 flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" disabled={w.screen_minutes <= 0 || hasPending('screen') || !!screenQ.data?.pause} onClick={() => setSheet('screen')}><MonitorPlay size={16} /> Pedir pantalla</Button>
-            <Button size="sm" variant="secondary" onClick={() => setSheet('log')}><NotebookPen size={16} /> Anotar pantalla</Button>
-          </div>
-          <ScreenList userId={user.id} />
-        </div>
+        <Link to="/pantalla" className="card flex items-center gap-3 p-4 font-bold">
+          <span className="text-tangerine"><MonitorPlay size={22} aria-hidden /></span>
+          <span className="min-w-0 flex-1">Mi pantalla<span className="block text-sm font-normal muted">{screenQ.data ? `${minutesHM(screenQ.data.balance)} · usar, pedir más y ver tu historial` : 'Usar, pedir más y ver tu historial'}</span></span>
+          <ChevronRight size={18} aria-hidden className="text-[var(--fg-3)]" />
+        </Link>
       </section>
 
       {sheet === 'withdraw' ? <WithdrawSheet bank={bank} onClose={() => setSheet(null)} /> : null}
@@ -128,8 +122,6 @@ export default function ChildMoney() {
       {sheet === 'loan' ? <LoanSheet bank={bank} onClose={() => setSheet(null)} /> : null}
       {sheet === 'save' ? <SaveSheet bank={bank} goals={goals} initialGoal={depositGoal} onClose={() => { setSheet(null); setDepositGoal(undefined); }} /> : null}
       {sheet === 'goal' ? <NewGoalSheet userId={user.id} onClose={() => setSheet(null)} /> : null}
-      {sheet === 'screen' ? <RequestScreenSheet balance={w.screen_minutes} onClose={() => setSheet(null)} /> : null}
-      {sheet === 'log' ? <LogScreenSheet balance={w.screen_minutes} onClose={() => setSheet(null)} /> : null}
     </div>
   );
 }

@@ -16,7 +16,7 @@ export const LEDGER_KIND = KIND;
 
 // Todo lo que resta minutos por decisión de un adulto se llama «Ajuste de pantalla» y va en positivo: sin castigos ni multas.
 const SCREEN_KIND: Record<string, string> = {
-  bonus: 'Extra', penalty: 'Ajuste de pantalla', spend: 'Gastados', adjustment: 'Ajuste', refund: 'Devolución', task: 'Tarea', usage: 'Anotado',
+  bonus: 'Extra', penalty: 'Ajuste de pantalla', spend: 'Gastados', adjustment: 'Ajuste', refund: 'Devolución', task: 'Tarea', usage: 'Anotado', session: 'Sesión',
   plan: 'Plan de la semana', expiry: 'Caducado',
 };
 const LOG_STATUS: Record<string, { label: string; tone: 'sun' | 'leaf' | 'muted' }> = {

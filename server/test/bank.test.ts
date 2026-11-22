@@ -379,8 +379,9 @@ describe('I7 ahorro programado', () => {
     expect(await saved(L())).toBe(1500);
     const goals = (await F.luciaC.get(`/api/goals/${L()}`)).body.goals;
     expect(goals[0]).toMatchObject({ principal_cents: 1500, interest_cents: 0, balance_cents: 1500, reached: false });
-    // No se puede quitar una meta con dinero.
-    expect((await F.luciaC.del(`/api/goals/${g.id}`)).status).toBe(409);
+    // Cancelar una meta con dinero devuelve lo ahorrado a la cuenta de dinero.
+    expect((await F.luciaC.del(`/api/goals/${g.id}`)).body).toMatchObject({ ok: true, returned_cents: 1500 });
+    expect(await cents(L())).toBe(2000);
   });
 
   it('interés del lunes: 10 € → 1 €, 150 € → 2 €, 0,50 € → 1 €; idempotente y sin interés sobre interés', async () => {

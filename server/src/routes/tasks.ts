@@ -114,6 +114,7 @@ export const INSTANCE_SELECT = `
          (SELECT count(*)::int FROM task_instances x WHERE x.task_id = i.task_id AND x.due_date = i.due_date AND x.status IN ('submitted','approved') AND x.assignee_id IS NOT DISTINCT FROM i.assignee_id) AS done_count,
          t.title, t.icon, t.description, t.difficulty, t.recurrence, t.assignment_mode, t.requires_approval, t.requires_photo, t.due_time,
          t.due_time_weekend, t.late_percent, t.points AS task_points, t.check_mode, t.penalty_minutes, t.success_minutes,
+         (CASE WHEN t.check_mode THEN COALESCE(t.success_minutes, 0) ELSE 0 END + CASE WHEN t.bonus_kind = 'screen' AND NOT t.bonus_surprise THEN COALESCE(t.bonus_minutes, 0) ELSE 0 END)::int AS minutes_reward,
          t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise, t.bonus_on_time_only, rw.title AS bonus_reward_title,
          au.display_name AS assignee_name, au.avatar AS assignee_avatar, au.color AS assignee_color,
          cu.display_name AS completed_by_name

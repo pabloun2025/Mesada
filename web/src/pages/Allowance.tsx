@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
 import { Banknote, CalendarCheck2, MonitorSmartphone, PauseCircle, ReceiptText, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { api, newKey, post } from '../lib/api';
@@ -6,14 +7,15 @@ import { currencySymbol, euros, fmtDate, parseEuros } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import type { Bank, BankSummary, Goal, User, Wallet } from '../lib/types';
-import { Avatar, Badge, Button, Field, Loading, PageHeader, SectionTitle, Segmented, Sheet, useToast } from '../components/ui';
+import { Avatar, Badge, Button, buttonClass, Field, Loading, PageHeader, SectionTitle, Segmented, Sheet, useToast } from '../components/ui';
 import { ScreenAdjustSheet } from '../components/ScreenAdjustSheet';
 import { Pips } from '../components/AmountSheet';
 import { BankApprovals, useBankApprovals } from '../components/BankApprovals';
 import { ScreenList } from '../components/Ledger';
 import { GoalProduct, LoanProduct, Statement } from '../components/Bank';
 import { minutesLabel } from '../lib/deadline';
-import { GiveScreenSheet, PaySheet } from '../components/MoneySheets';
+import { PaySheet } from '../components/MoneySheets';
+import { GiveMinutesSheet } from '../components/ScreenSheets';
 import type { ScreenView } from '../lib/types';
 
 function AdjustSheet({ child, onClose }: { child: User; onClose: () => void }) {
@@ -120,7 +122,8 @@ function KidPanel({ child: k, wallet: w, pending, onSheet }: { child: User; wall
           <p className="mt-1 text-xs text-[var(--fg-3)]">Convertido en total {euros(w.cents_converted_total)} · pagado {euros(w.cents_paid_total)}</p>
           <div className="mt-4 grid grid-cols-2 gap-2 min-[560px]:grid-cols-3 min-[1100px]:grid-cols-2 min-[1500px]:grid-cols-3">
             <Button variant="success" size="sm" className="h-11" disabled={w.cents_pending <= 0} onClick={() => onSheet('pay', w)}><Banknote size={17} aria-hidden /> Pagar</Button>
-            <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('screen', w)}><MonitorSmartphone size={17} aria-hidden /> Dar pantalla</Button>
+            <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('screen', w)}><MonitorSmartphone size={17} aria-hidden /> Dar minutos</Button>
+            <Link to={`/pantalla?hijo=${k.id}`} className={`${buttonClass('secondary', 'sm')} h-11`}>Pantalla</Link>
             <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('screen-adjust', w)}><Sparkles size={17} aria-hidden /> Ajuste de pantalla</Button>
             <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('adjust', w)}><SlidersHorizontal size={17} aria-hidden /> Ajustar</Button>
             <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('history', w, bank)}><ReceiptText size={17} aria-hidden /> Extracto</Button>
@@ -230,7 +233,7 @@ export default function Allowance() {
         <p className="muted">Los puntos disponibles de cada hijo se convertirán en euros ({family.rate_points} pts = {euros(family.rate_cents)}){family.cap_cents != null ? `, con un máximo de ${euros(family.cap_cents)} por ${periodName}. Lo que pase del límite se queda en puntos` : ''}. Cada {periodName} solo se puede cerrar una vez.</p>
       </Sheet>
       {sheet?.kind === 'pay' ? <PaySheet child={sheet.child} wallet={sheet.wallet} onClose={() => setSheet(null)} /> : null}
-      {sheet?.kind === 'screen' ? <GiveScreenSheet child={sheet.child} minutes={sheet.wallet.screen_minutes} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'screen' ? <GiveMinutesSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
       {sheet?.kind === 'screen-adjust' ? <ScreenAdjustSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
       {sheet?.kind === 'screen-history' ? (
         <Sheet open onClose={() => setSheet(null)} title={`Pantalla de ${sheet.child.display_name}`} subtitle={<>Saldo: <b className="num text-[var(--fg)]">{minutesLabel(sheet.wallet.screen_minutes)}</b></>}><ScreenList userId={sheet.child.id} /></Sheet>

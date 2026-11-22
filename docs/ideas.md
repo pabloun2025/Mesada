@@ -262,7 +262,9 @@ Hoy la meta está escondida en «Mi banco › Mis productos». Pasa a ser una «
 - **Moneda:** por familia, € o $. Se elige al crear la familia y se puede cambiar en Ajustes. Cambia el símbolo y el formato (6,00 € / $6.00); no convierte importes. Afecta a la app, los avisos, el ZIP de datos y los textos.
 - **Ficha del miembro (aclaración posterior):** la cuenta principal puede poner y cambiar el correo y el teléfono de WhatsApp de cualquier miembro (adultos, parientes e hijos); cada uno los cambia luego en Mi perfil. Solo la principal o la propia persona (403 para el resto); se avisa en la app al adulto o pariente afectado y queda en el historial.
 
-## I21 · Tiempo de pantalla más claro (22/11) — pendiente
+## I21 · Tiempo de pantalla más claro (22/11)
+
+**Estado: construida (23/11), ver D65 a D71.** Dos baterías (Semana y Ganado), temporizador en el servidor con «Usar pantalla», días y topes, alarma y cierre automático, exceso a la semana siguiente, castigos con retos, «Dar minutos» y «Pedir tiempo extra» con puntos o dinero, «+N min» en las tareas y minutos que vuelan.
 
 Hoy el hijo ve un total con dos líneas debajo y dos botones parecidos («Pedir pantalla» y «Anotar pantalla»). Se rehace para que se entienda de un vistazo, tanto el tiempo libre de cada semana como el extra que se gana.
 
@@ -284,3 +286,8 @@ Hoy el hijo ve un total con dos líneas debajo y dos botones parecidos («Pedir 
   - **Castigos:** bloquear días u horas concretas (p. ej. «sin pantalla hasta el jueves» o «nada de 20 a 22 h»). Se ve en ambas apps con su motivo y cuándo termina.
   - **Retos para desbloquear:** el padre puede asociar un reto al bloqueo (p. ej. «lee 20 min» u «ordena tu cuarto»); al validarlo, el bloqueo se levanta o se acorta.
   - **Historial:** registro de sesiones (inicio, fin, quién lo encendió) para padres e hijo.
+- **Respuestas del dueño (22/11):**
+  - Sin bloqueo real del aparato (una web no puede): alarma con sonido y vibración en el móvil del hijo y notificación a los padres. El tiempo usado de más se descuenta de la semana siguiente.
+  - Días de uso: días permitidos (L M X J V S D) y, opcional, un máximo por día (p. ej. L–V 30 min, S–D 2 h).
+  - Retos: el hijo lo cumple (con foto si se pide) y un adulto lo valida; entonces el bloqueo se levanta o se acorta.
+  - Programar ya.
