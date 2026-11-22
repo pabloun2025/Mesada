@@ -2,11 +2,15 @@
 // validar, mesada y pantalla. Todo se graba en la app real con datos inventados.
 // Uso: cd e2e && MEDIA_PORT=3201 MEDIA_DB=mesada_video node media/video-tutorial.mjs
 import path from 'node:path';
+import { mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { ROOT, BASE, startServer, stopServer, launch, login, api, ADULT, KID } from './lib.mjs';
 import { saveState, recordClip, assemble, OUT_DIR } from './video-lib.mjs';
 
-const OUT = path.join(ROOT, 'docs/video/tutorial.mp4');
+const OUT = process.env.MEDIA_OUTPUT_DIR
+  ? path.resolve(process.env.MEDIA_OUTPUT_DIR, 'tutorial.mp4')
+  : path.join(ROOT, 'docs/video/tutorial.mp4');
+mkdirSync(path.dirname(OUT), { recursive: true });
 const TASK = 'Poner el lavavajillas';
 const N = 7;
 const step = (n) => `Paso ${n} de ${N}`;

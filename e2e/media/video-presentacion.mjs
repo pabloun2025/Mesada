@@ -1,11 +1,15 @@
 // Vídeo de presentación (~30 s, 9:16, sin voz): el hijo marca, el padre valida y salen puntos, euros y pantalla.
 // Uso: cd e2e && MEDIA_PORT=3201 MEDIA_DB=mesada_video node media/video-presentacion.mjs
 import path from 'node:path';
+import { mkdirSync } from 'node:fs';
 import { ROOT, BASE, startServer, stopServer, launch, api, login, createFamily, addMember, today, sleep, sql, ADULT, KID, KID2 } from './lib.mjs';
 import { saveState, recordClip, assemble, OUT_DIR } from './video-lib.mjs';
 import { execFileSync } from 'node:child_process';
 
-const OUT = path.join(ROOT, 'docs/video/presentacion.mp4');
+const OUT = process.env.MEDIA_OUTPUT_DIR
+  ? path.resolve(process.env.MEDIA_OUTPUT_DIR, 'presentacion.mp4')
+  : path.join(ROOT, 'docs/video/presentacion.mp4');
+mkdirSync(path.dirname(OUT), { recursive: true });
 const server = await startServer();
 const browser = await launch();
 try {
