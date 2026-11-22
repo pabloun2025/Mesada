@@ -134,7 +134,7 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Padres, banca para padres: una cuenta por hijo, «Pendiente de pagar» destacado, operaciones por aprobar, préstamos y ahorros como productos.
 
 ## I9. Administración sin pedir el código cada vez (21/11)
-**Estado: decidida, sin programar.**
+**Estado: construida (21/11), ver D38.**
 - El código de la app de autenticación se pide una sola vez en cada dispositivo (móvil u ordenador).
 - Ese dispositivo queda recordado 90 días: en el día a día se entra en Administración sin código.
 - En un dispositivo nuevo, o pasados los 90 días, se vuelve a pedir el código.
@@ -184,3 +184,12 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Solo en tareas «Cuando haga falta». El padre pone en cada tarea «Después de hacerla, vuelve en N días» (1, 2, 3, 7…). Sin espera, sigue como hasta ahora.
 - Mientras espera, el hijo la ve en gris con «Vuelve el jueves» y no la puede marcar.
 - Cuando vuelve y nadie la hace, no pasa nada: no cuenta como fallo.
+
+## I15. Revisar una tarea: parcial, devolver o rechazar (22/11)
+**Estado: decidida, sin programar.**
+- Al validar una tarea, además de «Aprobar», el adulto puede:
+  - **Dar parte del premio:** botones 75 / 50 / 25 % o escribir otra cifra de puntos.
+  - **Devolver para que la arregle:** vuelve al hijo; cuenta la hora original (si la marcó a tiempo, sigue a tiempo).
+  - **Rechazar sin penalidad:** no gana nada.
+  - **Rechazar con penalidad:** resta puntos (por defecto, los de la tarea) y/o minutos de pantalla; la cantidad se pone al rechazar.
+- El motivo es obligatorio, con frases rápidas («Falta un poco», «No está hecha», «Mal hecha»…) o texto libre. El hijo lo ve.
