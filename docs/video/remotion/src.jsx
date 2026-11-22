@@ -21,6 +21,8 @@ function Scene({scene, time, kind, index, total, plates}) {
   const motion = spring({frame, fps, config: {damping: 20, stiffness: 95}});
   const progress = Math.min(1, (frame + 1) / time.frames);
   const cue = time.cues.find(({start, end}) => frame / fps >= start && frame / fps < end);
+  const lineLength = Math.max(1, ...((cue?.text ?? '').split('\n').map((line) => line.length)));
+  const captionSize = vertical ? Math.min(39, 840 / (0.65 * lineLength)) : 39;
   const offset = interpolate(motion, [0, 1], [30, 0]);
   const mediaHeight = vertical ? 1060 : 800;
   const mediaWidth = Math.round(mediaHeight * 540 / 740);
@@ -72,8 +74,8 @@ function Scene({scene, time, kind, index, total, plates}) {
     {cue && <div style={{position: 'absolute', bottom: vertical ? 228 : 52, left: vertical ? 78 : 190,
       right: vertical ? 78 : 190, textAlign: 'center'}}>
       <div style={{display: 'inline-block', background: '#0a1d35f2', color: 'white', borderRadius: 17,
-        padding: '12px 26px', fontSize: vertical ? 42 : 39, lineHeight: 1.18,
-        fontWeight: 700, whiteSpace: 'pre-line'}}>{cue.text}</div>
+        padding: '12px 26px', fontSize: captionSize, lineHeight: 1.18,
+        fontWeight: 700, whiteSpace: 'pre'}}>{cue.text}</div>
     </div>}
     {!plates && <div style={{position: 'absolute', left: vertical ? 90 : 100, right: vertical ? 90 : 100,
       bottom: vertical ? 174 : 25, height: 5, borderRadius: 8, background: '#44699344'}}>

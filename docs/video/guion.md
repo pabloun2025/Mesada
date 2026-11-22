@@ -159,6 +159,8 @@ done
 ### Recursos y licencias
 
 - Imagen de marca, logotipo y grabaciones procedentes del repositorio.
+- Remotion 4.0.545 aplica los términos de su licencia gratuita para personas
+  y organizaciones elegibles. [Licencia de Remotion](https://www.remotion.dev/docs/license)
 - Kokoro v1.0 y sus voces publicados bajo Apache 2.0. El script obtiene los
   artefactos de `thewh1teagle/kokoro-onnx` y verifica sus SHA-256.
   El paquete Python `kokoro-onnx` se distribuye bajo MIT.

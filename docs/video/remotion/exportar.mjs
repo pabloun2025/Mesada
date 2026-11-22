@@ -62,13 +62,25 @@ function encodeScene(folder, kind, scene, index) {
   let output = '[base]';
   if (guiones[kind][index].source) {
     const {width, height, x, y} = layout(kind);
-    plateInput.push('-i', video);
-    const cornerX = 'max(0,22-min(X,W-1-X))';
-    const cornerY = 'max(0,22-min(Y,H-1-Y))';
-    const mask = `if(lte(hypot(${cornerX},${cornerY}),22),255,0)`;
-    filters += `;[2:v]fps=30,scale=${width}:${height}:flags=lanczos,setsar=1,format=yuva444p,`
-      + `geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='${mask}'[app];`
-      + `[base][app]overlay=x=${x}:y=${y}:eof_action=repeat[scene]`;
+    const mask = path.join(folder, 'esquinas.pgm');
+    const radius = 22;
+    const pixels = Buffer.alloc(width * height, 255);
+    for (let yCorner = 0; yCorner < radius; yCorner++) {
+      for (let xCorner = 0; xCorner < radius; xCorner++) {
+        if (Math.hypot(radius - xCorner, radius - yCorner) <= radius) continue;
+        for (const row of [yCorner, height - 1 - yCorner]) {
+          pixels[row * width + xCorner] = 0;
+          pixels[row * width + width - 1 - xCorner] = 0;
+        }
+      }
+    }
+    writeFileSync(mask, Buffer.concat([Buffer.from(`P5
+${width} ${height}
+255
+`), pixels]));
+    plateInput.push('-i', video, '-i', mask);
+    filters += `;[2:v]fps=30,scale=${width}:${height}:flags=lanczos,setsar=1[screen];`
+      + `[screen][3:v]alphamerge[app];[base][app]overlay=x=${x}:y=${y}:eof_action=repeat[scene]`;
     output = '[scene]';
   }
   const duration = (scene.frames / fps).toFixed(9);
