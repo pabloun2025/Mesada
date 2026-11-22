@@ -82,6 +82,7 @@ case "${1:-estado}" in
     "${COMPOSE[@]}" exec -T backup sh /r2.sh "${@:-listar}"
     ;;
   disco)
+    set +e +o pipefail  # informe de solo lectura: un permiso denegado en una carpeta no debe cortarlo
     # Solo tamaños y nombres de carpetas de primer nivel: ningún dato de usuarios.
     echo "--- Disco del servidor ---"; df -h / | tail -1 | awk '{print "total " $2 " · usado " $3 " (" $5 ") · libre " $4}'
     echo "--- Docker (imágenes, contenedores, volúmenes, caché de construcción) ---"; docker system df
