@@ -1,0 +1,214 @@
+1
+00:00:00,520 --> 00:00:03,187
+Vamos a configurar una familia de ejemplo.
+
+2
+00:00:03,407 --> 00:00:07,801
+Verás cómo asignar una tarea, aprobarla
+y convertir sus puntos en paga.
+
+3
+00:00:08,021 --> 00:00:11,691
+Al final veremos también dónde
+consultar el tiempo de pantalla.
+
+4
+00:00:12,887 --> 00:00:15,511
+En el primer arranque,
+abre Crea tu familia.
+
+5
+00:00:15,731 --> 00:00:18,269
+Escribe el nombre de la
+familia y tu nombre.
+
+6
+00:00:18,489 --> 00:00:22,735
+Elige un usuario de adulto, añade el
+correo y establece una contraseña.
+
+7
+00:00:22,955 --> 00:00:25,579
+Pulsa Crear familia para
+entrar en el panel.
+
+8
+00:00:25,799 --> 00:00:28,657
+Guarda tus datos de acceso
+en un sitio seguro.
+
+9
+00:00:29,853 --> 00:00:34,504
+En Familia, pulsa Añadir. Elige el
+perfil de hijo, escribe su nombre y crea
+
+10
+00:00:34,724 --> 00:00:36,708
+un usuario que pueda recordar.
+
+11
+00:00:36,928 --> 00:00:39,424
+Dale un PIN de acceso y pulsa Añadir.
+
+12
+00:00:39,644 --> 00:00:43,292
+Desde ese momento tendrá su propia
+vista, con las tareas que le
+
+13
+00:00:43,512 --> 00:00:44,451
+corresponden.
+
+14
+00:00:45,653 --> 00:00:48,896
+Abre Tareas y pulsa Nueva.
+Dale un nombre concreto.
+
+15
+00:00:49,116 --> 00:00:51,740
+En el ejemplo escribimos
+Poner el lavavajillas.
+
+16
+00:00:51,960 --> 00:00:55,779
+Elige cuántos puntos vale, cuándo
+se repite y quién se encarga.
+
+17
+00:00:55,999 --> 00:00:58,793
+Selecciona a Nora y guarda con Crear tarea.
+
+18
+00:00:59,013 --> 00:01:01,104
+Comprueba que aparece en el listado.
+
+19
+00:01:02,320 --> 00:01:06,928
+En el móvil de Nora, elige Soy hijo o
+hija y entra con su usuario y su PIN.
+
+20
+00:01:07,148 --> 00:01:09,623
+En Hoy aparecen las tareas asignadas.
+
+21
+00:01:09,843 --> 00:01:12,915
+Cuando termine, pulsa el
+círculo al lado de la tarea.
+
+22
+00:01:13,135 --> 00:01:15,353
+Verá que queda esperando validación.
+
+23
+00:01:15,573 --> 00:01:18,603
+Desde el aviso puede deshacer
+el toque si se equivoca.
+
+24
+00:01:19,820 --> 00:01:22,423
+Vuelve a la cuenta adulta y abre Validar.
+
+25
+00:01:22,643 --> 00:01:24,563
+Busca la tarea que envió Nora.
+
+26
+00:01:24,783 --> 00:01:27,001
+Si está bien hecha, pulsa Aprobar.
+
+27
+00:01:27,221 --> 00:01:31,467
+En Otras opciones puedes reconocer
+solo una parte, devolver la tarea o
+
+28
+00:01:31,687 --> 00:01:36,060
+rechazarla. Una vez aprobada, Nora
+puede ver los puntos en su progreso.
+
+29
+00:01:37,253 --> 00:01:39,429
+Abre Mesada en la cuenta adulta.
+
+30
+00:01:39,649 --> 00:01:43,297
+Comprueba la equivalencia de puntos
+y euros que tiene tu familia.
+
+31
+00:01:43,517 --> 00:01:47,272
+Pulsa Cerrar semana y revisa
+el resumen antes de confirmar.
+
+32
+00:01:47,492 --> 00:01:50,180
+El importe convertido
+queda pendiente de pago.
+
+33
+00:01:50,400 --> 00:01:54,603
+Así puedes distinguir los puntos ganados
+del dinero que queda por entregar.
+
+34
+00:01:55,820 --> 00:01:59,852
+Cuando entregues la paga, abre el
+registro de pago, indica el importe y el
+
+35
+00:02:00,072 --> 00:02:03,421
+método que usaste. Aquí se
+registra un pago de ejemplo.
+
+36
+00:02:03,641 --> 00:02:07,673
+Al confirmar, Mesada guarda el movimiento
+y muestra un recibo que puedes
+
+37
+00:02:07,893 --> 00:02:10,027
+volver a consultar en el historial.
+
+38
+00:02:11,220 --> 00:02:15,551
+Si queréis organizar también el tiempo
+de pantalla, abre Ajustes y busca el
+
+39
+00:02:15,771 --> 00:02:19,909
+plan semanal. Activa el plan para
+Nora, escribe los minutos y guarda.
+
+40
+00:02:20,129 --> 00:02:23,201
+En este ejemplo, trescientos
+minutos son cinco horas.
+
+41
+00:02:23,421 --> 00:02:25,768
+El plan carga sus minutos cada lunes.
+
+42
+00:02:25,988 --> 00:02:29,081
+Nora puede consultar lo que
+le queda desde su cuenta.
+
+43
+00:02:30,287 --> 00:02:34,553
+Para empezar, basta con una tarea y un
+acuerdo claro sobre cuándo se da por
+
+44
+00:02:34,773 --> 00:02:37,163
+hecha. Probad un ciclo completo juntos.
+
+45
+00:02:37,383 --> 00:02:41,521
+Después podréis ajustar los puntos
+y la frecuencia a vuestra rutina.
+
+46
+00:02:41,741 --> 00:02:44,024
+Entra en Mesada para crear tu familia.
+

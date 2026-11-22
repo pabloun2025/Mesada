@@ -1,0 +1,22 @@
+{
+  "name": "mesada-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "voz": "python3 preparar.py",
+    "studio": "remotion studio src.jsx",
+    "render:presentacion": "node exportar.mjs presentacion",
+    "render:tutorial": "node exportar.mjs tutorial",
+    "render:vertical": "node exportar.mjs vertical",
+    "render": "node exportar.mjs",
+    "render:nativo": "remotion render src.jsx --codec=h264 --audio-codec=aac --crf=20 --concurrency=2"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.545",
+    "@remotion/cli": "4.0.545",
+    "@remotion/renderer": "4.0.545",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.545"
+  }
+}
