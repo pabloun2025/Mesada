@@ -9,6 +9,7 @@ import { ZodError } from 'zod';
 import { config } from './lib/config.js';
 import { HttpError } from './lib/errors.js';
 import { loadUser } from './lib/auth.js';
+import { assertRelativeMay } from './lib/relative-gate.js';
 import { clientIp } from './lib/limits.js';
 import { newErrorId, recordServerError } from './lib/errorlog.js';
 import { getPool } from './lib/db.js';
@@ -27,6 +28,13 @@ import bonusRoutes from './routes/bonus.js';
 import bankRoutes from './routes/bank.js';
 import extraRoutes from './routes/extras.js';
 import privacyRoutes from './routes/privacy.js';
+import relativeRoutes from './routes/relatives.js';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    routeList: { method: string; url: string }[];
+  }
+}
 
 export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({
@@ -34,6 +42,13 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     trustProxy: true,
     bodyLimit: 256 * 1024,
   });
+
+  // Registro de rutas para la prueba que comprueba que cada ruta prohibida a un pariente responde 403.
+  const routes: { method: string; url: string }[] = [];
+  app.addHook('onRoute', (r) => {
+    for (const m of Array.isArray(r.method) ? r.method : [r.method]) routes.push({ method: m, url: r.url });
+  });
+  app.decorate('routeList', routes);
 
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: config.maxUploadBytes, files: 1, fields: 10 } });
@@ -54,6 +69,8 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
       throw new HttpError(403, 'Petición no permitida', 'csrf');
     }
     req.user = await loadUser(req);
+    // Los parientes solo pueden usar una lista cerrada de rutas (ver y animar); el resto, 403 (D60).
+    if (req.user?.isRelative) assertRelativeMay(req.method, req.routeOptions.url);
   });
 
   app.setErrorHandler((err: any, req, reply) => {
@@ -100,6 +117,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(bankRoutes);
   await app.register(extraRoutes);
   await app.register(privacyRoutes);
+  await app.register(relativeRoutes);
 
   // En producción el servidor puede servir también la PWA compilada.
   if (config.staticDir && fs.existsSync(config.staticDir)) {

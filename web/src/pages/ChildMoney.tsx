@@ -101,7 +101,7 @@ export default function ChildMoney() {
               ))}
             </ul>
           ) : !bank.loan ? <p className="muted">Ponte una meta (unos auriculares, un vinilo…) y mete dinero cada semana: gana interés.</p> : null}
-          {doneGoals.length ? <ul className="space-y-3">{doneGoals.map((g) => <GoalProduct key={g.id} goal={g} mine={false} />)}</ul> : null}
+          {doneGoals.length ? <ul className="space-y-3">{doneGoals.map((g) => <GoalProduct key={g.id} goal={g} mine={g.status === 'proposed' || g.status === 'rejected'} onRemove={(x) => removeGoal.mutate(x.id)} />)}</ul> : null}
         </div>
       </section>
 

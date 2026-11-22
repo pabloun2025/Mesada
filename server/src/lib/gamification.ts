@@ -2,6 +2,7 @@ import { many, one, type Db } from './db.js';
 import { addDays, startOfWeek } from './dates.js';
 import { notify } from './notify/dispatch.js';
 import { LIFETIME_POINTS_SQL } from './ledger.js';
+import { fmtMoney } from './currency.js';
 
 export const LEVEL_TITLES = ['Novato', 'Aprendiz', 'Colaborador', 'Constante', 'Fiable', 'Experto', 'Crack', 'Maestro', 'Referente', 'Leyenda'];
 
@@ -29,8 +30,11 @@ export const BADGES: Record<string, { title: string; description: string; icon: 
   streak_30: { title: 'Hábito de hierro', description: 'Racha de 30 días', icon: '🏆' },
   weekly_goal: { title: 'Objetivo cumplido', description: 'Alcanzaste tu objetivo semanal', icon: '🎯' },
   first_reward: { title: 'Primer capricho', description: 'Canjeaste tu primera recompensa', icon: '🎁' },
-  saver: { title: 'Ahorrador', description: 'Tienes 10 € o más en la hucha', icon: '🐷' },
+  saver: { title: 'Ahorrador', description: 'Tienes {m10} o más en la hucha', icon: '🐷' },
 };
+
+/** Texto de una insignia con los importes en la moneda de la familia. */
+export const badgeText = (description: string, currency: string) => description.replace('{m10}', fmtMoney(1000, currency));
 
 export async function lifetimePoints(db: Db, userId: string) {
   const r = await one<{ p: number }>(
@@ -124,8 +128,9 @@ export async function evaluateBadges(db: Db, userId: string, today: string, tz: 
     [userId, earned, sourceInstanceId],
   );
   const fresh = r.rows.map((x) => x.badge as string);
+  const cur = fresh.length ? (await one<{ currency: string }>(db, 'SELECT f.currency FROM families f JOIN users u ON u.family_id = f.id WHERE u.id = $1', [userId]))?.currency ?? 'EUR' : 'EUR';
   for (const b of fresh) {
-    await notify(db, { userId, event: 'badge', title: `Nueva insignia: ${BADGES[b].title}`, body: BADGES[b].description, link: '/progreso', dedupeKey: `badge:${userId}:${b}` });
+    await notify(db, { userId, event: 'badge', title: `Nueva insignia: ${BADGES[b].title}`, body: badgeText(BADGES[b].description, cur), link: '/progreso', dedupeKey: `badge:${userId}:${b}` });
   }
   return fresh;
 }

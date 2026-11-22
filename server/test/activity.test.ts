@@ -36,6 +36,7 @@ describe('Historial con operaciones del banco', () => {
     const loan = (await F.luciaC.post('/api/loans', { amountCents: 500, weeks: 2 })).body.loan;
     expect((await F.mama.post(`/api/loans/${loan.id}/approve`, {})).status).toBe(200);
     const g = (await F.luciaC.post('/api/goals', { userId: L(), title: 'Vinilo', targetCents: 1000 })).body.goal;
+    expect((await F.mama.post(`/api/goals/${g.id}/proposal/approve`, {})).status).toBe(200);
     expect((await F.luciaC.post(`/api/goals/${g.id}/deposit`, { cents: 1000 })).status).toBe(200);
     const req = (await F.luciaC.post(`/api/goals/${g.id}/redeem`)).body.request;
     expect((await F.mama.post(`/api/goal-requests/${req.id}/approve`, { priceCents: 1000 })).status).toBe(200);

@@ -1,4 +1,4 @@
-const eur = (c: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(c / 100);
+import { euros as eur } from './format';
 
 export function describeAction(a: { action: string; data: any }): string {
   const d = a.data ?? {};
@@ -38,6 +38,24 @@ export function describeAction(a: { action: string; data: any }): string {
     case 'family.update': return 'cambió los ajustes de la familia';
     case 'family.create': return 'creó la familia';
     case 'goal.create': return `creó la meta «${d.title}»`;
+    case 'goal.propose': return `propuso la meta «${d.title}» (${eur(d.targetCents)})`;
+    case 'goal.approve_proposal': return `aprobó la meta «${d.title}»${d.adjusted ? ' con cambios' : ''}`;
+    case 'goal.reject_proposal': return `no aprobó la meta «${d.title}»: ${d.note}`;
+    case 'goal.auto_request': return `pidió ahorrar el ${d.percent} % de cada cierre en «${d.title}»`;
+    case 'goal.auto_set': return d.percent ? `puso el ahorro automático de «${d.title}» al ${d.percent} %` : `quitó el ahorro automático de «${d.title}»`;
+    case 'goal.auto_approve': return `aprobó el ahorro automático del ${d.percent} % para «${d.title}»`;
+    case 'goal.auto_reject': return `no aprobó el ahorro automático para «${d.title}»`;
+    case 'savings.auto': return `ahorró solo ${eur(d.cents)} en «${d.title}» (${d.percent} % del cierre)`;
+    case 'goal.match_rule': return d.rule ? `puso el aporte de los padres en «${d.title}»: ${eur(d.rule.givesCents)} por cada ${eur(d.rule.perCents)}, hasta ${eur(d.rule.capCents)}` : `quitó el aporte de los padres en «${d.title}»`;
+    case 'goal.gift': return `aportó ${eur(d.cents)} a «${d.title}»${d.message ? `: ${d.message}` : ''}`;
+    case 'goal.contribution_reverse': return `anuló un aporte de ${eur(d.cents)}`;
+    case 'cheer.send': return 'felicitó';
+    case 'invitation.create': return 'invitó a una persona a la familia';
+    case 'invitation.cancel': return 'anuló una invitación';
+    case 'invitation.accept': return `aceptó la invitación (${d.displayName})`;
+    case 'family.principal_transfer': return `cedió la cuenta principal a ${d.to}`;
+    case 'notify.contact_update': return `cambió el correo o el teléfono${d.email && d.email !== 'sin cambios' ? ` (correo ${d.email})` : ''}${d.phone && d.phone !== 'sin cambios' ? ` (teléfono ${d.phone})` : ''}`;
+    case 'user.profile_update': return 'cambió sus datos';
     case 'task.check_met': return 'marcó una tarea como cumplida';
     case 'task.check_not_met': return `marcó una tarea como no cumplida${d.penaltyApplied ? ` (−${d.penaltyApplied} min de pantalla)` : ''}`;
     case 'bonus.fulfill': return `cumplió un premio: ${d.label}`;

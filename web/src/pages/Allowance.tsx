@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
 import { Banknote, CalendarCheck2, MonitorSmartphone, PauseCircle, ReceiptText, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { api, newKey, post } from '../lib/api';
-import { euros, fmtDate, parseEuros } from '../lib/format';
+import { currencySymbol, euros, fmtDate, parseEuros } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import type { Bank, BankSummary, Goal, User, Wallet } from '../lib/types';
@@ -44,10 +44,10 @@ function AdjustSheet({ child, onClose }: { child: User; onClose: () => void }) {
     <Sheet open onClose={onClose} title={`Ajustar a ${child.display_name}`} footer={<Button className="w-full" loading={save.isPending} onClick={() => save.mutate()}>Guardar ajuste</Button>}>
       <div className="space-y-4">
         <div className="flex flex-wrap gap-2">
-          <Segmented label="Qué ajustar" value={type} onChange={setType} options={[{ value: 'points', label: 'Puntos' }, { value: 'money', label: 'Euros' }]} />
+          <Segmented label="Qué ajustar" value={type} onChange={setType} options={[{ value: 'points', label: 'Puntos' }, { value: 'money', label: 'Dinero' }]} />
           <Segmented label="Sentido" value={sign} onChange={setSign} options={[{ value: 'plus', label: 'Sumar' }, { value: 'minus', label: 'Restar' }]} />
         </div>
-        <Field label={type === 'points' ? 'Puntos' : 'Importe (€)'}>{(id) => <input id={id} className="field num text-xl font-bold" inputMode={type === 'points' ? 'numeric' : 'decimal'} value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
+        <Field label={type === 'points' ? 'Puntos' : `Importe (${currencySymbol()})`}>{(id) => <input id={id} className="field num text-xl font-bold" inputMode={type === 'points' ? 'numeric' : 'decimal'} value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
         <Field label="Motivo" hint="Queda en el historial y lo verá tu hijo/a.">{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Gracias por ayudar con la mudanza…" maxLength={300} />}</Field>
         {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
       </div>
@@ -104,7 +104,7 @@ function KidPanel({ child: k, wallet: w, pending, onSheet }: { child: User; wall
           <p className="mt-3.5 flex items-center gap-2.5 text-sm text-[var(--fg-2)]"><Pips used={bank.week.withdrawals_used} total={bank.week.withdrawals_max} /> Retiros esta semana: <b className="text-[var(--fg)]">{bank.week.withdrawals_used} de {bank.week.withdrawals_max}</b></p>
           <div className="mt-3.5 grid gap-2.5">
             {bank.loan ? <LoanProduct loan={bank.loan} mine={false} compact /> : <p className="rounded-[1.1rem] border border-[var(--line)] bg-[var(--bg)] px-3.5 py-2.5 text-sm text-[var(--fg-3)]">Sin préstamo</p>}
-            {goals.length ? <ul className="grid gap-2.5">{goals.map((g) => <GoalProduct key={g.id} goal={g} mine={false} compact />)}</ul> : null}
+            {goals.length ? <ul className="grid gap-2.5">{goals.map((g) => <GoalProduct key={g.id} goal={g} mine={false} compact manage />)}</ul> : null}
           </div>
           <p className="mt-3 flex flex-wrap items-center gap-x-2 text-sm text-[var(--fg-2)]">
             <MonitorSmartphone size={16} aria-hidden /> Pantalla: <b className="num text-[var(--fg)]">{minutesLabel(w.screen_minutes)}</b>
@@ -173,7 +173,7 @@ export default function Allowance() {
   if (fam.isLoading) return <Loading />;
   const periodName = family.settlement_period === 'week' ? 'semana' : 'mes';
   const sm = summary.data?.summary;
-  const pendingFor = (id: string) => approvals.pay.filter((r) => r.user_id === id).length + approvals.loans.filter((l) => l.user_id === id).length + approvals.goals.filter((g) => g.user_id === id).length;
+  const pendingFor = (id: string) => approvals.pay.filter((r) => r.user_id === id).length + approvals.loans.filter((l) => l.user_id === id).length + approvals.goals.filter((g) => g.user_id === id).length + approvals.proposals.filter((g) => g.user_id === id).length + approvals.autoRequests.filter((g) => g.user_id === id).length;
 
   return (
     <div>
@@ -226,7 +226,7 @@ export default function Allowance() {
       </section>
 
       <Sheet open={closing} onClose={() => setClosing(false)} title={`Cerrar la ${periodName} anterior`}
-        footer={<Button className="w-full" loading={settle.isPending} onClick={() => settle.mutate()}>Convertir puntos en euros</Button>}>
+        footer={<Button className="w-full" loading={settle.isPending} onClick={() => settle.mutate()}>Convertir puntos en dinero</Button>}>
         <p className="muted">Los puntos disponibles de cada hijo se convertirán en euros ({family.rate_points} pts = {euros(family.rate_cents)}){family.cap_cents != null ? `, con un máximo de ${euros(family.cap_cents)} por ${periodName}. Lo que pase del límite se queda en puntos` : ''}. Cada {periodName} solo se puede cerrar una vez.</p>
       </Sheet>
       {sheet?.kind === 'pay' ? <PaySheet child={sheet.child} wallet={sheet.wallet} onClose={() => setSheet(null)} /> : null}

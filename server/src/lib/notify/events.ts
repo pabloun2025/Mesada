@@ -37,6 +37,13 @@ export const EVENTS = {
   goal_decided: { label: 'Meta de ahorro resuelta', audience: 'child', defaults: ['whatsapp'] },
   savings_interest: { label: 'Interés del ahorro', audience: 'child', defaults: [] },
   badge: { label: 'Insignia u objetivo conseguido', audience: 'child', defaults: [] },
+  goal_proposed: { label: 'Meta de ahorro o ahorro automático por aprobar', audience: 'adult', defaults: ['whatsapp'] },
+  goal_gift: { label: 'Aporte a tu meta de ahorro', audience: 'child', defaults: [] },
+  goal_match: { label: 'Aporte de tus padres a tu meta', audience: 'child', defaults: [] },
+  goal_auto: { label: 'Ahorro automático a tu meta', audience: 'child', defaults: [] },
+  cheer: { label: 'Felicitación', audience: 'child', defaults: [] },
+  relative_activity: { label: 'Un pariente ha animado o aportado', audience: 'adult', defaults: [] },
+  family_change: { label: 'Cambios en la familia', audience: 'adult', defaults: [] },
 } satisfies Record<string, EventDef>;
 
 export type EventKey = keyof typeof EVENTS;

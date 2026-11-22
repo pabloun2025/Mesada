@@ -3,6 +3,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { LEGAL_VERSION } from './legal.js';
 import { getPool, many, one, tx, type Db } from './db.js';
+import { fmtMoney } from './currency.js';
 import type { ZipEntry } from './zip.js';
 
 /* ---------- Descarga de todos los datos de la familia ---------- */
@@ -25,11 +26,11 @@ const FILES: { file: string; about: string; specs: Spec[] }[] = [
   { file: 'tareas-hechas.json', about: 'Cada vez que se hizo una tarea, con notas, estado y la foto de evidencia (carpeta fotos/)', specs: [BY_FAMILY('task_instances', 'tareas_hechas')] },
   { file: 'puntos.json', about: 'Libro de puntos', specs: [BY_FAMILY('points_ledger', 'movimientos_de_puntos')] },
   { file: 'dinero.json', about: 'Libro de dinero, cierres semanales y pagos', specs: [BY_FAMILY('money_ledger', 'movimientos_de_dinero'), BY_FAMILY('settlements', 'cierres'), BY_FAMILY('payments', 'pagos'), BY_FAMILY('payout_requests', 'peticiones_de_pago')] },
-  { file: 'banco.json', about: 'Metas de ahorro, préstamos y topes', specs: [BY_FAMILY('savings_goals', 'metas'), BY_FAMILY('goal_requests', 'peticiones_de_meta'), BY_FAMILY('loans', 'prestamos'), BY_FAMILY('loan_charges', 'cuotas'), BY_FAMILY('cap_uses', 'usos_del_tope')] },
+  { file: 'banco.json', about: 'Metas de ahorro (con su foto, en la carpeta fotos/), préstamos y topes', specs: [BY_FAMILY('savings_goals', 'metas'), BY_FAMILY('goal_requests', 'peticiones_de_meta'), BY_FAMILY('loans', 'prestamos'), BY_FAMILY('loan_charges', 'cuotas'), BY_FAMILY('cap_uses', 'usos_del_tope')] },
   { file: 'recompensas.json', about: 'Recompensas, canjes y premios por bono', specs: [BY_FAMILY('rewards', 'recompensas'), BY_FAMILY('redemptions', 'canjes'), BY_FAMILY('bonus_grants', 'bonos'), BY_USER('bonus_claims', 'sorpresas_reclamadas')] },
   { file: 'pantalla.json', about: 'Minutos de pantalla, planes, ajustes y usos', specs: [BY_FAMILY('screen_ledger', 'movimientos'), BY_FAMILY('screen_lots', 'lotes'), BY_FAMILY('screen_plans', 'planes'), BY_FAMILY('screen_adjust_reasons', 'motivos_de_ajuste'), BY_FAMILY('screen_adjustments', 'ajustes'), BY_FAMILY('screen_usage_logs', 'usos'), BY_FAMILY('honesty_days', 'dias_de_honestidad')] },
-  { file: 'avisos.json', about: 'Avisos dentro de la app, envíos por correo o WhatsApp y preferencias', specs: [BY_USER('notifications', 'avisos'), BY_FAMILY('notification_outbox', 'envios'), BY_USER('notification_prefs', 'preferencias')] },
-  { file: 'invitaciones.json', about: 'Invitaciones a otros adultos', specs: [BY_FAMILY('invitations', 'invitaciones')] },
+  { file: 'avisos.json', about: 'Avisos dentro de la app, envíos por correo o WhatsApp y preferencias', specs: [BY_USER('notifications', 'avisos'), BY_FAMILY('notification_outbox', 'envios'), BY_USER('notification_prefs', 'preferencias'), BY_FAMILY('cheers', 'felicitaciones')] },
+  { file: 'invitaciones.json', about: 'Invitaciones a otros adultos y parientes (con su correo, teléfono y parentesco)', specs: [BY_FAMILY('invitations', 'invitaciones')] },
   { file: 'historial.json', about: 'Historial de todo lo que se ha hecho', specs: [BY_FAMILY('audit_log', 'historial')] },
 ];
 
@@ -46,28 +47,28 @@ function omit(table: string, rows: Record<string, unknown>[]) {
 /** Ruta de la foto dentro del ZIP (el nombre original lleva un UUID, no datos personales). */
 const zipPhoto = (rel: string) => `fotos/${path.basename(rel)}`;
 
-const README = (famName: string) => `DiploP · descarga de los datos de la familia «${famName}»
+const README = (famName: string, currency: string) => `DiploP · descarga de los datos de la familia «${famName}»
 Generada el ${new Date().toISOString().slice(0, 10)}.
 
 Qué hay aquí
 - Un fichero .json por tema (miembros, tareas, puntos, dinero, pantalla, avisos, historial…).
   Se abren con cualquier editor de texto o con un navegador. Las fechas van en formato internacional (UTC).
-- La carpeta fotos/ con las fotos de evidencia que subieron los hijos. En tareas-hechas.json,
-  el campo photo_path indica qué foto es cada una.
+- La carpeta fotos/ con las fotos de evidencia que subieron los hijos y las de sus metas de ahorro. En tareas-hechas.json
+  y banco.json, el campo photo_path indica qué foto es cada una.
 - No incluye contraseñas, PIN ni claves: no se guardan en claro y no se pueden descargar.
 
-Importes: los euros van en céntimos (500 = 5,00 €); los puntos y los minutos, en enteros.
+Importes: el dinero va en céntimos de la moneda de la familia (500 = ${fmtMoney(500, currency)}); los puntos y los minutos, en enteros.
 Esta descarga es tu derecho de acceso y de portabilidad (RGPD, arts. 15 y 20).
 Dudas: privacidad@veryfacil.org
 `;
 
 /** Genera los ficheros del ZIP, uno a uno. */
 export async function* exportEntries(familyId: string, db: Db = getPool()): AsyncGenerator<ZipEntry> {
-  const fam = await one<{ name: string }>(db, 'SELECT name FROM families WHERE id = $1', [familyId]);
-  yield { name: 'LEEME.txt', data: Buffer.from(README(fam?.name ?? ''), 'utf8'), deflate: true };
+  const fam = await one<{ name: string; currency: string }>(db, 'SELECT name, currency FROM families WHERE id = $1', [familyId]);
+  yield { name: 'LEEME.txt', data: Buffer.from(README(fam?.name ?? '', fam?.currency ?? 'EUR'), 'utf8'), deflate: true };
 
   // Fotos que existen de verdad en disco (la fila puede apuntar a una ya borrada).
-  const photoRows = await many<{ photo_path: string }>(db, 'SELECT photo_path FROM task_instances WHERE family_id = $1 AND photo_path IS NOT NULL', [familyId]);
+  const photoRows = await many<{ photo_path: string }>(db, 'SELECT photo_path FROM task_instances WHERE family_id = $1 AND photo_path IS NOT NULL UNION ALL SELECT photo_path FROM savings_goals WHERE family_id = $1 AND photo_path IS NOT NULL', [familyId]);
   const photos = photoRows.map((r) => r.photo_path).filter((rel) => safePhotoPath(rel) && fs.existsSync(safePhotoPath(rel)!));
   const have = new Set(photos);
 
@@ -75,7 +76,7 @@ export async function* exportEntries(familyId: string, db: Db = getPool()): Asyn
     const out: Record<string, unknown> = {};
     for (const s of f.specs) {
       const rows = await many(db, `SELECT t.* FROM ${s.table} t WHERE ${s.where}`, [familyId]);
-      out[s.key] = omit(s.table, rows).map((r) => (s.table === 'task_instances' && r.photo_path ? { ...r, photo_path: have.has(String(r.photo_path)) ? zipPhoto(String(r.photo_path)) : null } : r));
+      out[s.key] = omit(s.table, rows).map((r) => ((s.table === 'task_instances' || s.table === 'savings_goals') && r.photo_path ? { ...r, photo_path: have.has(String(r.photo_path)) ? zipPhoto(String(r.photo_path)) : null } : r));
     }
     yield { name: f.file, data: Buffer.from(JSON.stringify({ descripcion: f.about, ...out }, null, 2), 'utf8'), deflate: true };
   }
@@ -135,6 +136,8 @@ export async function eraseChild(familyId: string, userId: string): Promise<{ ph
       [familyId, userId],
     );
     await db.query(`UPDATE task_instances SET photo_path = NULL, child_note = NULL WHERE family_id = $1 AND completed_by = $2`, [familyId, userId]);
+    // Las fotos de sus metas de ahorro también (las filas de las metas se van con su cuenta).
+    for (const g of await many<{ photo_path: string }>(db, 'SELECT photo_path FROM savings_goals WHERE user_id = $1 AND photo_path IS NOT NULL', [userId])) rows.push({ photo_path: g.photo_path });
     await db.query(
       `DELETE FROM audit_log WHERE family_id = $1 AND (actor_id = $2 OR (entity = 'user' AND entity_id = $2) OR data->>'for' = $2::text OR data->>'userId' = $2::text)`,
       [familyId, userId],

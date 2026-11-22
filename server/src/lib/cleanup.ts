@@ -64,8 +64,22 @@ export async function runCleanup(now = new Date()): Promise<CleanupReport> {
     await db.query('UPDATE task_instances SET photo_path = NULL, photo_deleted_at = $2 WHERE id = $1', [e.id, now]);
   }
 
+  // 1b) Fotos de metas de ahorro: NO caducan mientras la meta siga abierta (propuesta o activa). Cerrada, comprada,
+  //     pasada a efectivo, rechazada o quitada, se borran pasados los mismos días que las de las tareas.
+  const goalPhotos = await many<{ id: string; photo_path: string }>(
+    db,
+    `SELECT id, photo_path FROM savings_goals
+      WHERE photo_path IS NOT NULL AND closed_at IS NOT NULL AND (archived OR status IN ('bought','cashed_out','rejected')) AND closed_at < $1::timestamptz - make_interval(days => $2)`,
+    [now, r.photoDays],
+  );
+  for (const e of goalPhotos) {
+    freed += size(path.resolve(config.uploadDir, e.photo_path));
+    removePhotoFile(e.photo_path);
+    await db.query('UPDATE savings_goals SET photo_path = NULL WHERE id = $1', [e.id]);
+  }
+
   // 2) Archivos sin fila (más de una hora, para no pisar una subida en curso) y filas sin archivo.
-  const referenced = new Set((await many<{ photo_path: string }>(db, 'SELECT photo_path FROM task_instances WHERE photo_path IS NOT NULL')).map((x) => path.normalize(x.photo_path)));
+  const referenced = new Set((await many<{ photo_path: string }>(db, 'SELECT photo_path FROM task_instances WHERE photo_path IS NOT NULL UNION ALL SELECT photo_path FROM savings_goals WHERE photo_path IS NOT NULL')).map((x) => path.normalize(x.photo_path)));
   let orphanFiles = 0;
   for (const f of photoFilesOnDisk()) {
     if (referenced.has(path.normalize(f.rel)) || now.getTime() - f.mtimeMs < 3_600_000) continue;
@@ -77,6 +91,13 @@ export async function runCleanup(now = new Date()): Promise<CleanupReport> {
   for (const row of await many<{ id: string; photo_path: string }>(db, 'SELECT id, photo_path FROM task_instances WHERE photo_path IS NOT NULL')) {
     if (!fs.existsSync(path.resolve(config.uploadDir, row.photo_path))) {
       await db.query('UPDATE task_instances SET photo_path = NULL, photo_deleted_at = $2 WHERE id = $1', [row.id, now]);
+      missing++;
+    }
+  }
+
+  for (const row of await many<{ id: string; photo_path: string }>(db, 'SELECT id, photo_path FROM savings_goals WHERE photo_path IS NOT NULL')) {
+    if (!fs.existsSync(path.resolve(config.uploadDir, row.photo_path))) {
+      await db.query('UPDATE savings_goals SET photo_path = NULL WHERE id = $1', [row.id]);
       missing++;
     }
   }
@@ -93,7 +114,7 @@ export async function runCleanup(now = new Date()): Promise<CleanupReport> {
   const serverErrors = await n(`DELETE FROM server_errors WHERE created_at < $1::timestamptz - interval '30 days'`, [now]);
 
   return {
-    at: now.toISOString(), expiredPhotos: expired.length, orphanFiles, missingFileRows: missing, sessions, trustedDevices, notifications,
+    at: now.toISOString(), expiredPhotos: expired.length + goalPhotos.length, orphanFiles, missingFileRows: missing, sessions, trustedDevices, notifications,
     outbox, resets, invitations, serverErrors, freedBytes: freed,
   };
 }

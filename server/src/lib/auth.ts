@@ -67,6 +67,11 @@ export interface AuthUser {
   username: string;
   sessionId?: string;
   isSuperadmin?: boolean;
+  /** Parentesco del adulto (I20) y si es «pariente» (ver y animar) o la cuenta principal de la familia. */
+  relationship?: string | null;
+  relationshipLabel?: string | null;
+  isRelative?: boolean;
+  isPrincipal?: boolean;
   /** Cuándo pasó esta sesión la verificación en dos pasos de administración. */
   adminVerifiedAt?: Date | null;
 }
@@ -82,7 +87,7 @@ export async function loadUser(req: FastifyRequest): Promise<AuthUser | undefine
   if (!token) return undefined;
   const row = await one(
     getPool(),
-    `SELECT u.id, u.family_id, u.role, u.display_name, u.username, u.is_superadmin, s.id AS session_id, s.admin_verified_at
+    `SELECT u.id, u.family_id, u.role, u.display_name, u.username, u.is_superadmin, u.relationship, u.relationship_label, u.is_relative, u.is_principal, s.id AS session_id, s.admin_verified_at
        FROM sessions s JOIN users u ON u.id = s.user_id JOIN families f ON f.id = u.family_id
       WHERE s.token_hash = $1 AND s.expires_at > now() AND u.active AND f.blocked_at IS NULL`,
     [sha256(token)],
@@ -90,7 +95,8 @@ export async function loadUser(req: FastifyRequest): Promise<AuthUser | undefine
   if (!row) return undefined;
   return {
     id: row.id, familyId: row.family_id, role: row.role, displayName: row.display_name, username: row.username,
-    sessionId: row.session_id, isSuperadmin: row.is_superadmin, adminVerifiedAt: row.admin_verified_at,
+    sessionId: row.session_id, isSuperadmin: row.is_superadmin,
+    relationship: row.relationship, relationshipLabel: row.relationship_label, isRelative: row.is_relative, isPrincipal: row.is_principal, adminVerifiedAt: row.admin_verified_at,
   };
 }
 
@@ -99,8 +105,24 @@ export function requireUser(req: FastifyRequest): AuthUser {
   return req.user;
 }
 
+/** Adulto completo (madre, padre, pareja, tutor/a legal): los parientes quedan fuera aunque sean adultos. */
 export function requireAdult(req: FastifyRequest): AuthUser {
   const u = requireUser(req);
   if (u.role !== 'adult') throw forbidden('Solo los adultos pueden hacer esto');
+  if (u.isRelative) throw forbidden('Como pariente puedes ver y animar, pero no cambiar esto');
+  return u;
+}
+
+/** Cualquier adulto de la familia, también los parientes (para ver y animar). Los hijos no. */
+export function requireGrownUp(req: FastifyRequest): AuthUser {
+  const u = requireUser(req);
+  if (u.role !== 'adult') throw forbidden('Solo los adultos pueden hacer esto');
+  return u;
+}
+
+/** La cuenta principal (la que creó la familia o a la que se cedió): añade y quita adultos y parientes. */
+export function requirePrincipal(req: FastifyRequest): AuthUser {
+  const u = requireAdult(req);
+  if (!u.isPrincipal) throw forbidden('Solo la cuenta principal puede añadir o quitar adultos y parientes');
   return u;
 }

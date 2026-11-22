@@ -2,17 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Camera, CalendarCheck, Check, ChevronRight, Database, Flame, Hammer, Hourglass, PartyPopper, PauseCircle, Smartphone, Star } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, del } from '../lib/api';
 import { addDays, euros, fmtDate, weekdayLong } from '../lib/format';
 import { useInvalidateAll, useUndoToast } from '../lib/hooks';
 import { useSession } from '../lib/session';
-import type { ExtraBoardItem, Instance, Progress, ScreenView, Wallet, BonusGrant } from '../lib/types';
+import type { ExtraBoardItem, Goal, Instance, Progress, ScreenView, Wallet, BonusGrant } from '../lib/types';
 import { minutesLabel } from '../lib/deadline';
 import { Button, Empty, Loading, SectionTitle, Sheet, useToast } from '../components/ui';
 import { LogScreenSheet } from '../components/MoneySheets';
 import { WeekRing } from '../components/Ring';
 import { GoldCoins } from '../components/Coins';
 import { TaskRow } from '../components/TaskRow';
+import { AutoSaveSheet, NewGoalSheet } from '../components/GoalSheets';
+import { GoalBar, GoalVisual, weeksLeftText } from '../components/Goal';
 
 export default function ChildToday() {
   const { user, family } = useSession();
@@ -139,6 +141,8 @@ export default function ChildToday() {
 
       <MiMesada points={wallet.data?.wallet.points_available} cents={wallet.data?.wallet.points_value_cents} />
 
+      <SavingsGoalCard />
+
       {firsts.length === 0 && hasOptional ? null : <section id="para-hoy" className="mb-8 scroll-mt-20">
         <SectionTitle>Para hoy {firsts.length ? <span className="num ml-1 text-base muted">{doneCount}/{firsts.length}</span> : null}</SectionTitle>
         {items.length ? (
@@ -219,6 +223,74 @@ export default function ChildToday() {
       {logOpen && screenMin != null ? <LogScreenSheet balance={screenMin} onClose={() => setLogOpen(false)} /> : null}
       {firsts.length > 0 && open.length === 0 ? <p className="mt-6 flex items-center justify-center gap-2 text-sm muted"><CalendarCheck size={16} aria-hidden /> Mañana más.</p> : null}
     </div>
+  );
+}
+
+/**
+ * «¿Para qué ahorras?» (I19): la meta de ahorro con presencia propia en Hoy, bajo «Mi mesada».
+ * Sin meta, invita a crear una; con meta, enseña foto o emoji, la barra y «Te faltan X semanas» (solo si hay datos de lo que gana).
+ */
+function SavingsGoalCard() {
+  const { user } = useSession();
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const goalsQ = useQuery({ queryKey: ['goals', user.id], queryFn: () => api<{ goals: Goal[] }>(`/goals/${user.id}`) });
+  const [creating, setCreating] = useState(false);
+  const [auto, setAuto] = useState<Goal | null>(null);
+  const dismiss = useMutation({ mutationFn: (id: string) => del(`/goals/${id}`), onSuccess: invalidate, onError: (e: Error) => toast(e.message, 'error') });
+  if (!goalsQ.data) return null;
+  const goals = goalsQ.data.goals;
+  const active = goals.filter((g) => g.status === 'active');
+  const proposed = goals.filter((g) => g.status === 'proposed');
+  const rejected = goals.filter((g) => g.status === 'rejected');
+  const main = active[0];
+  const weeks = main ? weeksLeftText(main, true) : null;
+  return (
+    <section aria-label="¿Para qué ahorras?" className="mb-8 rounded-[var(--radius-panel)] border border-[var(--line)] bg-[var(--card)] p-4 shadow-[var(--shadow-lift)]">
+      <h2 className="mb-3 text-xl font-extrabold">¿Para qué ahorras?</h2>
+      {main ? (
+        <div>
+          <div className="flex items-center gap-3">
+            <GoalVisual goal={main} size={64} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-lg font-bold">{main.title}</p>
+              {weeks ? <p className="font-bold text-leaf-text dark:text-[#7fe0b2]">{weeks}</p> : null}
+            </div>
+          </div>
+          <div className="mt-3"><GoalBar goal={main} label={`Meta ${main.title}`} /></div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link to="/mesada" className="inline-flex h-11 items-center gap-1.5 rounded-full bg-[var(--chip)] px-4 text-sm font-bold">Ir a mi banco <ChevronRight size={16} aria-hidden /></Link>
+            <button type="button" onClick={() => setAuto(main)} className="inline-flex h-11 items-center gap-1.5 rounded-full bg-[var(--chip)] px-4 text-sm font-bold">
+              {main.auto_pending_percent ? `Ahorro automático: esperando el ${main.auto_pending_percent} %` : main.auto_percent ? `Ahorro automático ${main.auto_percent} %` : 'Ahorro automático'}
+            </button>
+          </div>
+          {active.length > 1 ? <p className="mt-2 text-sm muted">y {active.length - 1} meta{active.length > 2 ? 's' : ''} más en Mi banco</p> : null}
+        </div>
+      ) : proposed.length ? null : (
+        <div>
+          <p className="mb-3 muted">Elige algo que quieras y ve guardando para conseguirlo. Tus padres te ayudan a aprobarlo.</p>
+          <Button size="lg" className="w-full" onClick={() => setCreating(true)}>Crear meta de ahorro</Button>
+        </div>
+      )}
+      {proposed.map((g) => (
+        <p key={g.id} role="status" className="mt-3 flex items-center gap-3 rounded-2xl bg-sun-soft p-3 font-bold text-[#7a5600] dark:bg-sun/15 dark:text-[#ffd979]">
+          <Hourglass size={18} className="shrink-0" aria-hidden /> <span className="min-w-0 flex-1">«{g.title}»: tus padres tienen que aprobarla.</span>
+        </p>
+      ))}
+      {rejected.map((g) => (
+        <div key={g.id} role="status" className="mt-3 rounded-2xl bg-berry-soft p-3 text-berry-deep dark:bg-berry/15 dark:text-[#ff9dbf]">
+          <p className="font-bold">«{g.title}» no se ha aprobado.</p>
+          {g.decision_note ? <p className="text-sm">Motivo: {g.decision_note}</p> : null}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setCreating(true)}>Proponer otra</Button>
+            <Button size="sm" variant="ghost" onClick={() => dismiss.mutate(g.id)}>Quitar aviso</Button>
+          </div>
+        </div>
+      ))}
+      {main && active.length < 3 ? <Button size="sm" variant="ghost" className="mt-2" onClick={() => setCreating(true)}>Crear otra meta de ahorro</Button> : null}
+      {creating ? <NewGoalSheet userId={user.id} onClose={() => setCreating(false)} /> : null}
+      {auto ? <AutoSaveSheet goal={auto} onClose={() => setAuto(null)} /> : null}
+    </section>
   );
 }
 

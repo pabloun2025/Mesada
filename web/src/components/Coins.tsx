@@ -1,3 +1,4 @@
+import { currencySymbol } from '../lib/format';
 import { useId } from 'react';
 
 /** Monedas doradas de adorno (recibo del canje, cuenta de dinero…). Puramente decorativas. */
@@ -33,7 +34,7 @@ export function GoldCoins({ className = '', size = 64 }: { className?: string; s
         <circle cx="50" cy="28" r="20" fill={`url(#${e})`} />
         <circle cx="49" cy="26" r="19" fill={`url(#${g})`} stroke="#b97800" strokeWidth="1.2" />
         <circle cx="49" cy="26" r="14.5" fill="none" stroke="#fff2b0" strokeOpacity=".75" strokeWidth="1.4" />
-        <text x="49" y="33" textAnchor="middle" fontSize="20" fontWeight="800" fill="#b97800" fontFamily="system-ui, sans-serif">€</text>
+        <text x="49" y="33" textAnchor="middle" fontSize="20" fontWeight="800" fill="#b97800" fontFamily="system-ui, sans-serif">{currencySymbol()}</text>
       </g>
     </svg>
   );

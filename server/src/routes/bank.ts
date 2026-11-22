@@ -1,11 +1,17 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { getPool, one } from '../lib/db.js';
-import { requireAdult, requireUser, type AuthUser } from '../lib/auth.js';
-import { forbidden, notFound } from '../lib/errors.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { requireAdult, requireGrownUp, requireUser, type AuthUser } from '../lib/auth.js';
+import { badRequest, conflict, forbidden, HttpError, notFound } from '../lib/errors.js';
+import { config } from '../lib/config.js';
+import { enforceLimit } from '../lib/limits.js';
+import { looksLikeImage, processPhoto, removePhotoFile, storePhoto } from '../lib/photos.js';
 import { bankOverview, cancelLoan, familyBankSummary, decideLoan, exchangePoints, listLoans, requestLoan, statement, takeAdvance } from '../lib/bank.js';
 import {
-  cancelGoalRequest, decideGoalRequest, goalDeposit, goalWithdrawEarly, listGoalRequests, requestGoalAction,
+  cancelGoalRequest, decideAutoSave, decideGoalProposal, decideGoalRequest, giveGoalGift, goalDeposit, goalWithdrawEarly, listGoalProposals,
+  listGoalRequests, requestGoalAction, reverseContribution, setAutoSave, setGoalPhoto, setMatchRule,
 } from '../lib/savings.js';
 
 const uuid = z.string().uuid();
@@ -131,5 +137,102 @@ export default async function bankRoutes(app: FastifyInstance) {
     const { id, decision } = z.object({ id: uuid, decision: z.enum(['approve', 'reject']) }).parse(req.params);
     const b = z.object({ priceCents: z.number().int().positive().max(100000000).optional(), note: z.string().trim().max(300).optional() }).parse(req.body ?? {});
     return decideGoalRequest(u, id, { approve: decision === 'approve', ...b });
+  });
+
+  // ---------- I19: metas propuestas por el hijo, ahorro automático, aporte de los padres, aportes puntuales y foto ----------
+  app.get('/api/goal-proposals', async (req) => {
+    const u = requireAdult(req);
+    return listGoalProposals(getPool(), u.familyId);
+  });
+
+  app.post('/api/goals/:id/proposal/:decision', async (req) => {
+    const u = requireAdult(req);
+    const { id, decision } = z.object({ id: uuid, decision: z.enum(['approve', 'reject']) }).parse(req.params);
+    const b = z.object({
+      title: z.string().trim().min(1).max(80).optional(), targetCents: z.number().int().positive().max(100000000).optional(),
+      emoji: z.string().trim().max(16).nullable().optional(), note: z.string().trim().max(300).optional(),
+    }).parse(req.body ?? {});
+    return decideGoalProposal(u, id, { approve: decision === 'approve', ...b });
+  });
+
+  // Ahorro automático: el hijo lo pide (espera aprobación) o un adulto lo fija.
+  app.put('/api/goals/:id/auto', async (req) => {
+    const u = requireUser(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ percent: z.number().int().min(0).max(100) }).parse(req.body);
+    return setAutoSave(u, id, b.percent);
+  });
+
+  app.post('/api/goals/:id/auto/:decision', async (req) => {
+    const u = requireAdult(req);
+    const { id, decision } = z.object({ id: uuid, decision: z.enum(['approve', 'reject']) }).parse(req.params);
+    return decideAutoSave(u, id, decision === 'approve');
+  });
+
+  // Regla del aporte de los padres («1 € por cada 4 € ahorrados, hasta X»). Cuerpo vacío o null la quita.
+  app.put('/api/goals/:id/match', async (req) => {
+    const u = requireAdult(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({
+      perCents: z.number().int().positive().max(100000000), givesCents: z.number().int().positive().max(100000000), capCents: z.number().int().positive().max(100000000),
+    }).nullable().parse(req.body ?? null);
+    return setMatchRule(u, id, b);
+  });
+
+  // Aporte puntual a la meta: adultos y parientes.
+  app.post('/api/goals/:id/gift', async (req) => {
+    const u = requireGrownUp(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ cents: z.number().int().positive().max(100000000), message: z.string().trim().max(140).optional() }).parse(req.body);
+    enforceLimit(req, 'gift', 60);
+    return giveGoalGift(u, id, { ...b, idempotencyKey: idemKey(req) });
+  });
+
+  app.post('/api/goals/:id/contributions/:entryId/reverse', async (req) => {
+    const u = requireAdult(req);
+    const { id, entryId } = z.object({ id: uuid, entryId: uuid }).parse(req.params);
+    return reverseContribution(u, id, entryId);
+  });
+
+  // Foto de la meta: se procesa como las demás (1280 px, sin EXIF) y NO caduca mientras la meta siga abierta.
+  app.post('/api/goals/:id/photo', async (req) => {
+    const u = requireUser(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    if (!req.isMultipart()) throw badRequest('Falta la foto');
+    let rel: string | null = null;
+    for await (const part of req.parts()) {
+      if (part.type !== 'file') continue;
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(part.mimetype)) throw badRequest('La foto debe ser JPG, PNG o WebP');
+      enforceLimit(req, 'upload', config.limits.uploadPerHour);
+      const stored = (await one<{ n: number }>(getPool(), `SELECT ((SELECT count(*) FROM task_instances WHERE family_id = $1 AND photo_path IS NOT NULL) + (SELECT count(*) FROM savings_goals WHERE family_id = $1 AND photo_path IS NOT NULL))::int AS n`, [u.familyId]))!.n;
+      if (stored >= config.caps.maxPhotos) throw conflict('La familia ha llegado al máximo de fotos guardadas.', 'too_many_photos');
+      const raw = await part.toBuffer();
+      if (part.file.truncated) throw new HttpError(413, `La foto pesa demasiado (máximo ${Math.round(config.maxUploadBytes / 1048576)} MB)`, 'too_large');
+      if (!looksLikeImage(raw, part.mimetype)) throw badRequest('El archivo no es una foto válida');
+      const out = await processPhoto(raw, part.mimetype);
+      rel = await storePhoto(u.familyId, out.data, out.ext);
+    }
+    if (!rel) throw badRequest('Falta la foto');
+    try {
+      return await setGoalPhoto(u, id, rel);
+    } catch (e) {
+      removePhotoFile(rel);
+      throw e;
+    }
+  });
+
+  app.get('/api/goals/:id/photo', async (req, reply) => {
+    const u = requireUser(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const g = await one(getPool(), 'SELECT user_id, photo_path FROM savings_goals WHERE id = $1 AND family_id = $2 AND NOT archived', [id, u.familyId]);
+    if (!g?.photo_path) throw notFound('Sin foto');
+    if (u.role === 'child' && u.id !== g.user_id) throw forbidden();
+    const abs = path.resolve(config.uploadDir, g.photo_path);
+    if (!abs.startsWith(path.resolve(config.uploadDir) + path.sep)) throw notFound('Sin foto');
+    if (!fs.existsSync(abs)) throw notFound('Sin foto');
+    const ext = path.extname(abs).slice(1);
+    reply.header('Cache-Control', 'private, no-cache');
+    reply.type(ext === 'jpg' ? 'image/jpeg' : `image/${ext}`);
+    return reply.send(fs.createReadStream(abs));
   });
 }

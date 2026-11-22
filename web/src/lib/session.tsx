@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api';
+import { setCurrency } from './format';
 import type { Family, User } from './types';
 
 export interface Me {
@@ -12,7 +13,9 @@ export function useMe() {
     queryKey: ['me'],
     queryFn: async () => {
       try {
-        return await api<Me>('/me');
+        const me = await api<Me>('/me');
+        setCurrency(me.family.currency); // antes de que nada se pinte con importes
+        return me;
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) return null;
         throw e;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Delete } from 'lucide-react';
 import { Button, Sheet } from './ui';
-import { euros } from '../lib/format';
+import { currencySymbol, decimalSep, euros } from '../lib/format';
 
 /** Unidades: euros (con decimales) o enteros (puntos y minutos). */
 export type AmountUnit = 'eur' | 'pts' | 'min';
@@ -41,16 +41,17 @@ function AmountDisplay({ raw, unit, over }: { raw: string; unit: AmountUnit; ove
     <p aria-live="polite" className="num flex items-baseline justify-center text-[3.75rem] leading-none font-extrabold">
       <span className="sr-only">{unit === 'eur' ? euros(rawToValue(raw, 'eur')) : `${rawToValue(raw, unit)} ${unit === 'min' ? 'minutos' : 'puntos'}`}</span>
       <span aria-hidden className="inline-flex items-baseline">
+        {unit === 'eur' && currencySymbol() === '$' ? <span className="mr-1 text-3xl font-bold text-[var(--fg-3)]">$</span> : null}
         <span className={raw ? ink : 'text-[var(--line)]'}>{int || '0'}</span>
         {unit === 'eur' ? (
           <>
-            <span className={dec !== undefined ? ink : 'text-[var(--line)]'}>,</span>
+            <span className={dec !== undefined ? ink : 'text-[var(--line)]'}>{decimalSep()}</span>
             <span className={ink}>{typedDec}</span>
             <span className="text-[var(--line)]">{'00'.slice(typedDec.length)}</span>
           </>
         ) : null}
         <span className="caret ml-0.5 inline-block h-12 w-[3px] self-center rounded-full bg-tangerine" />
-        <span className="ml-2 text-3xl font-bold text-[var(--fg-3)]">{unit === 'eur' ? '€' : unit}</span>
+        <span className="ml-2 text-3xl font-bold text-[var(--fg-3)]">{unit === 'eur' ? (currencySymbol() === '€' ? '€' : '') : unit}</span>
       </span>
     </p>
   );
@@ -169,11 +170,11 @@ export function AmountSheet(p: AmountSheetProps) {
                 <button
                   key={k}
                   type="button"
-                  aria-label={k === 'back' ? 'Borrar' : k === ',' ? 'Coma' : k}
+                  aria-label={k === 'back' ? 'Borrar' : k === ',' ? (decimalSep() === '.' ? 'Punto' : 'Coma') : k}
                   onClick={() => setRaw((r) => pressKey(r, k, unit))}
                   className={`font-display flex h-14 items-center justify-center rounded-2xl text-[1.65rem] font-semibold transition active:scale-[0.96] active:bg-tangerine-soft ${k === ',' || k === 'back' ? 'text-[var(--fg-2)]' : 'bg-[var(--bg)]'}`}
                 >
-                  {k === 'back' ? <Delete size={24} aria-hidden /> : k}
+                  {k === 'back' ? <Delete size={24} aria-hidden /> : k === ',' ? decimalSep() : k}
                 </button>
               );
             })}

@@ -8,7 +8,7 @@ import { LegalLinks } from '../components/LegalLinks';
 const STEPS = [
   { icon: ClipboardList, title: 'Tareas', text: 'Los padres reparten las tareas de casa y cada hijo ve las suyas.' },
   { icon: Star, title: 'Puntos', text: 'Al hacerlas y validarlas, los hijos ganan puntos.' },
-  { icon: Wallet, title: 'Dinero o premios', text: 'Los puntos se cambian por euros de mesada o por recompensas.' },
+  { icon: Wallet, title: 'Dinero o premios', text: 'Los puntos se cambian por dinero de mesada o por recompensas.' },
 ];
 
 const PARENTS = [
@@ -18,7 +18,7 @@ const PARENTS = [
 ];
 
 const KIDS = [
-  { icon: Star, title: 'Puntos', text: 'Cada tarea suma y se ve cuánto vale en euros.' },
+  { icon: Star, title: 'Puntos', text: 'Cada tarea suma y se ve cuánto vale en dinero.' },
   { icon: Flame, title: 'Rachas', text: 'Los días seguidos haciendo tareas dan insignias.' },
   { icon: PiggyBank, title: 'Metas de ahorro', text: 'Ahorran para algo que quieren y ganan interés.' },
   { icon: Gift, title: 'Recompensas', text: 'Cambian puntos por premios que eligen los padres.' },

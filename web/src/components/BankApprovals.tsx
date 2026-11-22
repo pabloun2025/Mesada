@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Banknote, Check, HandCoins, MonitorSmartphone, PiggyBank, ShoppingBag, X, type LucideIcon } from 'lucide-react';
+import { Banknote, CalendarClock, Check, HandCoins, MonitorSmartphone, PiggyBank, ShoppingBag, Target, X, type LucideIcon } from 'lucide-react';
 import { api, post } from '../lib/api';
-import { euros, parseEuros, refCode, relative } from '../lib/format';
+import { currencySymbol, euros, parseEuros, refCode, relative } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { screenPhrase, PAY_METHODS } from '../lib/screen';
-import type { GoalRequest, Loan, PayMethod, PayoutRequest, Wallet } from '../lib/types';
+import type { GoalProposals, GoalRequest, Loan, PayMethod, PayoutRequest, Wallet } from '../lib/types';
 import { Button, Field, Sheet, useToast } from './ui';
 import { AmountSheet } from './AmountSheet';
 import { MethodPicker } from './MoneySheets';
@@ -40,8 +40,51 @@ export function useBankApprovals() {
   const pay = useQuery({ queryKey: ['payout-requests', 'pending'], queryFn: () => api<{ requests: PayoutRequest[] }>('/payout-requests?status=pending') });
   const loans = useQuery({ queryKey: ['loans', 'pending'], queryFn: () => api<{ loans: Loan[] }>('/loans?status=pending') });
   const goals = useQuery({ queryKey: ['goal-requests', 'pending'], queryFn: () => api<{ requests: GoalRequest[] }>('/goal-requests?status=pending') });
-  const count = (pay.data?.requests.length ?? 0) + (loans.data?.loans.length ?? 0) + (goals.data?.requests.length ?? 0);
-  return { pay: pay.data?.requests ?? [], loans: loans.data?.loans ?? [], goals: goals.data?.requests ?? [], count };
+  const proposals = useQuery({ queryKey: ['goal-proposals'], queryFn: () => api<GoalProposals>('/goal-proposals') });
+  const count = (pay.data?.requests.length ?? 0) + (loans.data?.loans.length ?? 0) + (goals.data?.requests.length ?? 0) + (proposals.data?.proposals.length ?? 0) + (proposals.data?.autoRequests.length ?? 0);
+  return {
+    pay: pay.data?.requests ?? [], loans: loans.data?.loans ?? [], goals: goals.data?.requests ?? [],
+    proposals: proposals.data?.proposals ?? [], autoRequests: proposals.data?.autoRequests ?? [], count,
+  };
+}
+
+/** Una meta propuesta por un hijo: el adulto la aprueba (pudiendo ajustar nombre y precio) o la rechaza con un motivo. */
+function ProposalSheet({ p, mode, onClose }: { p: GoalProposals['proposals'][number]; mode: 'approve' | 'reject'; onClose: () => void }) {
+  const [title, setTitle] = useState(p.title);
+  const [price, setPrice] = useState((p.target_cents / 100).toFixed(2).replace('.', ','));
+  const [note, setNote] = useState('');
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const decide = useMutation({
+    mutationFn: () => {
+      if (mode === 'reject') {
+        if (!note.trim()) throw new Error('Cuéntale por qué (el motivo es obligatorio)');
+        return post(`/goals/${p.id}/proposal/reject`, { note });
+      }
+      const cents = parseEuros(price);
+      if (!cents || !title.trim()) throw new Error('Pon un nombre y un precio');
+      return post(`/goals/${p.id}/proposal/approve`, { title, targetCents: cents, note: note.trim() || undefined });
+    },
+    onSuccess: () => { toast(mode === 'approve' ? `Meta de ${p.display_name} aprobada` : 'Meta rechazada'); invalidate(); onClose(); },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  return (
+    <Sheet open onClose={onClose} title={mode === 'approve' ? `Aprobar la meta de ${p.display_name}` : `Rechazar la meta de ${p.display_name}`}
+      footer={<Button className="w-full" variant={mode === 'approve' ? 'success' : 'danger'} loading={decide.isPending} onClick={() => decide.mutate()}>{mode === 'approve' ? 'Aprobar meta' : 'Rechazar meta'}</Button>}>
+      <div className="space-y-4">
+        {mode === 'approve' ? (
+          <>
+            <p className="muted">Puedes ajustar el nombre o el precio antes de aprobarla.</p>
+            <Field label="Nombre de la meta">{(id) => <input id={id} className="field" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} />}</Field>
+            <Field label={`Precio (${currencySymbol()})`}>{(id) => <input id={id} className="field num text-2xl font-extrabold" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />}</Field>
+          </>
+        ) : null}
+        <Field label={mode === 'approve' ? 'Mensaje (opcional)' : 'Motivo (obligatorio)'} hint={mode === 'reject' ? 'Lo verá el niño: sé amable y concreto.' : undefined}>
+          {(id) => <input id={id} className="field" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} />}
+        </Field>
+      </div>
+    </Sheet>
+  );
 }
 
 /** Aprobar o rechazar una petición de pantalla, o rechazar un retiro; ambas admiten una nota. */
@@ -128,7 +171,8 @@ function PayRequestSheet({ req, onClose }: { req: PayoutRequest; onClose: () => 
 export function BankApprovals({ heading, empty }: { heading: (count: number) => React.ReactNode; empty?: React.ReactNode }) {
   const toast = useToast();
   const invalidate = useInvalidateAll();
-  const { pay, loans, goals, count } = useBankApprovals();
+  const { pay, loans, goals, proposals, autoRequests, count } = useBankApprovals();
+  const [prop, setProp] = useState<{ p: GoalProposals['proposals'][number]; mode: 'approve' | 'reject' } | null>(null);
   const [open, setOpen] = useState<{ req: PayoutRequest; mode: 'approve' | 'reject' } | null>(null);
   const [buy, setBuy] = useState<GoalRequest | null>(null);
   const [price, setPrice] = useState('');
@@ -148,7 +192,25 @@ export function BankApprovals({ heading, empty }: { heading: (count: number) => 
     onError: (e: Error) => toast(e.message, 'error'),
   });
 
+  const autoDecide = useMutation({
+    mutationFn: (v: { id: string; decision: 'approve' | 'reject' }) => post(`/goals/${v.id}/auto/${v.decision}`),
+    onSuccess: (_r, v) => { toast(v.decision === 'approve' ? 'Ahorro automático aprobado' : 'Ahorro automático rechazado'); invalidate(); },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+
   const items: Item[] = [
+    ...proposals.map<Item>((g) => ({
+      key: `np${g.id}`, at: g.created_at, icon: Target, tone: 'leaf', title: `Meta de ahorro «${g.title}»`,
+      detail: `${g.display_name} · ${relative(g.created_at)} · propone esta meta`, amount: euros(g.target_cents), who: g.display_name,
+      rejectLabel: `Rechazar la meta «${g.title}» de ${g.display_name}`, approveLabel: `Aprobar la meta «${g.title}» de ${g.display_name}`,
+      onReject: () => setProp({ p: g, mode: 'reject' }), onApprove: () => setProp({ p: g, mode: 'approve' }),
+    })),
+    ...autoRequests.map<Item>((g) => ({
+      key: `na${g.id}`, at: g.created_at, icon: CalendarClock, tone: 'sky', title: `Ahorro automático en «${g.title}»`,
+      detail: `${g.display_name} · quiere ahorrar solo el ${g.auto_pending_percent} % de cada cierre`, amount: `${g.auto_pending_percent} %`, who: g.display_name,
+      rejectLabel: `Rechazar el ahorro automático de ${g.display_name}`, approveLabel: `Aprobar el ahorro automático de ${g.display_name}`, busy: autoDecide.isPending,
+      onReject: () => autoDecide.mutate({ id: g.id, decision: 'reject' }), onApprove: () => autoDecide.mutate({ id: g.id, decision: 'approve' }),
+    })),
     ...pay.map<Item>((r) => r.kind === 'money' ? {
       key: `p${r.id}`, at: r.created_at, icon: Banknote, tone: 'berry', title: `Retiro de ${euros(r.amount_cents!)}`,
       detail: `${r.display_name} · ${relative(r.created_at)} · de su cuenta de dinero${r.note ? ` · «${r.note}»` : ''}`, amount: euros(r.amount_cents!), who: r.display_name,
@@ -208,6 +270,7 @@ export function BankApprovals({ heading, empty }: { heading: (count: number) => 
         </ul>
       ) : <div className="card p-5 text-center muted">{empty}</div>}
 
+      {prop ? <ProposalSheet key={prop.p.id + prop.mode} p={prop.p} mode={prop.mode} onClose={() => setProp(null)} /> : null}
       {open?.mode === 'approve' && open.req.kind === 'money' ? <PayRequestSheet key={open.req.id} req={open.req} onClose={() => setOpen(null)} /> : null}
       {open && !(open.mode === 'approve' && open.req.kind === 'money') ? <DecideSheet key={open.req.id + open.mode} req={open.req} mode={open.mode} onClose={() => setOpen(null)} /> : null}
       {buy ? (
@@ -215,7 +278,7 @@ export function BankApprovals({ heading, empty }: { heading: (count: number) => 
           footer={<Button className="w-full" variant="success" loading={goalDecide.isPending} disabled={!cents} onClick={() => goalDecide.mutate({ id: buy.id, decision: 'approve', priceCents: cents! })}>Marcar comprado</Button>}>
           <div className="space-y-4">
             <p>{buy.display_name} tiene <strong className="num">{euros(buy.balance_cents)}</strong> en esta meta. Paga en la tienda con él o ella y apunta lo que ha costado de verdad.</p>
-            <Field label="Precio real (€)">{(id) => <input id={id} className="field num text-2xl font-extrabold" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />}</Field>
+            <Field label={`Precio real (${currencySymbol()})`}>{(id) => <input id={id} className="field num text-2xl font-extrabold" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />}</Field>
             {diff != null ? (
               <p role="status" className="rounded-2xl bg-[var(--chip)] p-3 text-sm font-bold">
                 {diff > 0 ? `Sobran ${euros(diff)}: vuelven a su cuenta de dinero.` : diff < 0 ? `Faltan ${euros(-diff)}: se descuentan de su cuenta de dinero (puede quedar en negativo).` : 'Justo lo que tenía ahorrado.'}

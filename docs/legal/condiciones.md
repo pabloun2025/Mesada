@@ -1,6 +1,6 @@
 # Condiciones de uso
 
-_Versión 2026-11-22 · Última actualización: 22 de noviembre de 2026_
+_Versión 2026-11-23 · Última actualización: 23 de noviembre de 2026_
 
 Estas condiciones regulan el uso de DiploP, un servicio que ofrece **el responsable de DiploP**. Al crear tu familia marcas la casilla y las aceptas, junto con la [Política de privacidad](/privacidad).
 
@@ -8,7 +8,7 @@ Estas condiciones regulan el uso de DiploP, un servicio que ofrece **el responsa
 
 - **Crear una familia** solo pueden hacerlo personas **mayores de 18 años** que tengan la patria potestad o la tutela de los menores que añadan.
 - **Los hijos** usan DiploP con el usuario y el PIN que les da un adulto, y bajo su supervisión. Los hijos no se registran por su cuenta.
-- Los adultos que se unen con una invitación aceptan también estas condiciones.
+- Los adultos y parientes que se unen con una invitación aceptan también estas condiciones. Solo la cuenta principal de la familia (la que la creó) invita y quita adultos y parientes; los parientes (abuelos, tíos y otros) pueden ver el progreso de los niños y animarles, pero no gestionar nada.
 
 ## Qué te corresponde a ti
 

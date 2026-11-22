@@ -2,14 +2,16 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import {
   ArrowRightLeft, Banknote, CalendarClock, CalendarCheck2, Check, CheckCheck, FastForward, Gift, HandCoins, Handshake, History, Landmark, Lock, Nfc, Percent,
-  PiggyBank, Plus, ShoppingBag, SlidersHorizontal, Sparkles, Target, TrendingDown, TrendingUp, Undo2, type LucideIcon,
+  PiggyBank, Plus, ShoppingBag, SlidersHorizontal, Sparkles, TrendingDown, TrendingUp, Undo2, type LucideIcon,
 } from 'lucide-react';
 import { api, newKey, post } from '../lib/api';
-import { dayKey, euros, fmtDate, fmtTime, fmtWeekdayShort, parseEuros, refCode } from '../lib/format';
+import { currencySymbol, dayKey, euros, fmtDate, fmtTime, fmtWeekdayShort, refCode } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import type { BalanceHistory, Bank, BankAction, Goal, Loan, StatementEntry, User, Wallet } from '../lib/types';
 import { Badge, Button, Empty, Field, Loading, Sheet, useToast } from './ui';
+import { AutoSaveSheet, ManageGoalSheet } from './GoalSheets';
+import { GoalVisual, goalPct, weeksLeftText } from './Goal';
 import { AmountSheet, Pips } from './AmountSheet';
 import { useReceipt } from './Receipt';
 import { GoldCoins } from './Coins';
@@ -17,7 +19,7 @@ import { GoldCoins } from './Coins';
 /** Adultos de la familia: a quién avisamos en los recibos. */
 function useAdultNotice() {
   const { data } = useQuery({ queryKey: ['family'], queryFn: () => api<{ members: User[] }>('/family') });
-  const adults = (data?.members ?? []).filter((m) => m.role === 'adult' && m.active);
+  const adults = (data?.members ?? []).filter((m) => m.role === 'adult' && m.active && !m.is_relative);
   const one = adults.length === 1 ? adults[0] : null;
   return {
     who: one ? one.display_name : 'tus padres',
@@ -98,8 +100,9 @@ export function AccountRail({ bank, wallet }: { bank: Bank; wallet: Wallet }) {
           tone="money" title="Cuenta de dinero" number={bank.accounts.money}
           foot={wd !== 0 ? <><b className="num rounded-full bg-white/16 px-2.5 py-px">{wd > 0 ? '+' : '−'}{euros(Math.abs(wd))}</b> esta semana</> : <>Sin cambios esta semana</>}
         >
-          <span className={negative ? 'text-[#ffb3c7]' : ''}>{euros(bank.money_cents).replace(/\s?€/, '')}</span>
-          <small className="text-xl font-bold">€</small>
+          {currencySymbol() === '$' ? <small className="mr-0.5 text-xl font-bold">$</small> : null}
+          <span className={negative ? 'text-[#ffb3c7]' : ''}>{euros(bank.money_cents).replace(/[\s\u00a0]?[€$]/, '')}</span>
+          {currencySymbol() === '€' ? <small className="text-xl font-bold">€</small> : null}
         </AccountCard>
         <AccountCard tone="points" title="Cuenta de puntos" number={bank.accounts.points} foot={<>≈ {euros(wallet.points_value_cents)} por convertir</>}>
           <span className={bank.points < 0 ? 'text-[#9b1241]' : ''}>{bank.points}</span>
@@ -302,15 +305,15 @@ export function LoanProduct({ loan, mine, compact = false }: { loan: Loan; mine:
   );
 }
 
-const pct = (g: Goal) => (g.target_cents > 0 ? Math.min(100, Math.floor((g.balance_cents / g.target_cents) * 100)) : 0);
-
-/** Una meta de ahorro programado: progreso, interés ganado y lo que se puede hacer con ella. */
-export function GoalProduct({ goal, mine, compact = false, onDeposit, onRemove }: { goal: Goal; mine: boolean; compact?: boolean; onDeposit?: (g: Goal) => void; onRemove?: (g: Goal) => void }) {
+/** Una meta de ahorro: foto o emoji, progreso, «te faltan X semanas», interés, aportes y lo que se puede hacer con ella. */
+export function GoalProduct({ goal, mine, compact = false, manage = false, onDeposit, onRemove }: { goal: Goal; mine: boolean; compact?: boolean; manage?: boolean; onDeposit?: (g: Goal) => void; onRemove?: (g: Goal) => void }) {
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const showReceipt = useReceipt();
   const notice = useAdultNotice();
   const [confirm, setConfirm] = useState(false);
+  const [auto, setAuto] = useState(false);
+  const [managing, setManaging] = useState(false);
   const act = useMutation({
     mutationFn: (what: 'withdraw' | 'redeem' | 'cashout' | 'cancel') =>
       what === 'cancel' ? post(`/goal-requests/${goal.pending_request!.id}/cancel`) : post(`/goals/${goal.id}/${what}`),
@@ -322,52 +325,62 @@ export function GoalProduct({ goal, mine, compact = false, onDeposit, onRemove }
       else if (what === 'withdraw') {
         showReceipt({
           title: 'Ahorro sacado', amount: `+${euros(r.principal_cents)}`, at, ref: refCode('SA', goal.id),
-          rows: [{ label: 'Desde', value: `Meta ${goal.title}` }, { label: 'A', value: 'Cuenta de dinero' }, { label: 'Interés perdido', value: euros(r.forfeited_cents) }],
-          notice: { title: 'Tu dinero vuelve a tu cuenta.', sub: r.forfeited_cents ? `Pierdes ${euros(r.forfeited_cents)} de interés.` : undefined },
+          rows: [{ label: 'Desde', value: `Meta ${goal.title}` }, { label: 'A', value: 'Cuenta de dinero' }, { label: 'Interés y aportes perdidos', value: euros(r.forfeited_cents) }],
+          notice: { title: 'Tu dinero vuelve a tu cuenta.', sub: r.forfeited_cents ? `Pierdes ${euros(r.forfeited_cents)} de interés y aportes.` : undefined },
         });
       } else {
         const redeem = what === 'redeem';
         showReceipt({
           title: redeem ? 'Meta pedida' : 'Paso a efectivo pedido', badge: 'Esperando a un adulto', amount: euros(goal.balance_cents), at, ref: refCode(redeem ? 'MT' : 'EF', r.request.id),
           rows: [{ label: 'Meta', value: goal.title }, { label: 'Ahorrado', value: euros(goal.balance_cents) }],
-          notice: { title: redeem ? `Avisamos a ${notice.who}.` : `Avisamos a ${notice.who} para que lo apruebe.`, sub: redeem ? 'Irá contigo a la tienda.' : 'Pierdes el interés ganado.', avatar: notice.avatar },
+          notice: { title: redeem ? `Avisamos a ${notice.who}.` : `Avisamos a ${notice.who} para que lo apruebe.`, sub: redeem ? 'Irá contigo a la tienda.' : 'Pierdes el interés y los aportes.', avatar: notice.avatar },
         });
       }
     },
     onError: (e: Error) => toast(e.message, 'error'),
   });
   const closed = goal.status !== 'active';
-  const p = pct(goal);
+  const p = goalPct(goal);
+  const weeks = weeksLeftText(goal, mine);
+  const others = goal.interest_cents + goal.contributions_cents;
 
   if (closed) {
+    const label = goal.status === 'bought' ? `Comprada por ${euros(goal.price_cents ?? 0)}` : goal.status === 'cashed_out' ? 'Pasada a efectivo' : goal.status === 'proposed' ? 'Esperando a que la aprueben' : 'No aprobada';
     return (
-      <li className="card flex flex-wrap items-center gap-2 p-3.5">
-        <Target size={18} className="shrink-0 text-leaf-text" aria-hidden />
+      <li className="card flex flex-wrap items-center gap-2 p-3.5" aria-label={`Meta ${goal.title}`}>
+        <GoalVisual goal={goal} size={36} />
         <span className="min-w-0 flex-1 font-bold">{goal.title}</span>
-        <Badge tone="leaf">{goal.status === 'bought' ? `Comprada por ${euros(goal.price_cents ?? 0)}` : 'Pasada a efectivo'}</Badge>
+        <Badge tone={goal.status === 'proposed' ? 'sun' : goal.status === 'rejected' ? 'berry' : 'leaf'}>{label}</Badge>
+        {goal.status === 'rejected' && goal.decision_note ? <p className="basis-full text-sm text-[var(--fg-2)]">Motivo: {goal.decision_note}</p> : null}
+        {mine && (goal.status === 'rejected' || goal.status === 'proposed') ? (
+          <Button size="sm" variant="ghost" onClick={() => onRemove?.(goal)}>{goal.status === 'proposed' ? 'Cancelar propuesta' : 'Quitar aviso'}</Button>
+        ) : null}
       </li>
     );
   }
   if (compact) {
     return (
-      <li className="rounded-[1.1rem] border border-[var(--line)] p-3">
+      <li className="rounded-[1.1rem] border border-[var(--line)] p-3" aria-label={`Meta ${goal.title}`}>
         <div className="flex items-center gap-2.5 font-bold">
-          <span className="flex size-[34px] shrink-0 items-center justify-center rounded-[11px] bg-leaf-soft text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]"><Target size={18} aria-hidden /></span>
+          <GoalVisual goal={goal} size={36} />
           <span className="min-w-0 truncate">Ahorros · {goal.title}</span>
           <span className="num ml-auto shrink-0 text-base">{euros(goal.balance_cents)}{goal.reached ? '' : <small className="font-sans text-[0.8rem] font-normal text-[var(--fg-3)]"> / {euros(goal.target_cents)}</small>}</span>
         </div>
         <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-[var(--chip)]"><i className="block h-full rounded-full bg-gradient-to-r from-leaf to-[#38c28a]" style={{ width: `${p}%` }} /></div>
         <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--fg-2)]">
-          {goal.reached ? <span className="inline-flex items-center gap-1 rounded-full bg-leaf-soft px-2.5 py-0.5 text-xs font-bold text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]"><Check size={13} aria-hidden /> Meta alcanzada</span> : null}
+          {goal.reached ? <span className="inline-flex items-center gap-1 rounded-full bg-leaf-soft px-2.5 py-0.5 text-xs font-bold text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]"><Check size={13} aria-hidden /> Meta alcanzada</span> : weeks ? <span>{weeks}</span> : null}
           Interés ganado <b className="num text-leaf-deep dark:text-[#7fe0b2]">{euros(goal.interest_cents)}</b>
+          {goal.auto_percent ? <span>· Ahorro automático {goal.auto_percent} %</span> : null}
         </p>
+        {manage ? <Button size="sm" variant="secondary" className="mt-2" onClick={() => setManaging(true)}>Gestionar meta</Button> : null}
+        {managing ? <ManageGoalSheet goal={goal} onClose={() => setManaging(false)} /> : null}
       </li>
     );
   }
   return (
     <li className="card p-4" aria-label={`Meta ${goal.title}`}>
       <div className="flex items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-leaf-soft text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]"><Target size={22} aria-hidden /></span>
+        <GoalVisual goal={goal} size={48} />
         <h3 className="min-w-0 flex-1 text-[1.05rem]">Mis ahorros · {goal.title}</h3>
         {mine && !goal.pending_request ? (
           <button type="button" onClick={() => onDeposit?.(goal)} aria-label={`Meter dinero en ${goal.title}`} title="Meter dinero" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-leaf-soft text-leaf-deep transition active:scale-95 dark:bg-leaf/20 dark:text-[#7fe0b2]"><Plus size={20} aria-hidden /></button>
@@ -379,12 +392,15 @@ export function GoalProduct({ goal, mine, compact = false, onDeposit, onRemove }
       <div className="my-3 h-2.5 overflow-hidden rounded-full bg-[var(--chip)]" role="progressbar" aria-valuenow={p} aria-valuemin={0} aria-valuemax={100} aria-label={`Meta ${goal.title}`}>
         <i className="block h-full rounded-full bg-gradient-to-r from-leaf to-[#38c28a] transition-[width] duration-700" style={{ width: `${p}%` }} />
       </div>
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-leaf-soft px-2.5 py-0.5 text-xs font-bold text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]">
           <Sparkles size={13} aria-hidden /> Interés ganado <span className="num">+{euros(goal.interest_cents)}</span>
         </span>
         <span className="num text-sm text-[var(--fg-2)]">{p} %</span>
       </div>
+      {goal.contributions_cents > 0 ? <p className="mt-2 text-sm text-[var(--fg-2)]">Aportes de tu familia: <b className="num text-leaf-deep dark:text-[#7fe0b2]">+{euros(goal.contributions_cents)}</b></p> : null}
+      {weeks && !goal.reached ? <p className="mt-2 text-sm font-bold">{weeks}</p> : null}
+      {goal.match_per_cents ? <p className="mt-1 text-sm text-[var(--fg-2)]">Tus padres ponen {euros(goal.match_gives_cents!)} por cada {euros(goal.match_per_cents)} que ahorres (hasta {euros(goal.match_cap_cents!)}).</p> : null}
       {goal.reached ? <p className="mt-2 text-sm text-[var(--fg-2)]">¡Meta alcanzada! Sigue ganando interés hasta que la canjees.</p> : null}
       {mine ? (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] pt-3 text-sm">
@@ -414,12 +430,16 @@ export function GoalProduct({ goal, mine, compact = false, onDeposit, onRemove }
               )}
             </>
           )}
+          <button type="button" onClick={() => setAuto(true)} className="inline-flex min-h-11 basis-full items-center gap-1.5 font-bold text-tangerine">
+            <CalendarClock size={18} aria-hidden /> Ahorro automático: {goal.auto_pending_percent ? `esperando el ${goal.auto_pending_percent} %` : goal.auto_percent ? `${goal.auto_percent} % de cada cierre` : 'sin activar'}
+          </button>
         </div>
       ) : null}
+      {auto ? <AutoSaveSheet goal={goal} onClose={() => setAuto(false)} /> : null}
       <Sheet open={confirm} onClose={() => setConfirm(false)} title="Sacar mi ahorro" footer={<Button className="w-full" variant="danger" loading={act.isPending} onClick={() => act.mutate('withdraw')}>Sí, sacar mi dinero</Button>}>
         <p>Recuperas <strong className="num">{euros(goal.principal_cents)}</strong> en tu cuenta de dinero.</p>
-        {goal.interest_cents > 0 ? <p className="mt-2 font-bold text-berry-deep">Pierdes los {euros(goal.interest_cents)} de interés que has ganado.</p> : null}
-        <p className="mt-2 muted">Si esperas a llegar a la meta, conservas el interés.</p>
+        {others > 0 ? <p className="mt-2 font-bold text-berry-deep">Pierdes los {euros(others)} de interés y aportes que has recibido.</p> : null}
+        <p className="mt-2 muted">Si esperas a llegar a la meta, los conservas.</p>
       </Sheet>
     </li>
   );
@@ -457,6 +477,10 @@ function describe(e: StatementEntry): { icon: LucideIcon; tone: Tone; title: str
     case 'interest': return { icon: TrendingUp, tone: 'leaf', title: note || 'Interés' };
     case 'interest_forfeit': return { icon: TrendingDown, tone: 'berry', title: note || 'Interés perdido' };
     case 'goal_redeem': return { icon: ShoppingBag, tone: 'sun', title: note || 'Compra de meta' };
+    case 'goal_auto': return { icon: CalendarClock, tone: 'leaf', title: note || 'Ahorro automático' };
+    case 'goal_match': return { icon: Handshake, tone: 'leaf', title: note || 'Aporte de tus padres' };
+    case 'goal_gift': return { icon: Gift, tone: 'leaf', title: note || 'Aporte a tu meta' };
+    case 'goal_reversal': return { icon: Undo2, tone: 'chip', title: note || 'Aporte anulado' };
     case 'transfer': return { icon: PiggyBank, tone: 'leaf', title: note.startsWith('Ahorro:') ? `Ahorro en ${note.slice(7).trim()}` : note || 'Ahorro' };
     case 'payment': return e.is_withdrawal ? { icon: Banknote, tone: 'berry', title: 'Retiro' } : { icon: Handshake, tone: 'chip', title: `Pago de ${by}` };
     default: return { icon: History, tone: 'chip', title: note || e.kind };
@@ -470,7 +494,7 @@ function subtitle(e: StatementEntry, tz: string, viewer: string) {
   switch (e.kind) {
     case 'task': return `${t} · ${!by ? 'automática' : mine ? 'tú' : `validada por ${by}`}`;
     case 'payment': return e.is_withdrawal ? `${t} · pagado por ${by ?? 'un adulto'}` : `${e.method ? METHOD[e.method] : 'Pago'} · ${t}`;
-    case 'interest': case 'interest_forfeit': return `${t} · va a tu meta`;
+    case 'interest': case 'interest_forfeit': case 'goal_match': case 'goal_gift': case 'goal_reversal': return `${t} · va a tu meta`;
     case 'loan': return `${t} · ${by ?? 'un adulto'}`;
     default: return `${t}${by ? ` · ${mine ? 'tú' : by}` : ''}`;
   }
@@ -783,25 +807,4 @@ export function SaveSheet({ bank, goals, initialGoal, onClose }: { bank: Bank; g
   );
 }
 
-export function NewGoalSheet({ userId, onClose }: { userId: string; onClose: () => void }) {
-  const [goal, setGoal] = useState({ title: '', target: '' });
-  const toast = useToast();
-  const invalidate = useInvalidateAll();
-  const add = useMutation({
-    mutationFn: () => {
-      const cents = parseEuros(goal.target);
-      if (!cents || !goal.title.trim()) throw new Error('Pon un nombre y un importe');
-      return post('/goals', { userId, title: goal.title, targetCents: cents });
-    },
-    onSuccess: () => { invalidate(); onClose(); },
-    onError: (e: Error) => toast(e.message, 'error'),
-  });
-  return (
-    <Sheet open onClose={onClose} title="Nueva meta" footer={<Button className="w-full" loading={add.isPending} onClick={() => add.mutate()}>Crear meta</Button>}>
-      <div className="space-y-4">
-        <Field label="¿Para qué ahorras?">{(id) => <input id={id} className="field" value={goal.title} onChange={(e) => setGoal({ ...goal, title: e.target.value })} maxLength={80} />}</Field>
-        <Field label="¿Cuánto cuesta? (€)">{(id) => <input id={id} className="field num" inputMode="decimal" value={goal.target} onChange={(e) => setGoal({ ...goal, target: e.target.value })} />}</Field>
-      </div>
-    </Sheet>
-  );
-}
+export { NewGoalSheet } from './GoalSheets';

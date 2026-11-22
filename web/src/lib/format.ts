@@ -1,7 +1,23 @@
-const eur = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
+export type Currency = 'EUR' | 'USD';
+
+/**
+ * Moneda de la familia (D61): solo cambia el símbolo y el formato; nunca convierte importes.
+ * EUR → «6,00 €»; USD → «$6.00». `euros` es el ÚNICO formato de dinero de la interfaz; la sesión fija la moneda al cargar
+ * la familia (`setCurrency`) y la aplicación se vuelve a pintar entera si cambia.
+ */
+let currency: Currency = 'EUR';
+const formatters: Record<Currency, Intl.NumberFormat> = {
+  EUR: new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }),
+  USD: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }),
+};
 const int = new Intl.NumberFormat('es-ES');
 
-export const euros = (cents: number) => eur.format(cents / 100);
+export const setCurrency = (c: string | undefined) => { currency = c === 'USD' ? 'USD' : 'EUR'; };
+export const getCurrency = () => currency;
+export const currencySymbol = () => (currency === 'USD' ? '$' : '€');
+/** Separador decimal que se escribe y se lee: coma en euros, punto en dólares. */
+export const decimalSep = () => (currency === 'USD' ? '.' : ',');
+export const euros = (cents: number) => formatters[currency].format(cents / 100);
 export const pts = (n: number) => `${int.format(n)} pts`;
 export const num = (n: number) => int.format(n);
 
@@ -32,9 +48,9 @@ export function addDays(d: string, n: number) {
   return x.toISOString().slice(0, 10);
 }
 
-/** Convierte "5,50" o "5.5" a céntimos. Devuelve null si no es válido. */
+/** Convierte "5,50" o "5.5" a céntimos (con o sin símbolo de moneda). Devuelve null si no es válido. */
 export function parseEuros(s: string): number | null {
-  const clean = s.trim().replace(/\s|€/g, '').replace(',', '.');
+  const clean = s.trim().replace(/\s|€|\$/g, '').replace(',', '.');
   if (!/^\d+(\.\d{1,2})?$/.test(clean)) return null;
   return Math.round(parseFloat(clean) * 100);
 }

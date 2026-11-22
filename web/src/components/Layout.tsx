@@ -7,6 +7,7 @@ import {
 import { api, ApiError, post } from '../lib/api';
 import { useLogout, useSession } from '../lib/session';
 import { relative } from '../lib/format';
+import { kinshipText } from '../lib/kinship';
 import { Avatar, Empty, IconButton, Sheet } from './ui';
 import { RevealModal } from './RevealModal';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -123,12 +124,15 @@ export function Layout() {
   const location = useLocation();
   const theme = useTheme();
   const [more, setMore] = useState(false);
-  const isAdult = user.role === 'adult';
+  const isRelativeUser = user.role === 'adult' && !!user.is_relative;
+  const isAdult = user.role === 'adult' && !isRelativeUser;
 
   const { data: dash } = useQuery({ queryKey: ['dashboard'], queryFn: () => api('/dashboard'), enabled: isAdult, refetchInterval: 60_000 });
   const pendingCount = (dash?.pendingApprovals?.length ?? 0) + (dash?.pendingRedemptions ?? 0) + (dash?.pendingChecks ?? 0) + (dash?.pendingGrants ?? 0) + (dash?.pendingRequests ?? 0) + (dash?.pendingUsage ?? 0) + (dash?.pendingBank ?? 0);
 
-  const primary: NavItem[] = isAdult
+  const primary: NavItem[] = isRelativeUser
+    ? [{ to: '/', label: 'Inicio', icon: <House size={22} />, end: true }, { to: '/perfil', label: 'Mi perfil', icon: <User size={22} /> }]
+    : isAdult
     ? [
         { to: '/', label: 'Panel', icon: <House size={22} />, end: true },
         { to: '/validar', label: 'Validar', icon: <CircleCheckBig size={22} />, badge: pendingCount },
@@ -141,7 +145,9 @@ export function Layout() {
         { to: '/premios', label: 'Premios', icon: <Gift size={22} /> },
         { to: '/mesada', label: 'Mi banco', icon: <PiggyBank size={22} /> },
       ];
-  const secondary: NavItem[] = isAdult
+  const secondary: NavItem[] = isRelativeUser
+    ? []
+    : isAdult
     ? [
         { to: '/extras', label: 'Trabajos extra', icon: <Hammer size={20} /> },
         { to: '/premios', label: 'Recompensas', icon: <Gift size={20} /> },
@@ -194,7 +200,7 @@ export function Layout() {
           <Avatar name={user.display_name} avatar={user.avatar} colorKey={user.color} size={36} />
           <div className="min-w-0 flex-1">
             <p className="truncate font-bold">{user.display_name}</p>
-            <p className="text-xs muted">{isAdult ? 'Adulto' : 'Hijo/a'}</p>
+            <p className="text-xs muted">{isRelativeUser ? kinshipText(user) || 'Pariente' : isAdult ? kinshipText(user) || 'Adulto' : 'Hijo/a'}</p>
           </div>
           <IconButton label="Cerrar sesión" onClick={doLogout}><LogOut size={18} /></IconButton>
         </div>
@@ -226,7 +232,7 @@ export function Layout() {
 
         {/* Barra inferior (móvil) */}
         <nav aria-label="Principal" className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-[var(--line)] bg-[var(--card)]/95 backdrop-blur-md lg:hidden">
-          <div className="mx-auto grid max-w-lg grid-cols-5">
+          <div className="mx-auto grid max-w-lg" style={{ gridTemplateColumns: `repeat(${primary.length + (secondary.length ? 1 : 0)}, minmax(0, 1fr))` }}>
             {primary.map((i) => (
               <NavLink
                 key={i.to}
@@ -243,13 +249,15 @@ export function Layout() {
                 )}
               </NavLink>
             ))}
-            <button type="button" onClick={() => setMore(true)} className="flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-bold text-[var(--fg-3)]">
-              <span className="flex h-8 w-14 items-center justify-center"><Menu size={22} /></span>
-              Más
-            </button>
+            {secondary.length ? (
+              <button type="button" onClick={() => setMore(true)} className="flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-bold text-[var(--fg-3)]">
+                <span className="flex h-8 w-14 items-center justify-center"><Menu size={22} /></span>
+                Más
+              </button>
+            ) : null}
           </div>
         </nav>
-        {!isAdult ? <RevealModal /> : null}
+        {user.role === 'child' ? <RevealModal /> : null}
         <MoreSheet open={more} onClose={() => setMore(false)} items={secondary} />
       </div>
     </div>
