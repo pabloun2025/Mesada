@@ -4,12 +4,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell, BellRing, CalendarCheck, ChartColumn, CircleCheckBig, Gift, Hammer, House, ListChecks, LogOut, Menu, Moon, PiggyBank, Settings, ShieldCheck, Sun, Trophy, User, Users, History,
 } from 'lucide-react';
-import { api, post } from '../lib/api';
+import { api, ApiError, post } from '../lib/api';
 import { useLogout, useSession } from '../lib/session';
 import { relative } from '../lib/format';
 import { Avatar, Empty, IconButton, Sheet } from './ui';
 import { RevealModal } from './RevealModal';
 import { ErrorBoundary } from './ErrorBoundary';
+import { LegalLinks } from './LegalLinks';
 
 type NavItem = { to: string; label: string; icon: ReactNode; badge?: number; end?: boolean };
 
@@ -34,9 +35,14 @@ function ConnectionBanner() {
     () => cache.findAll({ predicate: (q) => q.state.status === 'error' && q.state.fetchStatus === 'idle' }).length,
   );
   if (!failed) return null;
+  // Si el servidor dio un código de error, se enseña para poder dictarlo.
+  const errorId = cache.findAll({ predicate: (q) => q.state.status === 'error' && q.state.error instanceof ApiError && !!q.state.error.errorId })
+    .map((q) => (q.state.error as ApiError).errorId)[0];
   return (
     <div role="alert" className="mx-auto mb-4 flex w-full max-w-5xl flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-berry-soft px-4 py-2 text-sm font-bold text-berry-deep dark:bg-berry/20">
-      <span className="min-w-0 flex-1">No se han podido cargar algunos datos. Revisa la conexión.</span>
+      <span className="min-w-0 flex-1">
+        {errorId ? <>Algo ha fallado en el servidor. Si sigue pasando, indica este código: <span className="num select-all">{errorId}</span>.</> : 'No se han podido cargar algunos datos. Revisa la conexión.'}
+      </span>
       <button type="button" className="min-h-11 rounded-full px-3 underline underline-offset-2" onClick={() => qc.refetchQueries({ predicate: (q) => q.state.status === 'error' })}>Reintentar</button>
     </div>
   );
@@ -105,6 +111,7 @@ function MoreSheet({ open, onClose, items }: { open: boolean; onClose: () => voi
           </NavLink>
         ))}
       </nav>
+      <LegalLinks className="mt-3 justify-center" onNavigate={onClose} />
     </Sheet>
   );
 }
@@ -213,6 +220,8 @@ export function Layout() {
         <main id="contenido" tabIndex={-1} className="mx-auto w-full max-w-5xl flex-1 px-[max(1rem,env(safe-area-inset-left))] pt-5 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:px-8 lg:pb-12">
           <ConnectionBanner />
           <ErrorBoundary resetKey={location.pathname}><Outlet /></ErrorBoundary>
+          {/* En escritorio, los textos legales van al pie (en el móvil están en «Más»). */}
+          <LegalLinks className="mt-10 hidden justify-center lg:flex" />
         </main>
 
         {/* Barra inferior (móvil) */}

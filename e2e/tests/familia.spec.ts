@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 import { test, expect, devices, type Browser, type Locator, type Page } from '@playwright/test';
 
@@ -52,6 +55,84 @@ async function keypad(scope: Locator, text: string, fresh = false) {
   for (const ch of text) await scope.getByRole('button', { name: ch === ',' ? 'Coma' : ch, exact: true }).click();
 }
 
+/**
+ * Auditoría de contraste de las tarjetas con degradado (el banco del carrusel), que las herramientas de selectores no miden:
+ * cada tarjeta se desplaza a la vista, se leen el color y la caja de cada texto, se repinta la tarjeta SIN texto
+ * y se mide, píxel a píxel, el contraste del texto contra lo que de verdad hay detrás (degradado, rayos y monedas incluidos).
+ * Devuelve los textos que no llegan a 4,5:1 (3:1 si son grandes).
+ */
+async function contrastFailures(p: Page, cardSelector: string, variant?: (card: Element) => void): Promise<string[]> {
+  const failures: string[] = [];
+  const cards = p.locator(cardSelector);
+  const n = await cards.count();
+  expect(n, `no hay tarjetas ${cardSelector}`).toBeGreaterThan(0);
+  for (let i = 0; i < n; i++) {
+    const card = cards.nth(i);
+    await card.evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'instant' as ScrollBehavior }));
+    await p.waitForTimeout(120);
+    expect(await card.evaluate((el) => { const r = el.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1; }), 'la tarjeta no ha quedado a la vista').toBe(true);
+    const items = await card.evaluate((el, v) => {
+      if (v) new Function('card', `(${v})(card)`)(el);
+      const box = el.getBoundingClientRect();
+      const out: { text: string; x: number; y: number; w: number; h: number; rgb: number[]; alpha: number; large: boolean }[] = [];
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = node.textContent?.trim();
+        const parent = node.parentElement;
+        if (!text || !parent || parent.closest('.sr-only, svg')) continue; // las ilustraciones (monedas con «€» dibujado) no son texto de la interfaz
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const cs = getComputedStyle(parent);
+        const m = cs.color.match(/[\d.]+/g)!.map(Number);
+        let opacity = 1;
+        for (let e: Element | null = parent; e; e = e.parentElement) { opacity *= Number(getComputedStyle(e).opacity); if (e === el) break; }
+        const size = parseFloat(cs.fontSize);
+        for (const r of range.getClientRects()) {
+          if (r.width < 2 || r.height < 2) continue;
+          out.push({ text, x: r.left - box.left, y: r.top - box.top, w: r.width, h: r.height, rgb: m.slice(0, 3), alpha: (m[3] ?? 1) * opacity, large: size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700) });
+        }
+      }
+      const st = document.createElement('style');
+      st.id = '__contrast';
+      st.textContent = '[data-contrast] * { color: transparent !important; text-shadow: none !important; }';
+      document.head.append(st);
+      el.setAttribute('data-contrast', '');
+      return out;
+    }, variant ? variant.toString() : null);
+    const png = await card.screenshot({ scale: 'css' });
+    await card.evaluate((el) => { el.removeAttribute('data-contrast'); document.getElementById('__contrast')?.remove(); });
+    const bad = await p.evaluate(async ({ b64, items }) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const g = c.getContext('2d', { willReadFrequently: true })!;
+      g.drawImage(img, 0, 0);
+      const lin = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+      const lum = (r: number, gg: number, b: number) => 0.2126 * lin(r) + 0.7152 * lin(gg) + 0.0722 * lin(b);
+      const res: string[] = [];
+      for (const it of items) {
+        const x = Math.max(0, Math.floor(it.x)), y = Math.max(0, Math.floor(it.y));
+        const w = Math.max(1, Math.min(img.width - x, Math.ceil(it.w))), h = Math.max(1, Math.min(img.height - y, Math.ceil(it.h)));
+        const d = g.getImageData(x, y, w, h).data;
+        let worst = Infinity;
+        for (let k = 0; k < d.length; k += 4) {
+          const bg = [d[k], d[k + 1], d[k + 2]];
+          const fg = it.rgb.map((v, j) => v * it.alpha + bg[j] * (1 - it.alpha));
+          const l1 = lum(fg[0], fg[1], fg[2]), l2 = lum(bg[0], bg[1], bg[2]);
+          worst = Math.min(worst, (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05));
+        }
+        if (worst < (it.large ? 3 : 4.5)) res.push(`«${it.text}» ${worst.toFixed(2)}:1`);
+      }
+      return res;
+    }, { b64: png.toString('base64'), items });
+    const title = (await card.getAttribute('aria-label')) ?? `tarjeta ${i + 1}`;
+    for (const b of bad) failures.push(`${title}: ${b}`);
+  }
+  return failures;
+}
+
 async function newAdultPage(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
   return ctx.newPage();
@@ -68,16 +149,54 @@ test.describe.serial('Familia completa', () => {
     kid = await newPhonePage(browser);
   });
 
-  test('primer arranque: un adulto crea la familia', async () => {
+  test('primer arranque: un adulto crea la familia (casilla de aceptación obligatoria y campo trampa invisible)', async ({ browser }) => {
     await adult.goto('/');
     await expect(adult).toHaveURL(/configurar/);
+    // En el móvil (375 px): la casilla enlaza con los textos legales y el campo trampa queda fuera de pantalla y sin foco.
+    const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+    const m = await ctx.newPage();
+    await m.goto('/configurar');
+    const box = m.getByRole('checkbox', { name: /acepto/i });
+    await expect(box).toBeVisible();
+    expect(await box.evaluate((e) => e.getBoundingClientRect().width), 'casilla ≥ 24 px').toBeGreaterThanOrEqual(24);
+    const label = m.locator('label[for]').filter({ hasText: 'política de privacidad' });
+    expect((await label.boundingBox())!.height, 'zona de toque de la casilla').toBeGreaterThanOrEqual(44);
+    await expect(label.getByRole('link', { name: 'política de privacidad' })).toHaveAttribute('href', '/privacidad');
+    await expect(label.getByRole('link', { name: 'condiciones de uso' })).toHaveAttribute('href', '/condiciones');
+    const trap = m.locator('input[name=website]');
+    expect((await trap.boundingBox())!.x).toBeLessThan(0);
+    await expect(trap).toHaveJSProperty('tabIndex', -1);
+    expect(await m.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await m.getByLabel('Nombre de la familia').fill('Familia Prueba');
+    await m.getByLabel('Tu nombre').fill(ADULT.name);
+    await m.screenshot({ path: `${SHOTS}/82-alta-con-casilla-375.png`, fullPage: true });
+    // Sin la casilla el navegador no deja enviar: sigue en /configurar y no se ha creado nada.
+    await m.getByLabel('Usuario').fill(ADULT.user);
+    await m.getByLabel('Correo').fill('ana@example.com');
+    await m.getByLabel('Contraseña').fill(ADULT.pass);
+    await m.getByRole('button', { name: 'Crear familia' }).click();
+    await expect(m).toHaveURL(/configurar/);
+    expect(await box.evaluate((e: HTMLInputElement) => e.validity.valueMissing)).toBe(true);
+    expect((await api(m, 'get', '/setup/status')).body.needsSetup).toBe(true);
+    // Y por la API tampoco, ni con otra versión de los textos.
+    const payload = { familyName: 'X', displayName: 'X', username: 'robotx', password: 'contrasena-larga', email: 'x@example.com' };
+    expect((await api(m, 'post', '/setup', payload)).status).toBe(400);
+    expect((await api(m, 'post', '/setup', { ...payload, acceptTerms: true, termsVersion: '1999-01-01' })).body.error).toBe('terms_outdated');
+    expect((await api(m, 'get', '/setup/status')).body.needsSetup).toBe(true);
+    await ctx.close();
+
     await adult.getByLabel('Nombre de la familia').fill('Familia Prueba');
     await adult.getByLabel('Tu nombre').fill(ADULT.name);
     await adult.getByLabel('Usuario').fill(ADULT.user);
     await adult.getByLabel('Correo').fill('ana@example.com');
     await adult.getByLabel('Contraseña').fill(ADULT.pass);
+    await adult.getByRole('checkbox', { name: /acepto/i }).check();
     await adult.getByRole('button', { name: 'Crear familia' }).click();
     await expect(adult.getByRole('heading', { name: 'Familia', exact: true })).toBeVisible();
+    // Quedan guardadas la versión y la fecha de la aceptación.
+    const me = (await api(adult, 'get', '/me')).body.user;
+    expect(me.terms_version).toBe((await api(adult, 'get', '/setup/status')).body.legalVersion);
+    expect(Date.now() - new Date(me.terms_accepted_at).getTime()).toBeLessThan(120_000);
   });
 
   test('añade al otro adulto y a los dos hijos', async () => {
@@ -1016,6 +1135,68 @@ test.describe.serial('Familia completa', () => {
     expect((await adult.request.get('/brand/og-image.jpg')).headers()['content-type']).toContain('image/jpeg');
   });
 
+  test('textos legales: públicos, sin banner ni cookies, enlazados desde bienvenida, acceso y «Más», sin desbordar', async ({ browser }) => {
+    const noOverflow = (p: Page) => p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    const DOCS = [
+      { path: '/privacidad', link: 'Privacidad', h1: 'Política de privacidad', shot: '83-privacidad-375', has: ['privacidad@veryfacil.org', 'Agencia Española de Protección de Datos', 'solo cookies técnicas', 'Oracle Cloud', 'Cloudflare', 'Resend', 'patria potestad', 'portabilidad'] },
+      { path: '/aviso-legal', link: 'Aviso legal', h1: 'Aviso legal', shot: '84-aviso-legal-375', has: ['el responsable de DiploP', 'privacidad@veryfacil.org'] },
+      { path: '/condiciones', link: 'Condiciones', h1: 'Condiciones de uso', shot: '85-condiciones-375', has: ['mayores de 18 años', 'de juguete'] },
+    ];
+    for (const [w, theme] of [[375, 'light'], [320, 'dark']] as const) {
+      const ctx = await browser.newContext({ viewport: { width: w, height: 760 }, hasTouch: true, colorScheme: theme, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+      await ctx.addInitScript((t) => localStorage.setItem('mesada:theme', t), theme);
+      const p = await ctx.newPage();
+      // Desde la bienvenida: pie con los tres enlaces.
+      await p.goto('/bienvenida');
+      const foot = p.getByRole('navigation', { name: 'Información legal' });
+      for (const d of DOCS) await expect(foot.getByRole('link', { name: d.link })).toBeVisible();
+      for (const d of DOCS) {
+        await p.goto('/bienvenida');
+        await p.getByRole('navigation', { name: 'Información legal' }).getByRole('link', { name: d.link }).click();
+        await expect(p).toHaveURL(new RegExp(d.path));
+        await expect(p.getByRole('heading', { level: 1, name: d.h1 })).toBeVisible();
+        const text = await p.locator('main').innerText();
+        for (const t of d.has) expect(text, `${d.path} debe decir «${t}»`).toContain(t);
+        expect(text).toMatch(/Versión \d{4}-\d{2}-\d{2}/);
+        expect(await noOverflow(p), `${d.path} ${w} ${theme} desborda`).toBeLessThanOrEqual(0);
+        // Sin banner de cookies y, de hecho, sin ninguna cookie en un dispositivo sin sesión.
+        await expect(p.getByText(/aceptar (todas )?las cookies|rechazar cookies/i)).toHaveCount(0);
+        await expect(p.getByRole('dialog')).toHaveCount(0);
+        expect(await ctx.cookies(), 'una visita anónima no debe fijar cookies').toEqual([]);
+        if (theme === 'light') { await p.waitForTimeout(150); await p.screenshot({ path: `${SHOTS}/${d.shot}.png`, fullPage: true }); }
+      }
+      // Los enlaces cruzados del propio texto funcionan (de privacidad a condiciones y aviso legal).
+      await p.goto('/privacidad');
+      await p.locator('main').getByRole('link', { name: 'Condiciones de uso' }).click();
+      await expect(p.getByRole('heading', { level: 1, name: 'Condiciones de uso' })).toBeVisible();
+      // Desde el acceso.
+      await p.goto('/entrar');
+      for (const d of DOCS) await expect(p.getByRole('navigation', { name: 'Información legal' }).getByRole('link', { name: d.link })).toBeVisible();
+      await ctx.close();
+    }
+    // Con sesión también se leen, y están en «Más» (móvil) y al pie de la página (escritorio).
+    const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+    const p = await ctx.newPage();
+    await login(p, ADULT.user, ADULT.pass);
+    await expect(p.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    await p.getByRole('button', { name: 'Más' }).click();
+    const sheet = p.getByRole('dialog');
+    await expect(sheet.getByRole('navigation', { name: 'Información legal' }).getByRole('link')).toHaveCount(3);
+    for (const l of await sheet.getByRole('navigation', { name: 'Información legal' }).getByRole('link').all()) expect((await l.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await p.waitForTimeout(250);
+    await p.screenshot({ path: `${SHOTS}/86-mas-enlaces-legales-375.png` });
+    await sheet.getByRole('link', { name: 'Privacidad' }).click();
+    await expect(p.getByRole('heading', { level: 1, name: 'Política de privacidad' })).toBeVisible();
+    expect(await ctx.cookies().then((c) => c.map((x) => x.name))).toEqual(['mesada_session']); // la única cookie: la de sesión
+    await p.getByRole('link', { name: 'Volver' }).click();
+    await expect(p.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    await ctx.close();
+    const d = await newAdultPage(browser);
+    await login(d, ADULT.user, ADULT.pass);
+    await expect(d.getByRole('main').getByRole('navigation', { name: 'Información legal' })).toBeVisible();
+    await d.context().close();
+  });
+
   test('inicio del hijo: tarjeta «Mi mesada», tres accesos y valor en euros de cada tarea', async () => {
     await kid.goto('/');
     const card = kid.getByRole('region', { name: 'Mi mesada' });
@@ -1042,7 +1223,7 @@ test.describe.serial('Familia completa', () => {
     await kid.screenshot({ path: `${SHOTS}/47-hijo-banco-monedas-375.png` });
   });
 
-  test('calidad de interfaz: claro y oscuro a 375 y 320 px, sin desbordar y con objetivos táctiles de 44 px', async ({ browser }) => {
+  test('calidad de interfaz: claro y oscuro a 375 y 320 px, sin desbordar, con objetivos táctiles de 44 px y contraste de las tarjetas del banco', async ({ browser }) => {
     let n = 48;
     const overflow = (p: Page) => p.evaluate(() => {
       let o = document.documentElement.scrollWidth - document.documentElement.clientWidth;
@@ -1091,6 +1272,18 @@ test.describe.serial('Familia completa', () => {
         await shot(p, 'hijo-extras');
         await p.goto('/mesada');
         await expect(p.getByRole('region', { name: 'Cuenta de dinero' })).toBeVisible();
+        // Contraste de las dos tarjetas del carrusel (cada una se desplaza a la vista antes de medirla), también en saldo negativo.
+        expect(await contrastFailures(p, '.acct'), `contraste de las tarjetas del banco a ${w} px (${theme})`).toEqual([]);
+        const negative = (card: Element) => { card.querySelector('p.num > span')?.classList.add(card.classList.contains('acct-money') ? 'text-[#ffb3c7]' : 'text-[#9b1241]'); };
+        expect(await contrastFailures(p, '.acct', negative), `contraste con saldo negativo a ${w} px (${theme})`).toEqual([]);
+        await p.evaluate(() => document.querySelectorAll('.acct p.num > span').forEach((e) => e.classList.remove('text-[#ffb3c7]', 'text-[#9b1241]')));
+        if (w === 375 && theme === 'light') {
+          await p.locator('.acct').last().evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'instant' as ScrollBehavior }));
+          await p.waitForTimeout(200);
+          await p.screenshot({ path: `${SHOTS}/91-banco-tarjeta-puntos-contraste-375.png` });
+        }
+        await p.locator('.rail').evaluate((e) => e.scrollTo(0, 0));
+        await p.waitForTimeout(150);
         await shot(p, 'hijo-banco');
         await p.context().close();
         // Adulto: Validar y la hoja de revisión.
@@ -1239,6 +1432,227 @@ test.describe.serial('Familia completa', () => {
     await kid.reload();
     await expect(kid.getByRole('button', { name: 'Pedir pantalla' })).toBeEnabled();
     await phone.context().close();
+  });
+
+  test('privacidad y datos: descargar el ZIP, borrar un hijo y borrar la familia entera (contraseña y frase)', async ({ browser }) => {
+    const DB = 'postgres://postgres:postgres@127.0.0.1:5432/mesada_e2e';
+    const sql = (q: string) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
+    const phone = async () => {
+      const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+      return ctx.newPage();
+    };
+    /** Lee el ZIP que descarga la app (nombre → contenido). */
+    const unzip = (buf: Buffer) => {
+      const out = new Map<string, Buffer>();
+      const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+      let q = buf.readUInt32LE(eocd + 16);
+      for (let i = 0, n = buf.readUInt16LE(eocd + 10); i < n; i++) {
+        const method = buf.readUInt16LE(q + 10), csize = buf.readUInt32LE(q + 20), nl = buf.readUInt16LE(q + 28), off = buf.readUInt32LE(q + 42);
+        const name = buf.subarray(q + 46, q + 46 + nl).toString('utf8');
+        const start = off + 30 + buf.readUInt16LE(off + 26) + buf.readUInt16LE(off + 28);
+        const raw = buf.subarray(start, start + csize);
+        out.set(name, method === 8 ? zlib.inflateRawSync(raw) : Buffer.from(raw));
+        q += 46 + nl + buf.readUInt16LE(q + 30) + buf.readUInt16LE(q + 32);
+      }
+      return out;
+    };
+
+    // 1) Descargar todos los datos de la familia desde Ajustes (móvil).
+    const a = await phone();
+    await login(a, ADULT.user, ADULT.pass);
+    await expect(a.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    await a.goto('/ajustes');
+    const section = a.getByRole('region', { name: 'Privacidad y datos' });
+    await expect(section).toBeVisible();
+    await expect(section).toContainText(/Aceptaste la política de privacidad y las condiciones el .* \(versión \d{4}-\d{2}-\d{2}\)/);
+    await section.scrollIntoViewIfNeeded();
+    expect(await a.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await a.screenshot({ path: `${SHOTS}/87-ajustes-privacidad-375.png` });
+    const [dl] = await Promise.all([a.waitForEvent('download'), section.getByRole('link', { name: /Descargar los datos de la familia/ }).click()]);
+    expect(dl.suggestedFilename()).toMatch(/^diplop-familia-\d{4}-\d{2}-\d{2}\.zip$/);
+    const zip = unzip(fs.readFileSync((await dl.path())!));
+    expect([...zip.keys()]).toEqual(expect.arrayContaining(['LEEME.txt', 'miembros.json', 'tareas-hechas.json', 'puntos.json', 'dinero.json', 'historial.json']));
+    const miembros = JSON.parse(zip.get('miembros.json')!.toString()).miembros.map((m: any) => m.display_name);
+    expect(miembros).toEqual(expect.arrayContaining([ADULT.name, KID.name, 'Hugo', 'Carlos']));
+    expect([...zip.values()].map((b) => b.toString()).join('\n')).not.toMatch(/password_hash|scrypt\$|totp_secret/);
+    // Un hijo no puede descargarlo.
+    expect((await api(kid, 'get', '/privacy/export')).status).toBe(403);
+    await a.context().close();
+
+    // 2) Una familia de usar y tirar (con el registro abierto un momento) para borrar sin tocar la principal.
+    sql(`INSERT INTO install_settings(key, value) VALUES ('registration_open', 'true') ON CONFLICT (key) DO UPDATE SET value = 'true'`);
+    try {
+      const p = await phone();
+      await p.goto('/configurar');
+      await p.getByLabel('Nombre de la familia').fill('Familia Efímera');
+      await p.getByLabel('Tu nombre').fill('Eva');
+      await p.getByLabel('Usuario').fill('eva.efimera');
+      await p.getByLabel('Correo').fill('eva@example.com');
+      await p.getByLabel('Contraseña').fill('contrasena-eva-1');
+      await p.getByRole('checkbox', { name: /acepto/i }).check();
+      await p.getByRole('button', { name: 'Crear familia' }).click();
+      await expect(p.getByRole('heading', { name: 'Familia', exact: true })).toBeVisible();
+      const famId = sql(`SELECT family_id FROM users WHERE username = 'eva.efimera'`);
+      const peque = (await api(p, 'post', '/members', { role: 'child', displayName: 'Peque', username: 'peque.efimero', password: '4321', weeklyGoalPoints: 50 })).body.member;
+      const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+      expect((await api(p, 'post', '/tasks', { title: 'Foto del cuarto', points: 10, recurrence: 'daily', startDate: today, assignees: [peque.id], requiresPhoto: true })).status).toBe(200);
+      // El hijo sube una foto de evidencia.
+      const kctx = await browser.newContext({ locale: 'es-ES' });
+      expect((await kctx.request.post('/api/auth/login', { data: { username: 'peque.efimero', password: '4321' }, headers: { 'X-Mesada': '1' } })).status()).toBe(200);
+      const inst = (await (await kctx.request.get('/api/instances')).json()).instances[0];
+      const jpeg = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/yQALCAABAAEBAREA/8wABgAQEAX/2gAIAQEAAD8A0s8g/9k=', 'base64');
+      const up = await kctx.request.post(`/api/instances/${inst.id}/complete`, { multipart: { photo: { name: 'cuarto.jpg', mimeType: 'image/jpeg', buffer: jpeg }, note: 'ya está' }, headers: { 'X-Mesada': '1' } });
+      expect(up.status(), await up.text()).toBe(200);
+      const dir = path.join(process.cwd(), '.data/uploads', famId);
+      expect(fs.readdirSync(dir)).toHaveLength(1);
+      // Y una sesión abierta del hijo, que dejará de valer.
+      expect(sql(`SELECT count(*) FROM sessions WHERE user_id = '${peque.id}'`)).toBe('1');
+
+      // 2a) Borrar al hijo: pide contraseña (con una mala, no borra) y se lleva la foto.
+      await p.goto('/familia');
+      await p.getByRole('button', { name: 'Editar a Peque' }).click();
+      await p.getByRole('button', { name: /Borrar los datos de Peque/ }).click();
+      const sheet = p.getByRole('dialog').last();
+      const confirm = sheet.getByRole('button', { name: /Borrar a Peque para siempre/ });
+      await expect(confirm).toBeDisabled();
+      await sheet.getByLabel('Tu contraseña').fill('mala-contrasena-9');
+      await p.screenshot({ path: `${SHOTS}/88-borrar-hijo-375.png` });
+      await confirm.click();
+      await expect(sheet.getByRole('alert')).toHaveText('La contraseña no es correcta');
+      expect(sql(`SELECT count(*) FROM users WHERE id = '${peque.id}'`)).toBe('1');
+      await sheet.getByLabel('Tu contraseña').fill('contrasena-eva-1');
+      await confirm.click();
+      await expect(p.getByText('Se han borrado los datos de Peque')).toBeVisible();
+      await expect(p.getByText('@peque.efimero')).toHaveCount(0);
+      expect(sql(`SELECT count(*) FROM users WHERE id = '${peque.id}'`)).toBe('0');
+      expect(sql(`SELECT count(*) FROM task_instances WHERE family_id = '${famId}' AND assignee_id IS NOT NULL`)).toBe('0');
+      expect(fs.existsSync(dir) ? fs.readdirSync(dir) : []).toHaveLength(0);
+      expect((await kctx.request.get('/api/me')).status()).toBe(401);
+      await kctx.close();
+
+      // 2b) Borrar la familia entera: botón bloqueado hasta escribir la frase; contraseña mala no borra.
+      await p.goto('/ajustes');
+      await p.getByRole('button', { name: /Borrar la familia entera/ }).click();
+      const dlg = p.getByRole('dialog').last();
+      const go = dlg.getByRole('button', { name: 'Borrar para siempre' });
+      await expect(go).toBeDisabled();
+      await dlg.getByLabel('Tu contraseña').fill('mala-contrasena-9');
+      await dlg.getByLabel(/Escribe BORRAR MI FAMILIA/).fill('borrar mi');
+      await expect(go).toBeDisabled();
+      await dlg.getByLabel(/Escribe BORRAR MI FAMILIA/).fill('borrar mi familia');
+      await expect(go).toBeEnabled();
+      await p.screenshot({ path: `${SHOTS}/89-borrar-familia-375.png` });
+      await go.click();
+      await expect(dlg.getByRole('alert')).toHaveText('La contraseña no es correcta');
+      expect(sql(`SELECT count(*) FROM families WHERE id = '${famId}'`)).toBe('1');
+      await dlg.getByLabel('Tu contraseña').fill('contrasena-eva-1');
+      await go.click();
+      // Vuelve a la bienvenida, sin sesión, y no queda nada.
+      await expect(p.getByRole('heading', { level: 1, name: /Tareas de casa, puntos y mesada/ })).toBeVisible();
+      expect(sql(`SELECT count(*) FROM families WHERE id = '${famId}'`)).toBe('0');
+      for (const t of ['users', 'tasks', 'task_instances', 'points_ledger', 'audit_log', 'notification_outbox', 'sessions']) {
+        const col = t === 'sessions' ? `user_id IN (SELECT id FROM users WHERE family_id = '${famId}')` : `family_id = '${famId}'`;
+        expect(sql(`SELECT count(*) FROM ${t} WHERE ${col}`), t).toBe('0');
+      }
+      expect(fs.existsSync(dir)).toBe(false);
+      expect((await api(p, 'get', '/me')).status).toBe(401);
+      await login(p, 'eva.efimera', 'contrasena-eva-1');
+      await expect(p.getByRole('alert')).toHaveText('Usuario o contraseña incorrectos');
+      await p.context().close();
+    } finally {
+      sql(`DELETE FROM install_settings WHERE key = 'registration_open'`);
+    }
+    // La familia principal sigue entera.
+    expect((await api(adult, 'get', '/me')).status).toBe(200);
+    expect(sql(`SELECT count(*) FROM families`)).toBe('1');
+  });
+
+  test('administración › Sistema: disco, copias con aviso, limpieza y familias inactivas, a 375 px', async ({ browser }) => {
+    const DB = 'postgres://postgres:postgres@127.0.0.1:5432/mesada_e2e';
+    const sql = (q: string) => execFileSync('psql', [DB, '-Atc', q]).toString().trim();
+    // Carpeta de copias de prueba que lee la API (BACKUP_DIR): una copia local y una subida a R2, ambas de hace más de 26 h.
+    const dir = path.join(process.cwd(), '.data/backups');
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+    const old = new Date(Date.now() - 30 * 3600_000);
+    for (const [n, b] of [['mesada-20261121-030000.dump', 5_000_000], ['fotos-20261121-030000.tar.gz', 800_000]] as const) {
+      fs.writeFileSync(path.join(dir, n), Buffer.alloc(b));
+      fs.utimesSync(path.join(dir, n), old, old);
+    }
+    fs.writeFileSync(path.join(dir, '.r2-list.txt'), `5000100;${old.toISOString()};mesada-20261121-030000.dump.gpg\n`);
+    fs.writeFileSync(path.join(dir, '.r2-ok'), '');
+    fs.utimesSync(path.join(dir, '.r2-ok'), old, old);
+    // Una familia dormida (8 meses sin uso), inventada, con una sola persona.
+    const fam = sql(`INSERT INTO families(name, created_at) VALUES ('Familia Dormida', now() - interval '8 months') RETURNING id`).split('\n')[0];
+    sql(`INSERT INTO users(family_id, role, display_name, username, password_hash, last_login_at, created_at) VALUES ('${fam}', 'adult', 'Adulto Dormido', 'dormido', 'x', now() - interval '8 months', now() - interval '8 months')`);
+
+    const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+    const p = await ctx.newPage();
+    await login(p, ADULT.user, ADULT.pass);
+    await expect(p.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    sql(`UPDATE sessions SET admin_verified_at = now() WHERE user_id = (SELECT id FROM users WHERE username = '${ADULT.user}')`);
+    await p.goto('/administracion');
+    await p.getByRole('radio', { name: 'Sistema' }).click();
+    const noOverflow = () => p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    // (a) Disco y datos.
+    const disk = p.getByRole('region', { name: /Disco y datos/ });
+    await expect(disk).toContainText('Volumen de datos');
+    await expect(disk).toContainText(/Fotos de evidencia\s*\d+ ·/);
+    await expect(disk).toContainText('Base de datos');
+    // (b) Copias: lista local y R2, y aviso visible porque la última pasa de 26 h.
+    const copias = p.getByRole('region', { name: 'Copias de seguridad' });
+    await expect(copias.getByRole('alert')).toContainText('más de 26 horas');
+    await expect(copias).toContainText('mesada-20261121-030000.dump');
+    await expect(copias).toContainText('mesada-20261121-030000.dump.gpg');
+    await expect(copias).toContainText('Última subida correcta');
+    expect(await noOverflow()).toBeLessThanOrEqual(0);
+    await p.screenshot({ path: `${SHOTS}/92-admin-sistema-disco-copias-375.png`, fullPage: true });
+    // Limpieza manual: informa de lo borrado y queda en el registro.
+    await p.getByRole('button', { name: 'Limpiar basura' }).click();
+    await expect(p.getByRole('status').filter({ hasText: /Borrado:/ })).toContainText('Liberado');
+    expect(sql(`SELECT count(*) FROM admin_audit WHERE action = 'maintenance.cleanup'`)).toBe('1');
+    await p.getByRole('region', { name: 'Limpieza' }).scrollIntoViewIfNeeded();
+    await p.screenshot({ path: `${SHOTS}/93-admin-limpieza-375.png` });
+    // (c) Familias inactivas: solo nombre, personas y fechas.
+    const inact = p.getByRole('region', { name: 'Familias inactivas' });
+    await expect(inact).toContainText('Familia Dormida');
+    await expect(inact).toContainText('1 persona');
+    await expect(inact).not.toContainText(/Adulto Dormido|@dormido/);
+    await inact.scrollIntoViewIfNeeded();
+    await p.screenshot({ path: `${SHOTS}/94-admin-familias-inactivas-375.png` });
+    await inact.getByRole('button', { name: /Borrar la familia Familia Dormida/ }).click();
+    const dlg = p.getByRole('dialog').last();
+    const go = dlg.getByRole('button', { name: 'Borrar para siempre' });
+    await expect(go).toBeDisabled();
+    await dlg.getByLabel(/nombre exacto/).fill('Familia Dormida');
+    await expect(go).toBeDisabled();
+    await dlg.getByLabel(/Escribe BORRAR FAMILIA INACTIVA/).fill('borrar familia inactiva');
+    await expect(go).toBeEnabled();
+    await p.screenshot({ path: `${SHOTS}/95-admin-borrar-inactiva-375.png` });
+    await go.click();
+    await expect(p.getByText('Familia borrada')).toBeVisible();
+    expect(sql(`SELECT count(*) FROM families WHERE id = '${fam}'`)).toBe('0');
+    expect(sql(`SELECT count(*) FROM admin_audit WHERE action = 'family.erase_inactive' AND family_id IS NULL`)).toBe('1');
+    await expect(p.getByRole('region', { name: 'Familias inactivas' })).toContainText('Ninguna familia inactiva');
+    fs.rmSync(dir, { recursive: true, force: true });
+    await ctx.close();
+  });
+
+  test('vigilancia: /api/health comprueba la base y un fallo del servidor enseña su código', async ({ browser }) => {
+    const h = await api(adult, 'get', '/health');
+    expect(h).toMatchObject({ status: 200, body: { ok: true, db: 'up' } });
+    const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 375, height: 812 }, hasTouch: true, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+    const p = await ctx.newPage();
+    await login(p, ADULT.user, ADULT.pass);
+    await expect(p.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    await p.route('**/api/dashboard', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'internal', errorId: 'K7M2QX9R', message: 'Algo ha fallado por nuestra parte. Indica este código: K7M2QX9R' }) }));
+    await p.goto('/');
+    const banner = p.getByRole('alert').filter({ hasText: 'K7M2QX9R' });
+    await expect(banner).toBeVisible({ timeout: 15_000 });
+    await expect(banner).toContainText('Algo ha fallado en el servidor');
+    expect(await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await p.screenshot({ path: `${SHOTS}/90-error-con-codigo-375.png` });
+    await ctx.close();
   });
 
   test('la app es instalable (manifest y service worker)', async () => {

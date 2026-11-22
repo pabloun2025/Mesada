@@ -45,6 +45,7 @@ try {
     await A.getByLabel('Usuario').fill(ADULT.user);
     await A.getByLabel('Correo').fill('marta@example.com');
     await A.getByLabel('Contraseña').fill(ADULT.pass);
+    await A.getByRole('checkbox', { name: /acepto/i }).check();
     await A.getByLabel('Nombre de la familia').scrollIntoViewIfNeeded();
     await A.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await shot(A, '02-crear-familia');
@@ -324,6 +325,28 @@ try {
     await shot(A, '49-admin-dispositivo');
   });
   await step('modo-oscuro', async () => { await A.goto(BASE + '/'); await A.getByRole('button', { name: 'Modo oscuro' }).click(); await shot(A, '50-modo-oscuro'); await A.getByRole('button', { name: /Modo claro/ }).click().catch(() => {}); });
+
+  // Privacidad, descarga y borrado de datos (apartado 13 del manual)
+  await step('privacidad-ajustes', async () => {
+    await A.goto(BASE + '/ajustes');
+    await toTop(A, A.getByRole('region', { name: 'Privacidad y datos' }), 24);
+    await shot(A, '51-ajustes-privacidad');
+  });
+  await step('borrar-hijo', async () => {
+    await A.goto(BASE + '/familia');
+    await A.getByRole('button', { name: `Editar a ${KID2.name}` }).click();
+    await A.getByRole('dialog').getByRole('button', { name: /Borrar los datos de/ }).scrollIntoViewIfNeeded();
+    await shot(A, '52-borrar-hijo');
+    await closeDialog(A);
+  });
+  await step('borrar-familia', async () => {
+    await A.goto(BASE + '/ajustes');
+    await A.getByRole('button', { name: /Borrar la familia entera/ }).click();
+    await A.getByRole('dialog').getByLabel(/Escribe BORRAR MI FAMILIA/).fill('borrar mi');
+    await shot(A, '53-borrar-familia');
+    await closeDialog(A);
+  });
+  await step('politica', async () => { await A.goto(BASE + '/privacidad'); await shot(A, '54-politica-privacidad'); });
 } finally {
   await browser.close();
   stopServer(server);

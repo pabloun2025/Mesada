@@ -234,3 +234,15 @@ Cuando una familia nueva entra por primera vez, un asistente paso a paso le ayud
   5. Invitar a otro adulto (opcional, último paso).
 - **Tareas sugeridas:** lista por edad, ya marcada; el adulto desmarca lo que no sirva.
 - Cada paso explica en una frase qué es y para qué sirve (modo tutorial).
+
+## I19 · Meta de ahorro visible (22/11) — pendiente, programar tras lo actual
+
+Hoy la meta está escondida en «Mi banco › Mis productos». Pasa a ser una «meta de ahorro» con presencia propia.
+
+- **Dónde:** en Hoy, bajo «Mi mesada», hay una tarjeta grande «¿Para qué ahorras?» con el botón «Crear meta de ahorro». Si ya hay meta, la tarjeta muestra su barra de progreso.
+- **Quién:** el hijo la propone y el adulto la aprueba (puede ajustar el precio o el nombre).
+- **Extras:**
+  - Foto o emoji del objetivo.
+  - «Te faltan X semanas», calculado con lo que suele ganar por semana.
+  - Ahorro automático: un % de cada cierre de semana va solo a la meta.
+  - Aporte de los padres: el adulto suma un empujón (p. ej. 1 € por cada 4 € ahorrados).

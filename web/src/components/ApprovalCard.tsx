@@ -13,6 +13,7 @@ export interface Pending {
   completed_at: string | null;
   child_note: string | null;
   has_photo: boolean;
+  photo_deleted?: boolean;
   display_name: string | null;
   avatar: string | null;
   color: string | null;
@@ -105,6 +106,7 @@ export function ApprovalCard({ p, compact = false }: { p: Pending; compact?: boo
   const [points, setPoints] = useState(p.points);
   const [rejecting, setRejecting] = useState(false);
   const [photo, setPhoto] = useState(false);
+  const [gone, setGone] = useState(!!p.photo_deleted);
   const busy = review.isPending;
 
   return (
@@ -130,7 +132,7 @@ export function ApprovalCard({ p, compact = false }: { p: Pending; compact?: boo
             <button type="button" className="flex size-11 items-center justify-center rounded-full" aria-label="Más puntos" onClick={() => setPoints((x) => x + 5)}><Plus size={16} /></button>
           </div>
         ) : null}
-        {p.has_photo ? (
+        {p.has_photo || p.photo_deleted ? (
           <Button variant="secondary" size="sm" onClick={() => setPhoto(true)}><Image size={16} /> Ver foto</Button>
         ) : null}
         <div className="ml-auto flex gap-2">
@@ -142,7 +144,11 @@ export function ApprovalCard({ p, compact = false }: { p: Pending; compact?: boo
       </div>
       <ReviewSheet p={p} open={rejecting} onClose={() => setRejecting(false)} />
       <Sheet open={photo} onClose={() => setPhoto(false)} title={p.title}>
-        <img src={`/api/instances/${p.id}/photo`} alt={`Foto de ${p.display_name} para «${p.title}»`} loading="lazy" className="w-full rounded-2xl" />
+        {gone ? (
+          <p role="status" className="rounded-2xl bg-[var(--chip)] p-4 text-center font-bold">Foto ya borrada</p>
+        ) : (
+          <img src={`/api/instances/${p.id}/photo`} alt={`Foto de ${p.display_name} para «${p.title}»`} loading="lazy" className="w-full rounded-2xl" onError={() => setGone(true)} />
+        )}
       </Sheet>
     </li>
   );

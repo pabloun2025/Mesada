@@ -9,7 +9,7 @@ import { scheduleReminders } from '../src/lib/notify/reminders.js';
 import { channelBlockReason, minAge } from '../src/lib/notify/dispatch.js';
 import { inQuietHours, nextAllowedTime, zonedToUtc } from '../src/lib/notify/time.js';
 import { resetLoginFailures } from '../src/routes/auth.js';
-import { Client, createFamily, resetDb } from './helpers.js';
+import { Client, consent, createFamily, resetDb } from './helpers.js';
 
 let app: FastifyInstance;
 let F: Awaited<ReturnType<typeof createFamily>>;
@@ -259,10 +259,10 @@ describe('recuperación de contraseña e invitaciones por correo', () => {
     const token = tokenFrom(email.sent.at(-1)!.link);
     const anon = new Client(app);
     expect((await anon.post('/api/invitations/lookup', { token })).body.invitation).toMatchObject({ display_name: 'Abuela', family_name: 'Familia f' });
-    const acc = await anon.post('/api/invitations/accept', { token, username: 'abuela', password: 'contrasena-abuela' });
+    const acc = await anon.post('/api/invitations/accept', { token, username: 'abuela', password: 'contrasena-abuela', ...consent });
     expect(acc.status, JSON.stringify(acc.body)).toBe(200);
     expect(acc.body.user).toMatchObject({ role: 'adult', family_id: F.ids.family });
     expect((await anon.get('/api/me')).status).toBe(200);
-    expect((await new Client(app).post('/api/invitations/accept', { token, username: 'otra', password: 'contrasena-larga' })).status).toBe(404);
+    expect((await new Client(app).post('/api/invitations/accept', { token, username: 'otra', password: 'contrasena-larga', ...consent })).status).toBe(404);
   });
 });

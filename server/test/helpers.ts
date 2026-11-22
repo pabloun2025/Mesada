@@ -1,8 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { getPool, migrate } from '../src/lib/db.js';
+import { LEGAL_VERSION } from '../src/lib/legal.js';
+import { resetLimits } from '../src/lib/limits.js';
+
+/** Cuerpo válido del alta (casilla aceptada, versión vigente). */
+export const consent = { acceptTerms: true, termsVersion: LEGAL_VERSION };
 
 export async function resetDb() {
+  resetLimits();
   const pool = getPool();
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
   await migrate(pool);
@@ -59,7 +65,7 @@ export class Client {
 /** Crea una familia con 2 adultos y 2 hijos y devuelve clientes autenticados. */
 export async function createFamily(app: FastifyInstance, prefix = 'f') {
   const mama = new Client(app);
-  const s = await mama.post('/api/setup', { familyName: `Familia ${prefix}`, displayName: 'Mamá', username: `${prefix}mama`, password: 'contrasena-segura', email: `${prefix}mama@example.com` });
+  const s = await mama.post('/api/setup', { familyName: `Familia ${prefix}`, displayName: 'Mamá', username: `${prefix}mama`, password: 'contrasena-segura', email: `${prefix}mama@example.com`, ...consent });
   if (s.status !== 200) throw new Error(JSON.stringify(s.body));
   const mk = async (role: string, name: string, user: string, password: string) =>
     (await mama.post('/api/members', { role, displayName: name, username: user, password, birthYear: 2012, weeklyGoalPoints: 100 })).body.member;

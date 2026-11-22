@@ -56,6 +56,14 @@ values = {
     'EVOLUTION_INSTANCE_TOKEN': old.get('EVOLUTION_INSTANCE_TOKEN', ''),
     'BACKUP_KEEP_DAYS': '14',
 }
+# Opcionales que se ponen a mano en el servidor y los despliegues NO deben borrar: copia externa cifrada en R2 (D52),
+# límites y topes de abuso (D50). Solo se escriben si ya tienen valor.
+for k in ('R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'BACKUP_PASSPHRASE', 'R2_RETENTION_DAYS', 'R2_PREFIX',
+          'R2_INCLUDE_PHOTOS', 'RATE_SETUP_PER_HOUR', 'RATE_INVITE_PER_HOUR', 'RATE_INVITE_ACCEPT_PER_HOUR', 'RATE_RECOVERY_PER_HOUR',
+          'RATE_RESET_PER_HOUR', 'RATE_UPLOAD_PER_HOUR', 'RATE_EXPORT_PER_HOUR', 'MAX_MEMBERS_PER_FAMILY', 'MAX_PENDING_INVITATIONS',
+          'MAX_PHOTOS_PER_FAMILY', 'MAX_UPLOAD_MB', 'PHOTO_RETENTION_DAYS', 'CLEAN_NOTIFICATIONS_DAYS', 'CLEAN_OUTBOX_DAYS', 'INACTIVE_FAMILY_MONTHS', 'TRUST_CLOUDFLARE_IP'):
+    if old.get(k) and k not in values:
+        values[k] = old[k]
 for k, v in values.items():
     if any(c in v for c in "\r\n'"):
         raise SystemExit(f'Valor no admitido en {k}.')

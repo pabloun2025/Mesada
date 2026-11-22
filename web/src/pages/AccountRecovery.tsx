@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { post } from '../lib/api';
+import { api, post } from '../lib/api';
+import { ConsentBox } from '../components/Consent';
 import { Button, Field, Loading } from '../components/ui';
 import { AuthShell } from './AuthShell';
 
@@ -76,6 +77,8 @@ export function AcceptInvitation() {
   const navigate = useNavigate();
   const inv = useQuery({ queryKey: ['invitation', token], queryFn: () => post('/invitations/lookup', { token }), retry: false });
   const [f, setF] = useState({ username: '', password: '' });
+  const [accept, setAccept] = useState(false);
+  const status = useQuery({ queryKey: ['setup'], queryFn: () => api<{ legalVersion: string }>('/setup/status') });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const submit = async (e: FormEvent) => {
@@ -83,7 +86,7 @@ export function AcceptInvitation() {
     setError('');
     setLoading(true);
     try {
-      await post('/invitations/accept', { token, ...f });
+      await post('/invitations/accept', { token, ...f, acceptTerms: accept, termsVersion: status.data?.legalVersion ?? '' });
       await qc.invalidateQueries();
       navigate('/');
     } catch (err: any) {
@@ -106,6 +109,7 @@ export function AcceptInvitation() {
       <form onSubmit={submit} className="space-y-4">
         <Field label="Usuario" hint="Letras, números, punto o guion. Sin espacios.">{(id) => <input id={id} name="username" className="field" autoComplete="username" spellCheck={false} autoCapitalize="none" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} required minLength={3} />}</Field>
         <Field label="Contraseña" hint="Mínimo 8 caracteres.">{(id) => <input id={id} className="field" type="password" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required minLength={8} />}</Field>
+        <ConsentBox checked={accept} onChange={setAccept} adult={false} />
         {error ? <p role="alert" className="rounded-xl bg-berry-soft px-3 py-2 text-sm font-bold text-berry-deep">{error}</p> : null}
         <Button type="submit" size="lg" className="w-full" loading={loading}>Crear mi cuenta</Button>
       </form>

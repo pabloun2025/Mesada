@@ -8,6 +8,7 @@ import { useSession } from '../lib/session';
 import { Button, Field, IconButton, PageHeader, Segmented, Toggle, useToast } from '../components/ui';
 import type { Family } from '../lib/types';
 import { PlanSettings, ReasonsSettings } from '../components/ScreenSettings';
+import { PrivacySettings } from '../components/PrivacyData';
 
 /** Festivos y vacaciones: esos días rige la hora límite de fin de semana. */
 function Holidays() {
@@ -181,6 +182,7 @@ export default function Settings() {
         <Holidays />
         {error ? <p role="alert" className="font-bold text-berry-deep">{error}</p> : null}
         <Button size="lg" loading={save.isPending} onClick={() => save.mutate()}>Guardar ajustes</Button>
+        <PrivacySettings />
       </div>
     </div>
   );

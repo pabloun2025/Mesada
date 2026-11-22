@@ -4,6 +4,7 @@ import { getPool, many, migrate } from './lib/db.js';
 import { ensureInstances } from './lib/instances.js';
 import { processOutbox } from './lib/notify/worker.js';
 import { runWeeklyBank } from './lib/savings.js';
+import { maybeNightlyCleanup } from './lib/cleanup.js';
 import { runScreenExpiry, runScreenPlans } from './lib/screen.js';
 
 const app = await buildApp();
@@ -24,6 +25,12 @@ async function tick() {
     }
   } catch (e) {
     app.log.error(e, 'Fallo en la tarea periódica');
+  }
+  try {
+    const rep = await maybeNightlyCleanup();
+    if (rep) app.log.info({ cleanup: rep }, 'Limpieza nocturna');
+  } catch (e) {
+    app.log.error(e, 'Fallo en la limpieza nocturna');
   }
 }
 await tick();

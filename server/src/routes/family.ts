@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { getPool, many, one, tx } from '../lib/db.js';
 import { hashPassword, requireAdult, requireUser } from '../lib/auth.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { config } from '../lib/config.js';
 import { audit } from '../lib/audit.js';
 import { getFamily } from '../lib/family.js';
 import { adultPassword, childSecret, publicUser, resetLoginFailures, usernameSchema } from './auth.js';
@@ -98,6 +99,8 @@ export default async function familyRoutes(app: FastifyInstance) {
     const b = z.object({ role: z.enum(['adult', 'child']), username: usernameSchema, password: z.string().max(200), ...memberFields }).parse(req.body);
     (b.role === 'adult' ? adultPassword : childSecret).parse(b.password);
     const id = await tx(async (db) => {
+      const count = (await one<{ n: number }>(db, 'SELECT count(*)::int AS n FROM users WHERE family_id = $1', [u.familyId]))!.n;
+      if (count >= config.caps.maxMembers) throw conflict(`Una familia puede tener hasta ${config.caps.maxMembers} personas. Borra a quien ya no use la app.`, 'too_many_members');
       if (await one(db, 'SELECT 1 FROM users WHERE lower(username) = lower($1)', [b.username])) throw badRequest('Ese nombre de usuario ya existe', 'username_taken');
       const r = await one(
         db,

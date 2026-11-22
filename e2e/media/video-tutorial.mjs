@@ -3,7 +3,7 @@
 // Uso: cd e2e && MEDIA_PORT=3201 MEDIA_DB=mesada_video node media/video-tutorial.mjs
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { ROOT, startServer, stopServer, launch, login, ADULT, KID } from './lib.mjs';
+import { ROOT, BASE, startServer, stopServer, launch, login, api, ADULT, KID } from './lib.mjs';
 import { saveState, recordClip, assemble, OUT_DIR } from './video-lib.mjs';
 
 const OUT = path.join(ROOT, 'docs/video/tutorial.mp4');
@@ -26,6 +26,12 @@ try {
     await type(app.getByLabel('Correo'), 'marta@example.com', 40);
     await type(app.getByLabel('Contraseña'), ADULT.pass, 40);
     await pause(700);
+    await cap(step(1), 'Acepta la privacidad y crea la familia');
+    const acepto = app.getByRole('checkbox', { name: /acepto/i });
+    await acepto.scrollIntoViewIfNeeded();
+    await pulse(acepto); await pause(600);
+    await acepto.check();
+    await pause(1600);
     const crear = app.getByRole('button', { name: 'Crear familia' });
     await pulse(crear); await pause(500);
     await crear.click();
@@ -68,6 +74,16 @@ try {
   }, { start: '/' }));
   const adultState = path.join(OUT_DIR, 'adulto.json'), kidState = path.join(OUT_DIR, 'hijo.json');
   await saveState(browser, adultState, (p) => login(p, ADULT.user, ADULT.pass));
+  // Datos de la grabación (sin grabar): 100 puntos de partida, para que las cifras cuadren entre escenas y con la tarjeta
+  // «Mi mesada 120 → 6 €» de la imagen de apertura y de cierre: 100 + los 20 de la tarea = 120 puntos = 6 €.
+  {
+    const ctx = await browser.newContext({ storageState: adultState, locale: 'es-ES' });
+    const pg = await ctx.newPage();
+    await pg.goto(BASE + '/');
+    const nora = (await api(pg, 'get', '/family')).body.members.find((m) => m.username === KID.user);
+    await api(pg, 'post', '/adjustments/points', { userId: nora.id, delta: 100, note: 'Puntos de bienvenida', bonus: true });
+    await ctx.close();
+  }
 
   // 4. El hijo entra y marca la tarea
   clips.push(await recordClip(browser, 't2', async ({ app, cap, type, pause, pulse }) => {

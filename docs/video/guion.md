@@ -16,7 +16,7 @@ Hilo: el hijo marca, el padre valida y salen puntos, euros y pantalla.
 | 0:00 – 0:03 | Tarjeta de marca: familia, logo DiploP y «Mi mesada» | (sin rótulo) |
 | 0:03 – 0:10 | Móvil de Nora: marca «Poner el lavavajillas» como hecha | Paso 1 · Tu hijo marca la tarea como hecha |
 | 0:10 – 0:17 | Móvil de Marta: pulsa «Aprobar» en Validar | Paso 2 · Tú la validas con un toque |
-| 0:17 – 0:21 | Inicio de Nora: tarjeta «Mi mesada» (★ 120 → 6,00 €) | Y entonces… · Gana puntos ⭐ que valen euros |
+| 0:17 – 0:21 | Inicio de Nora: tarjeta «Mi mesada» (★ 120 → 6,00 €) y anillo de la semana en 120 | Y entonces… · Gana puntos ⭐ que valen euros |
 | 0:21 – 0:24 | «Mi banco» con el dinero de la mesada | Y entonces… · Mesada en euros, sin líos |
 | 0:24 – 0:28 | «Mi tiempo de pantalla» con el saldo y el plan | Y además… · Minutos de pantalla 🎮 que se ganan |
 | 0:28 – 0:32 | Cierre: logo, «Mi mesada» y dirección | Tareas, puntos y mesada para toda la familia · mesada.veryfacil.org |
@@ -28,7 +28,7 @@ Siete pasos. Cada rótulo lleva arriba «Paso N de 7».
 | Paso | Qué se ve | Rótulos |
 |---|---|---|
 | Intro (3 s) | Tarjeta de marca | — |
-| 1 · Crear la familia | Pantalla «Crea tu familia». Se escribe a mano el nombre de la familia, el usuario, el correo y la contraseña, y se pulsa «Crear familia» | Crea tu familia |
+| 1 · Crear la familia | Pantalla «Crea tu familia». Se escribe a mano el nombre de la familia, el usuario, el correo y la contraseña, se marca la casilla de privacidad y se pulsa «Crear familia» | Crea tu familia · Acepta la privacidad y crea la familia |
 | 2 · Añadir al hijo | Familia > Añadir. Nombre, usuario y PIN de Nora | Añade a tu hijo |
 | 3 · Crear una tarea | Tareas > Nueva. Icono, nombre, asignada a Nora, puntos | Crea una tarea · Elige cuántos puntos vale · ¡Tarea creada! |
 | 4 · El hijo la marca | Nora entra con usuario y PIN (Soy hijo/a) y marca la tarea | Tu hijo entra con su PIN · Y marca la tarea como hecha |
@@ -36,6 +36,16 @@ Siete pasos. Cada rótulo lleva arriba «Paso N de 7».
 | 6 · Puntos y mesada | Progreso de Nora (puntos y nivel). Después, Mesada de los padres: Cerrar semana, convertir en euros, Pagar por Bizum y recibo | Tu hijo ve sus puntos y su nivel · Cierra la semana: los puntos pasan a euros · Anota el pago cuando se lo entregues |
 | 7 · Pantalla | Ajustes > Plan semanal de pantalla (300 min). Después, «Ajuste de pantalla» con motivos en positivo y, por último, el saldo de Nora | Pon un plan de tiempo de pantalla · 5 horas a la semana · Si hace falta, ajusta con motivos en positivo · Tu hijo ve cuánto le queda · Se recarga cada lunes |
 | Cierre (4 s) | Logo, «Mi mesada» y dirección | Tareas, puntos y mesada para toda la familia · mesada.veryfacil.org |
+
+## Cifras coherentes entre escenas
+
+Las cifras de la grabación están preparadas para que no se contradigan entre escenas ni con la tarjeta de marca «Mi mesada ★ 120 → 6 €» de la apertura y el cierre (100 puntos = 5 €):
+
+- **Presentación:** Nora tiene 100 puntos antes de validar (anillo de la semana en 100, «Mi mesada» 100 → 5 €) y 120 después (anillo en 120, 120 → 6 €). Los otros 100 puntos de ejemplo son de una semana ya cerrada (5 € en el banco); se fechan hace dos semanas para que el anillo no los cuente, o marcaría 200.
+- **Tutorial:** se añaden 100 puntos de bienvenida antes de que Nora marque la tarea; con los 20 de la tarea, todo habla de 120 puntos = 6 € (cierre, pago por Bizum, «Tu progreso»).
+- **Cierre:** la imagen se muestra solo desde el logotipo hacia abajo; no debe verse nada de la foto de familia (las manos) detrás del rótulo.
+
+Tras regenerar, se comprueban fotogramas con `ffmpeg` (ver abajo).
 
 ## Cómo se generan
 
@@ -49,6 +59,13 @@ MEDIA_PORT=3201 MEDIA_DB=mesada_video node media/video-tutorial.mjs
 # Capturas del manual (docs/manual/img) y PDF
 node media/capturas-manual.mjs
 node media/pdf.mjs
+```
+
+Comprobar fotogramas (por ejemplo, el cierre y las escenas con cifras):
+
+```bash
+ffmpeg -sseof -1.5 -i docs/video/presentacion.mp4 -frames:v 1 /tmp/cierre.png      # el cierre, sin restos de la foto
+ffmpeg -i docs/video/presentacion.mp4 -vf "fps=1/2.5,scale=270:-1,tile=6x2" -frames:v 1 /tmp/hoja.png   # hoja de contactos
 ```
 
 | Archivo | Para qué sirve |

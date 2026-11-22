@@ -1,7 +1,7 @@
 // Vídeo de presentación (~30 s, 9:16, sin voz): el hijo marca, el padre valida y salen puntos, euros y pantalla.
 // Uso: cd e2e && MEDIA_PORT=3201 MEDIA_DB=mesada_video node media/video-presentacion.mjs
 import path from 'node:path';
-import { ROOT, BASE, startServer, stopServer, launch, api, login, createFamily, addMember, today, sleep, ADULT, KID, KID2 } from './lib.mjs';
+import { ROOT, BASE, startServer, stopServer, launch, api, login, createFamily, addMember, today, sleep, sql, ADULT, KID, KID2 } from './lib.mjs';
 import { saveState, recordClip, assemble, OUT_DIR } from './video-lib.mjs';
 import { execFileSync } from 'node:child_process';
 
@@ -22,6 +22,10 @@ try {
   }
   await api(setup, 'post', '/adjustments/points', { userId: nora.id, delta: 100, note: 'Puntos de ejemplo' });
   await api(setup, 'post', '/allowance/settle', {}); // 100 puntos pasan a 5 € de mesada
+  // Esos primeros 100 puntos son de una semana ya cerrada: se fechan hace dos semanas para que el anillo de la semana
+  // no los cuente. Así el hijo ve 100 puntos (5 €) antes de validar y 120 (6 €) después: las cifras cuadran entre
+  // escenas y con la tarjeta «Mi mesada 120 → 6 €» de la imagen de cierre.
+  sql(`UPDATE points_ledger SET created_at = created_at - interval '14 days' WHERE id IN (SELECT id FROM points_ledger WHERE user_id = '${nora.id}' AND note = 'Puntos de ejemplo' ORDER BY created_at LIMIT 1)`);
   await api(setup, 'post', '/adjustments/points', { userId: nora.id, delta: 100, note: 'Puntos de ejemplo' });
   await api(setup, 'put', `/screen/plans/${nora.id}`, { minutesPerWeek: 300, enabled: true });
   await api(setup, 'post', '/screen/adjust', { userId: nora.id, delta: 45, note: 'Gracias por ayudar' });

@@ -6,7 +6,9 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { getPool, many, one, tx } from '../lib/db.js';
 import { requireAdult, requireUser } from '../lib/auth.js';
-import { badRequest, forbidden, notFound } from '../lib/errors.js';
+import { badRequest, conflict, forbidden, HttpError, notFound } from '../lib/errors.js';
+import { enforceLimit } from '../lib/limits.js';
+import { looksLikeImage, processPhoto, removePhotoFile, storePhoto } from '../lib/photos.js';
 import { audit } from '../lib/audit.js';
 import { config } from '../lib/config.js';
 import { familyToday, getFamily } from '../lib/family.js';
@@ -107,7 +109,7 @@ async function validateAssignees(familyId: string, ids: string[]) {
 
 export const INSTANCE_SELECT = `
   SELECT i.id, i.task_id, i.assignee_id, i.due_date, i.status, i.points, i.completed_by, i.completed_at, i.child_note,
-         (i.photo_path IS NOT NULL) AS has_photo, i.reviewed_at, i.review_note,
+         (i.photo_path IS NOT NULL) AS has_photo, (i.photo_deleted_at IS NOT NULL) AS photo_deleted, i.reviewed_at, i.review_note,
          i.deadline_at, i.on_time, i.check_met, (i.reviewed_by IS NOT NULL) AS adult_reviewed, i.review_outcome, i.penalty_points, i.penalty_screen, i.repeat_no, t.repeatable, t.max_per_day, t.cooldown_days,
          (SELECT count(*)::int FROM task_instances x WHERE x.task_id = i.task_id AND x.due_date = i.due_date AND x.status IN ('submitted','approved') AND x.assignee_id IS NOT DISTINCT FROM i.assignee_id) AS done_count,
          t.title, t.icon, t.description, t.difficulty, t.recurrence, t.assignment_mode, t.requires_approval, t.requires_photo, t.due_time,
@@ -298,16 +300,15 @@ export default async function taskRoutes(app: FastifyInstance) {
       for await (const part of req.parts()) {
         if (part.type === 'file') {
           if (!['image/jpeg', 'image/png', 'image/webp'].includes(part.mimetype)) throw badRequest('La foto debe ser JPG, PNG o WebP');
-          const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[part.mimetype];
-          const rel = path.join(u.familyId, `${crypto.randomUUID()}.${ext}`);
-          const abs = path.join(config.uploadDir, rel);
-          fs.mkdirSync(path.dirname(abs), { recursive: true });
-          await pipeline(part.file, fs.createWriteStream(abs, { mode: 0o600 }));
-          if (part.file.truncated) {
-            fs.rmSync(abs, { force: true });
-            throw badRequest('La foto es demasiado grande');
-          }
-          photoPath = rel;
+          enforceLimit(req, 'upload', config.limits.uploadPerHour);
+          const stored = (await one<{ n: number }>(getPool(), 'SELECT count(*)::int AS n FROM task_instances WHERE family_id = $1 AND photo_path IS NOT NULL', [u.familyId]))!.n;
+          if (stored >= config.caps.maxPhotos) throw conflict('La familia ha llegado al máximo de fotos guardadas. Un adulto puede descargarlas y borrar tareas antiguas.', 'too_many_photos');
+          const raw = await part.toBuffer();
+          if (part.file.truncated) throw new HttpError(413, `La foto pesa demasiado (máximo ${Math.round(config.maxUploadBytes / 1048576)} MB)`, 'too_large');
+          // Se comprueba el contenido real, se reduce a 1280 px y se quitan EXIF y GPS.
+          if (!looksLikeImage(raw, part.mimetype)) throw badRequest('El archivo no es una foto válida');
+          const out = await processPhoto(raw, part.mimetype);
+          photoPath = await storePhoto(u.familyId, out.data, out.ext);
         } else if (part.fieldname === 'note') {
           note = String(part.value).slice(0, 500);
         }
@@ -318,7 +319,7 @@ export default async function taskRoutes(app: FastifyInstance) {
     try {
       return await completeInstance(u, id, { note, photoPath });
     } catch (e) {
-      if (photoPath) fs.rmSync(path.join(config.uploadDir, photoPath), { force: true });
+      removePhotoFile(photoPath);
       throw e;
     }
   });
@@ -351,11 +352,13 @@ export default async function taskRoutes(app: FastifyInstance) {
   app.get('/api/instances/:id/photo', async (req, reply) => {
     const u = requireUser(req);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const row = await one(getPool(), 'SELECT photo_path, completed_by FROM task_instances WHERE id = $1 AND family_id = $2', [id, u.familyId]);
+    const row = await one(getPool(), 'SELECT photo_path, completed_by, photo_deleted_at FROM task_instances WHERE id = $1 AND family_id = $2', [id, u.familyId]);
+    if (row && !row.photo_path && row.photo_deleted_at) throw new HttpError(410, 'Foto ya borrada', 'photo_deleted');
     if (!row?.photo_path) throw notFound('Sin foto');
     if (u.role !== 'adult' && row.completed_by !== u.id) throw forbidden();
     const abs = path.resolve(config.uploadDir, row.photo_path);
-    if (!abs.startsWith(path.resolve(config.uploadDir) + path.sep) || !fs.existsSync(abs)) throw notFound('Sin foto');
+    if (!abs.startsWith(path.resolve(config.uploadDir) + path.sep)) throw notFound('Sin foto');
+    if (!fs.existsSync(abs)) throw new HttpError(410, 'Foto ya borrada', 'photo_deleted');
     const ext = path.extname(abs).slice(1);
     reply.header('Cache-Control', 'private, max-age=3600');
     reply.type(ext === 'jpg' ? 'image/jpeg' : `image/${ext}`);

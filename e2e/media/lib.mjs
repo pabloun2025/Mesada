@@ -78,6 +78,7 @@ export async function createFamily(page, { family = 'Familia Soler', email = 'ma
   await page.getByLabel('Usuario').fill(ADULT.user);
   await page.getByLabel('Correo').fill(email);
   await page.getByLabel('Contraseña').fill(ADULT.pass);
+  await page.getByRole('checkbox', { name: /acepto/i }).check(); // casilla obligatoria de privacidad y condiciones
   await page.getByRole('button', { name: 'Crear familia' }).click();
   await page.getByRole('heading', { name: 'Familia', exact: true }).waitFor();
 }

@@ -65,7 +65,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#d9eafa}
 @keyframes f{from{opacity:1}to{opacity:0}}
 ${kind === 'outro' ? `
 .bg{background:linear-gradient(#bcdcf8,#dcecfb 30%,#eaf3fc)}
-.bg img{top:auto;bottom:0;height:auto;width:100%;animation:none;-webkit-mask-image:linear-gradient(transparent 38%,#000 46%)}
+.bg img{top:auto;bottom:0;height:auto;width:100%;animation:none;-webkit-mask-image:linear-gradient(transparent 46%,#000 48.2%)}  /* la imagen se muestra desde el logotipo hacia abajo: por encima quedaban las manos de la foto de familia */
 .t.a{top:34px;font-weight:800;font-size:31px;line-height:1.12;animation:up .8s .2s both}
 .t.u{top:122px;animation:up .8s .6s both}
 .t.u span{display:inline-block;background:#142a5c;color:#fff;font-weight:800;font-size:25px;border-radius:99px;padding:12px 26px;box-shadow:0 10px 24px -10px rgba(20,42,92,.6)}

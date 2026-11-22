@@ -7,5 +7,5 @@ ADMIN_URL="${DB_URL%/*}/postgres"
 psql "$ADMIN_URL" -qc "DROP DATABASE IF EXISTS mesada_e2e WITH (FORCE)" -c "CREATE DATABASE mesada_e2e"
 rm -rf ./.data
 cd ../server
-exec env DATABASE_URL="$DB_URL" PORT=3100 STATIC_DIR=../web/dist UPLOAD_DIR=../e2e/.data/uploads \
+exec env DATABASE_URL="$DB_URL" PORT=3100 STATIC_DIR=../web/dist UPLOAD_DIR=../e2e/.data/uploads BACKUP_DIR=../e2e/.data/backups \
   AUTH_RATE_LIMIT=1000 LOG_LEVEL=warn npx tsx src/index.ts

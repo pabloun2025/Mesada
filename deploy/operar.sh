@@ -2,6 +2,8 @@
 # Operaciones de Mesada en el servidor compartido. Lo lanza .github/workflows/operar.yml (o a mano en /home/ubuntu/mesada).
 #   ./deploy/operar.sh estado              → estado sin secretos (sí/no de cada clave, conexión de WhatsApp)
 #   ./deploy/operar.sh preparar-whatsapp   → crea UNA VEZ la instancia «mesada» en la Evolution de consulares
+#   ./deploy/operar.sh copia-r2-probar     → sube un fichero de prueba cifrado, lo baja, lo descifra y lo borra (sin datos)
+#   ./deploy/operar.sh copia-r2 listar|ultima|descargar NOMBRE.gpg → copias externas cifradas (docs/despliegue.md §0.b)
 #   ./deploy/operar.sh activar-envios      → NOTIFY_REAL_SEND=true (correo y WhatsApp reales)
 #   ./deploy/operar.sh desactivar-envios   → vuelve al modo simulado
 #   ./deploy/operar.sh enlace-recuperacion USUARIO → SOLO A MANO por SSH: imprime un enlace de un solo uso (30 min)
@@ -43,6 +45,9 @@ case "${1:-estado}" in
       st=$(evo "$tok" "http://evolution-api:8080/instance/connectionState/$(getv EVOLUTION_INSTANCE)" | sed -nE 's/.*"state":"([a-z]+)".*/\1/p')
       echo "WhatsApp conexión: ${st:-sin respuesta (¿el token de instancia no vale para esta ruta?)}"
     fi
+    echo "--- Copia externa cifrada en R2 (solo sí/no, nunca valores) ---"
+    echo "endpoint: $(yesno "$(getv R2_ENDPOINT)") · bucket: $(yesno "$(getv R2_BUCKET)") · clave de acceso: $(yesno "$(getv R2_ACCESS_KEY_ID)") · clave secreta: $(yesno "$(getv R2_SECRET_ACCESS_KEY)") · contraseña de cifrado: $(yesno "$(getv BACKUP_PASSPHRASE)")"
+    "${COMPOSE[@]}" logs --no-color --tail=400 backup 2>/dev/null | grep -E 'R2 (OK|ERROR)|copia externa' | tail -4 || true
     # Diagnóstico sin datos personales: ni direcciones ni nombres.
     echo "--- Cuentas de adulto con correo (necesario para recuperar la contraseña) ---"
     "${COMPOSE[@]}" exec -T db psql -U mesada -d mesada -tAc "SELECT 'con correo: ' || count(*) FILTER (WHERE email IS NOT NULL) || ' · sin correo: ' || count(*) FILTER (WHERE email IS NULL) FROM users WHERE role = 'adult' AND active" || true
@@ -69,6 +74,13 @@ case "${1:-estado}" in
     setv EVOLUTION_INSTANCE_TOKEN "$tok"
     reload_app
     echo "Listo: vincula el móvil en la app → Avisos → Línea de WhatsApp."
+    ;;
+  copia-r2)
+    shift
+    "${COMPOSE[@]}" exec -T backup sh /r2.sh "${@:-listar}"
+    ;;
+  copia-r2-probar)
+    "${COMPOSE[@]}" exec -T backup sh /r2.sh probar
     ;;
   activar-envios)
     setv NOTIFY_REAL_SEND true

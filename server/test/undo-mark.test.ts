@@ -241,3 +241,56 @@ describe('Desmarcar (I17)', () => {
     expect(await lifetimePoints(pool(), F.ids.lucia)).toBe(0);
   });
 });
+
+describe('Desmarcar retira las insignias que ya no se cumplen (D55)', () => {
+  const badges = async (u: string) => (await many(pool(), 'SELECT badge FROM user_badges WHERE user_id = $1 ORDER BY badge', [u])).map((r) => r.badge as string);
+
+  it('la insignia que dio esa tarea se retira, con su aviso, y vuelve a darse al volver a marcarla', async () => {
+    const t = await mkTask({ requiresApproval: false });
+    await F.luciaC.post(`/api/instances/${t.id}/complete`);
+    expect(await badges(F.ids.lucia)).toContain('first_task');
+    const notes = async () => (await many(pool(), `SELECT title FROM notifications WHERE user_id = $1 AND title LIKE 'Nueva insignia%'`, [F.ids.lucia])).length;
+    expect(await notes()).toBe(1);
+    const r = await unmark(F.luciaC, t.id);
+    expect(r.body.badgesRevoked).toContain('first_task');
+    expect(await badges(F.ids.lucia)).not.toContain('first_task');
+    expect(await notes()).toBe(0);
+    const a = await one(pool(), `SELECT data FROM audit_log WHERE action = 'task.unmark' AND entity_id = $1`, [t.id]);
+    expect(a!.data.badgesRevoked).toContain('first_task');
+    await F.luciaC.post(`/api/instances/${t.id}/complete`);
+    expect(await badges(F.ids.lucia)).toContain('first_task');
+    expect(await notes()).toBe(1);
+  });
+
+  it('una insignia ganada antes con otra tarea no se toca', async () => {
+    const a = await mkTask({ title: 'Primera', requiresApproval: false });
+    await F.luciaC.post(`/api/instances/${a.id}/complete`);
+    const b = await mkTask({ title: 'Segunda', requiresApproval: false });
+    await F.luciaC.post(`/api/instances/${b.id}/complete`);
+    await unmark(F.luciaC, b.id);
+    expect(await badges(F.ids.lucia)).toContain('first_task');
+  });
+
+  it('si otra tarea sigue sosteniéndola, se queda; y las que no vienen de tareas (canje, ahorro) nunca se retiran', async () => {
+    const a = await mkTask({ title: 'Primera', requiresApproval: false });
+    const b = await mkTask({ title: 'Segunda', requiresApproval: false });
+    // Las dos se marcan «a la vez» (misma pasada): la insignia queda atribuida a la primera que la cumplió.
+    await F.luciaC.post(`/api/instances/${b.id}/complete`);
+    await F.luciaC.post(`/api/instances/${a.id}/complete`);
+    await unmark(F.luciaC, b.id); // b la dio; sin b sigue habiendo una tarea aprobada
+    expect(await badges(F.ids.lucia)).toContain('first_task');
+    // Una insignia ficticia sin relación con tareas y atribuida a la instancia no se retira.
+    await pool().query(`INSERT INTO user_badges(user_id, badge, source_instance_id) VALUES ($1,'saver',$2)`, [F.ids.lucia, a.id]);
+    await unmark(F.luciaC, a.id);
+    expect(await badges(F.ids.lucia)).toContain('saver');
+    expect(await badges(F.ids.lucia)).not.toContain('first_task');
+  });
+
+  it('con validación de un adulto: la insignia llega al validar, y desmarcar antes de validar no concede nada', async () => {
+    const t = await mkTask();
+    await F.luciaC.post(`/api/instances/${t.id}/complete`);
+    expect(await badges(F.ids.lucia)).toEqual([]);
+    await unmark(F.luciaC, t.id);
+    expect(await badges(F.ids.lucia)).toEqual([]);
+  });
+});

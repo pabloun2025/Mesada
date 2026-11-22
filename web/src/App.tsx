@@ -27,13 +27,28 @@ const Profile = lazy(() => import('./pages/Profile'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Extras = lazy(() => import('./pages/Extras'));
 const Admin = lazy(() => import('./pages/Admin'));
+const Legal = lazy(() => import('./pages/Legal'));
 
 const KNOWN = 'mesada:returning';
 const knownDevice = () => {
   try { return localStorage.getItem(KNOWN) === '1'; } catch { return false; }
 };
 
+/** Los textos legales se pueden leer con y sin sesión; el resto de rutas depende de si hay sesión. */
 export function App() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <Routes>
+        <Route path="/privacidad" element={<Legal doc="privacidad" />} />
+        <Route path="/aviso-legal" element={<Legal doc="aviso-legal" />} />
+        <Route path="/condiciones" element={<Legal doc="condiciones" />} />
+        <Route path="*" element={<AppRoutes />} />
+      </Routes>
+    </Suspense>
+  );
+}
+
+function AppRoutes() {
   const me = useMe();
   const setup = useQuery({ queryKey: ['setup'], queryFn: () => api('/setup/status'), enabled: me.data === null });
 
@@ -91,6 +106,8 @@ export function App() {
               <Route path="perfil" element={<Profile />} />
             </>
           )}
+          {/* Recién creada la familia, la sesión puede llegar antes que la navegación: se va a Familia, no al inicio. */}
+          {adult ? <Route path="configurar" element={<Navigate to="/familia" replace />} /> : null}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

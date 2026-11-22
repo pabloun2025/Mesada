@@ -4,8 +4,11 @@ import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../lib/config.js';
 import { z } from 'zod';
-import { getPool, one, tx } from '../lib/db.js';
+import { getPool, many, one, tx } from '../lib/db.js';
 import { hashPassword, requireAdult, verifyPassword, type AuthUser } from '../lib/auth.js';
+import { runCleanup, recordCleanup, lastCleanup } from '../lib/cleanup.js';
+import { backupsInfo, inactiveFamilies, storageInfo } from '../lib/storage-info.js';
+import { eraseFamily } from '../lib/privacy.js';
 import { badRequest, forbidden, HttpError, notFound } from '../lib/errors.js';
 import { generateSecret, hashCode, otpauthUri, recoveryCodes, seal, unseal, verifyTotp } from '../lib/totp.js';
 import { getSetting, setSetting } from '../lib/settings.js';
@@ -308,8 +311,56 @@ export default async function adminRoutes(app: FastifyInstance) {
         dbBytes: Number(size?.bytes ?? 0),
         backups: lastBackup(),
         node: process.version,
+        errors24: (await one<{ n: number }>(db, `SELECT count(*)::int AS n FROM server_errors WHERE created_at > now() - interval '24 hours'`))!.n,
       },
     };
+  });
+
+  /* ---------- Errores del servidor (el código que ve la persona usuaria) ---------- */
+
+  app.get('/api/admin/errors', async (req) => {
+    requireSuper(req);
+    const q = z.object({ id: z.string().max(20).optional() }).parse(req.query);
+    const rows = await many(
+      getPool(),
+      `SELECT id, created_at, method, route, status, message, stack FROM server_errors WHERE ($1::text IS NULL OR id = upper($1)) ORDER BY created_at DESC LIMIT 50`,
+      [q.id ?? null],
+    );
+    return { errors: rows };
+  });
+
+  /* ---------- Almacenamiento, copias y mantenimiento (solo lectura salvo limpiar y borrar inactivas) ---------- */
+
+  app.get('/api/admin/storage', async (req) => {
+    requireSuper(req);
+    return { storage: await storageInfo(), backups: backupsInfo(), lastCleanup: await lastCleanup() };
+  });
+
+  app.post('/api/admin/cleanup', async (req) => {
+    const u = requireSuper(req);
+    const rep = await runCleanup();
+    await recordCleanup(rep, u.id, 'manual');
+    return { report: rep };
+  });
+
+  app.get('/api/admin/inactive-families', async (req) => {
+    requireSuper(req);
+    return { months: config.retention.inactiveFamilyMonths, families: await inactiveFamilies() };
+  });
+
+  // Borrar una familia inactiva: nombre exacto + frase, verificación en dos pasos reciente y solo si de verdad está inactiva.
+  app.post('/api/admin/inactive-families/:id/erase', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
+    const u = requireSuper(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const b = z.object({ confirmName: z.string().max(200), phrase: z.string().max(100) }).parse(req.body);
+    if (b.phrase.trim().replace(/\s+/g, ' ').toUpperCase() !== 'BORRAR FAMILIA INACTIVA') throw badRequest('Escribe exactamente: BORRAR FAMILIA INACTIVA', 'phrase_mismatch');
+    const [fam] = await inactiveFamilies(config.retention.inactiveFamilyMonths, id);
+    if (!fam) throw new HttpError(409, 'Esa familia no está inactiva (o no existe).', 'not_inactive');
+    if (b.confirmName.trim() !== fam.name) throw badRequest('El nombre de la familia no coincide', 'name_mismatch');
+    const r = await eraseFamily(id);
+    // Constancia sin el nombre ni datos de nadie: quién, cuándo, cuántas personas y desde cuándo estaba inactiva.
+    await getPool().query(`INSERT INTO admin_audit(actor_id, action, data, ip) VALUES ($1, 'family.erase_inactive', $2, $3)`, [u.id, JSON.stringify({ members: r.users, photos: r.photos, lastUse: fam.last_use }), req.ip ?? null]);
+    return { ok: true };
   });
 
   /* ---------- Familias y cuentas ---------- */

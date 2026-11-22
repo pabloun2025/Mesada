@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { closePool, getPool } from '../src/lib/db.js';
 import { todayIn } from '../src/lib/dates.js';
+import { LEGAL_VERSION } from '../src/lib/legal.js';
 import { Client, createFamily, resetDb } from './helpers.js';
 import { resetLoginFailures } from '../src/routes/auth.js';
 
@@ -37,7 +38,7 @@ async function myInstances(c: Client) {
 describe('autenticación y roles', () => {
   it('el setup solo funciona una vez', async () => {
     const c = new Client(app);
-    const r = await c.post('/api/setup', { familyName: 'Otra', displayName: 'X', username: 'intruso', password: 'contrasena-larga', email: 'x@example.com' });
+    const r = await c.post('/api/setup', { familyName: 'Otra', displayName: 'X', username: 'intruso', password: 'contrasena-larga', email: 'x@example.com', acceptTerms: true, termsVersion: LEGAL_VERSION });
     expect(r.status).toBe(403);
   });
   it('rechaza credenciales incorrectas y peticiones sin cabecera CSRF', async () => {
