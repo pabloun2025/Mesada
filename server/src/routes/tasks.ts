@@ -108,7 +108,7 @@ async function validateAssignees(familyId: string, ids: string[]) {
 export const INSTANCE_SELECT = `
   SELECT i.id, i.task_id, i.assignee_id, i.due_date, i.status, i.points, i.completed_by, i.completed_at, i.child_note,
          (i.photo_path IS NOT NULL) AS has_photo, i.reviewed_at, i.review_note,
-         i.deadline_at, i.on_time, i.check_met, i.repeat_no, t.repeatable, t.max_per_day, t.cooldown_days,
+         i.deadline_at, i.on_time, i.check_met, i.review_outcome, i.penalty_points, i.penalty_screen, i.repeat_no, t.repeatable, t.max_per_day, t.cooldown_days,
          (SELECT count(*)::int FROM task_instances x WHERE x.task_id = i.task_id AND x.due_date = i.due_date AND x.status IN ('submitted','approved') AND x.assignee_id IS NOT DISTINCT FROM i.assignee_id) AS done_count,
          t.title, t.icon, t.description, t.difficulty, t.recurrence, t.assignment_mode, t.requires_approval, t.requires_photo, t.due_time,
          t.due_time_weekend, t.late_percent, t.points AS task_points, t.check_mode, t.penalty_minutes, t.success_minutes,
@@ -318,7 +318,17 @@ export default async function taskRoutes(app: FastifyInstance) {
   app.post('/api/instances/:id/review', async (req) => {
     const u = requireAdult(req);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const b = z.object({ approve: z.boolean(), points: z.number().int().min(0).max(10000).optional(), note: z.string().max(500).optional() }).parse(req.body);
+    const b = z
+      .object({
+        approve: z.boolean().optional(),
+        action: z.enum(['approve', 'partial', 'return', 'reject', 'reject_penalty']).optional(),
+        points: z.number().int().min(0).max(10000).optional(),
+        note: z.string().max(500).optional(),
+        penaltyPoints: z.number().int().min(0).max(10000).optional(),
+        penaltyMinutes: z.number().int().min(0).max(1440).optional(),
+      })
+      .refine((v) => v.approve !== undefined || v.action !== undefined, { message: 'falta la decisión' })
+      .parse(req.body);
     return reviewInstance(u, id, b);
   });
 

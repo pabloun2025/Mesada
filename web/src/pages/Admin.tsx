@@ -11,13 +11,16 @@ import { Badge, Button, Field, Loading, PageHeader, Segmented, Sheet, Toggle, us
  * nunca puntos ni dinero de las familias. Exige verificación en dos pasos en cada sesión.
  */
 
-type Status = { eligible: boolean; totpEnabled: boolean; verified: boolean };
+type Status = { eligible: boolean; totpEnabled: boolean; verified: boolean; deviceTrusted?: boolean };
 
 const fmtBytes = (n: number) => (n > 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
 const fmtUptime = (s: number) => (s > 86400 ? `${Math.floor(s / 86400)} d` : s > 3600 ? `${Math.floor(s / 3600)} h` : `${Math.floor(s / 60)} min`);
 const ACTIONS: Record<string, string> = {
   'admin.2fa_enabled': 'Activó la verificación en dos pasos',
   'admin.verified': 'Entró en la administración',
+  device_remembered: 'Recordó un dispositivo 90 días',
+  device_trusted_login: 'Entró en la administración desde un dispositivo recordado',
+  device_forgotten: 'Olvidó un dispositivo',
   'admin.verify_failed': 'Falló un código de verificación',
   'admin.recovery_codes_regenerated': 'Generó códigos de recuperación nuevos',
   'family.block': 'Bloqueó una familia',
@@ -113,6 +116,7 @@ function Verify({ onDone }: { onDone: () => void }) {
       <h2 className="text-lg font-bold">Confirma que eres tú</h2>
       <p className="muted">Escribe el código de tu aplicación de autenticación. Si la perdiste, usa uno de tus códigos de recuperación.</p>
       <CodeInput value={code} onChange={setCode} label="Código" />
+      <p className="text-sm muted">Este dispositivo se recordará 90 días: no te lo volveremos a pedir aquí.</p>
       <Button type="submit" loading={verify.isPending}>Entrar</Button>
       {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
     </form>
@@ -263,7 +267,7 @@ function Families() {
   );
 }
 
-function AdminSettings({ onLock }: { onLock: () => void }) {
+function AdminSettings({ onLock, onForget, deviceTrusted }: { onLock: () => void; onForget: () => void; deviceTrusted: boolean }) {
   const qc = useQueryClient();
   const toast = useToast();
   const { data } = useQuery({ queryKey: ['admin', 'overview'], queryFn: () => api('/admin/overview') });
@@ -290,7 +294,17 @@ function AdminSettings({ onLock }: { onLock: () => void }) {
           </>
         )}
       </section>
-      <Button variant="secondary" onClick={onLock}><Lock size={18} /> Salir de la administración</Button>
+      {deviceTrusted ? (
+        <section className="panel space-y-3 p-5">
+          <h2 className="text-lg font-bold">Este dispositivo</h2>
+          <p className="muted">Está recordado: entras sin código durante 90 días desde la última vez que lo escribiste.</p>
+          <Button variant="secondary" onClick={() => confirm('¿Olvidar este dispositivo? Se te volverá a pedir el código aquí.') && onForget()}>Olvidar este dispositivo</Button>
+        </section>
+      ) : null}
+      <div className="space-y-2">
+        <Button variant="secondary" onClick={onLock}><Lock size={18} /> Salir de la administración</Button>
+        <p className="text-sm muted">Salir también olvida todos tus dispositivos recordados.</p>
+      </div>
     </div>
   );
 }
@@ -315,10 +329,11 @@ type Tab = 'resumen' | 'familias' | 'ajustes' | 'registro';
 
 export default function Admin() {
   const qc = useQueryClient();
-  const status = useQuery<Status>({ queryKey: ['admin', 'status'], queryFn: () => api('/admin/status') });
+  const status = useQuery<Status>({ queryKey: ['admin', 'status'], queryFn: () => api('/admin/status'), refetchInterval: 10 * 60_000 });
   const [tab, setTab] = useState<Tab>('resumen');
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin'] });
   const lock = useMutation({ mutationFn: () => post('/admin/lock'), onSuccess: () => { qc.removeQueries({ queryKey: ['admin'] }); refresh(); } });
+  const forget = useMutation({ mutationFn: () => post('/admin/device/forget'), onSuccess: () => { qc.removeQueries({ queryKey: ['admin'] }); refresh(); } });
   if (!status.data) return <Loading />;
   const s = status.data;
   const header = <PageHeader title="Administración" subtitle="Cuentas, envíos y estado del servidor. Sin datos de puntos ni dinero." />;
@@ -329,7 +344,7 @@ export default function Admin() {
     <div className="max-w-4xl">
       <PageHeader
         title="Administración"
-        subtitle={<span className="inline-flex items-center gap-1.5"><ShieldCheck size={16} className="text-leaf" aria-hidden /> Verificada. Se vuelve a pedir el código a las 12 horas.</span>}
+        subtitle={<span className="inline-flex items-center gap-1.5"><ShieldCheck size={16} className="text-leaf" aria-hidden /> {s.deviceTrusted ? 'Dispositivo recordado: no se pide el código.' : 'Verificada. Se vuelve a pedir el código a las 12 horas.'}</span>}
       />
       <div className="mb-5">
         <Segmented label="Sección" value={tab} onChange={setTab} options={[
@@ -339,7 +354,7 @@ export default function Admin() {
           { value: 'registro', label: 'Registro' },
         ]} />
       </div>
-      {tab === 'resumen' ? <Overview /> : tab === 'familias' ? <Families /> : tab === 'ajustes' ? <AdminSettings onLock={() => lock.mutate()} /> : <Audit />}
+      {tab === 'resumen' ? <Overview /> : tab === 'familias' ? <Families /> : tab === 'ajustes' ? <AdminSettings onLock={() => lock.mutate()} onForget={() => forget.mutate()} deviceTrusted={!!s.deviceTrusted} /> : <Audit />}
     </div>
   );
 }

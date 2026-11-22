@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Camera, Check, Clock, Hourglass, RotateCcw, ShieldCheck, Users, X } from 'lucide-react';
 import type { Instance } from '../lib/types';
 import { remaining, useNow } from '../lib/deadline';
-import { backLabel } from '../lib/format';
+import { backLabel, euros } from '../lib/format';
+import { useSession } from '../lib/session';
 import { Avatar, Badge, PointsPill } from './ui';
 import { BonusChip } from './BonusChip';
 
@@ -12,6 +13,7 @@ const STATUS: Record<string, { label: string; tone: 'muted' | 'sky' | 'sun' | 'b
   approved: { label: 'Hecha', tone: 'leaf' },
   rejected: { label: 'Necesita repaso', tone: 'berry' },
   expired: { label: 'Vencida', tone: 'berry' },
+  declined: { label: 'Rechazada', tone: 'berry' },
 };
 
 /** Hora límite con cuenta atrás viva; pasada la hora, avisa de que ahora vale menos. */
@@ -34,6 +36,11 @@ function Deadline({ inst }: { inst: Instance }) {
   );
 }
 
+/** Valor en euros de los puntos de la tarea, junto a «+10 ★». */
+function Euro({ text }: { text: string }) {
+  return <span className="num text-xs font-bold text-leaf-deep dark:text-[#7fe0b2]"><span aria-hidden className="hidden sm:inline">· </span>{text}</span>;
+}
+
 export function TaskRow({
   inst,
   onComplete,
@@ -50,6 +57,8 @@ export function TaskRow({
   celebrate?: boolean;
 }) {
   const [justDone, setJustDone] = useState(false);
+  const { family } = useSession();
+  const euroOf = (pts: number) => euros(Math.floor((pts * family.rate_cents) / family.rate_points));
   const waiting = !!inst.blocked_until;
   const doable = canComplete && !inst.check_mode && !waiting && (inst.status === 'pending' || inst.status === 'rejected');
   const finished = inst.status === 'approved' || inst.status === 'submitted';
@@ -72,6 +81,8 @@ export function TaskRow({
             <Badge tone={inst.check_met === true ? 'leaf' : inst.check_met === false ? 'berry' : 'muted'}>
               {inst.check_met === true ? <Check size={12} aria-hidden /> : inst.check_met === false ? <X size={12} aria-hidden /> : <ShieldCheck size={12} aria-hidden />} {checkLabel}
             </Badge>
+          ) : inst.review_outcome === 'partial' && inst.status === 'approved' ? (
+            <Badge tone="sun">Premio parcial: +{inst.points} de {inst.task_points}</Badge>
           ) : inst.status !== 'pending' ? <Badge tone={st.tone}>{st.label}</Badge> : null}
           {!check && inst.on_time === false && !open ? <Badge tone="sun">Con retraso</Badge> : null}
           {showAssignee && inst.assignee_name ? (
@@ -94,16 +105,29 @@ export function TaskRow({
           {open || inst.status === 'submitted' ? <BonusChip bonus={inst.bonus} /> : null}
           {inst.requires_photo ? <span className="inline-flex items-center gap-1 muted"><Camera size={14} aria-hidden /> Con foto</span> : null}
         </div>
-        {inst.status === 'rejected' && inst.review_note ? <p className="mt-1.5 text-sm text-berry">«{inst.review_note}»</p> : null}
+        {(inst.status === 'rejected' || inst.status === 'declined' || inst.review_outcome === 'partial') && inst.review_note ? (
+          <p className={`mt-1.5 text-sm ${inst.review_outcome === 'partial' ? 'text-sun-ink dark:text-sun' : 'text-berry'}`}>«{inst.review_note}»</p>
+        ) : null}
+        {inst.status === 'declined' && (inst.penalty_points || inst.penalty_screen) ? (
+          <p className="mt-1 text-sm font-bold text-berry">
+            Se te ha restado {[inst.penalty_points ? `${inst.penalty_points} puntos` : '', inst.penalty_screen ? `${inst.penalty_screen} min de pantalla` : ''].filter(Boolean).join(' y ')}.
+          </p>
+        ) : null}
       </div>
       <div className="relative flex shrink-0 items-center gap-2.5">
         {isLate ? (
-          <span className="flex items-center gap-1" aria-label={`Ahora vale ${inst.late_points} puntos en vez de ${inst.points}`}>
-            <span className="num text-sm font-bold text-[var(--fg-3)] line-through decoration-2">{inst.points}</span>
-            <PointsPill points={inst.late_points} />
+          <span className="flex flex-col items-end gap-0.5 sm:flex-row sm:items-center sm:gap-1.5" aria-label={`Ahora vale ${inst.late_points} puntos en vez de ${inst.points}`}>
+            <span className="flex items-center gap-1">
+              <span className="num text-sm font-bold text-[var(--fg-3)] line-through decoration-2">{inst.points}</span>
+              <PointsPill points={inst.late_points} star />
+            </span>
+            <Euro text={euroOf(inst.late_points)} />
           </span>
-        ) : check && inst.points === 0 ? null : (
-          <PointsPill points={inst.points} tone={inst.status === 'approved' ? 'leaf' : 'tangerine'} />
+        ) : check && inst.points === 0 ? null : inst.status === 'declined' ? null : (
+          <span className="flex flex-col items-end gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+            <PointsPill points={inst.points} tone={inst.status === 'approved' ? 'leaf' : 'tangerine'} star />
+            {inst.points > 0 ? <Euro text={euroOf(inst.points)} /> : null}
+          </span>
         )}
         {justDone && celebrate ? (
           <span aria-hidden className="anim-rise num pointer-events-none absolute -top-2 right-1 font-extrabold text-tangerine">+{isLate ? inst.late_points : inst.points}</span>
@@ -121,6 +145,8 @@ export function TaskRow({
           >
             <Check size={22} strokeWidth={3} />
           </button>
+        ) : inst.status === 'declined' ? (
+          <span className="anim-pop flex size-11 items-center justify-center rounded-full bg-berry text-white" aria-hidden><X size={20} strokeWidth={3} /></span>
         ) : finished ? (
           <span className={`anim-pop flex size-11 items-center justify-center rounded-full text-white ${inst.status === 'approved' ? 'bg-leaf' : 'bg-sun'}`} aria-hidden>
             {inst.status === 'approved' ? <Check size={22} strokeWidth={3} /> : <Hourglass size={18} />}

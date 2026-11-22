@@ -8,14 +8,16 @@ export function useInvalidateAll() {
   return () => qc.invalidateQueries();
 }
 
+export type ReviewAction = 'approve' | 'partial' | 'return' | 'reject' | 'reject_penalty';
+
 export function useReview() {
   const toast = useToast();
   const invalidate = useInvalidateAll();
   return useMutation({
-    mutationFn: (v: { id: string; approve: boolean; points?: number; note?: string }) =>
-      post(`/instances/${v.id}/review`, { approve: v.approve, points: v.points, note: v.note }),
+    mutationFn: (v: { id: string; action: ReviewAction; points?: number; note?: string; penaltyPoints?: number; penaltyMinutes?: number }) =>
+      post(`/instances/${v.id}/review`, { action: v.action, points: v.points, note: v.note, penaltyPoints: v.penaltyPoints, penaltyMinutes: v.penaltyMinutes }),
     onSuccess: (_d, v) => {
-      toast(v.approve ? 'Tarea aprobada' : 'Tarea devuelta para repasar');
+      toast({ approve: 'Tarea aprobada', partial: 'Premio parcial dado', return: 'Tarea devuelta para que la arregle', reject: 'Tarea rechazada', reject_penalty: 'Tarea rechazada con penalidad' }[v.action]);
       invalidate();
     },
     onError: (e: Error) => {

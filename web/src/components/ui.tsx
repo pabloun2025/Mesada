@@ -55,6 +55,10 @@ const VARIANTS: Record<Variant, string> = {
   success: 'bg-leaf text-white hover:bg-leaf-deep',
 };
 
+/** Clases de botón para enlaces (<Link>) con el mismo aspecto que <Button>. */
+export const buttonClass = (variant: Variant = 'primary', size: 'sm' | 'md' | 'lg' = 'md') =>
+  `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full font-bold transition active:scale-[0.97] ${({ sm: 'h-9 px-3.5 text-sm', md: 'h-11 px-5', lg: 'h-13 px-6 text-lg' })[size]} ${VARIANTS[variant]}`;
+
 export function Button({
   variant = 'primary',
   size = 'md',
@@ -95,13 +99,13 @@ export function Spinner({ className = 'size-4' }: { className?: string }) {
 
 /* ---------- Píldoras y etiquetas ---------- */
 
-export function PointsPill({ points, tone = 'tangerine', sign = true }: { points: number; tone?: 'tangerine' | 'leaf' | 'muted'; sign?: boolean }) {
+export function PointsPill({ points, tone = 'tangerine', sign = true, star = false }: { points: number; tone?: 'tangerine' | 'leaf' | 'muted'; sign?: boolean; star?: boolean }) {
   const tones = {
     tangerine: 'bg-sun-soft text-sun-ink dark:bg-sun/20 dark:text-[#ffd979]',
     leaf: 'bg-leaf-soft text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]',
     muted: 'bg-[var(--chip)] text-[var(--fg-3)]',
   };
-  return <span className={`num inline-flex h-7 items-center rounded-full px-2.5 text-sm font-bold ${tones[tone]}`}>{sign && points > 0 ? '+' : ''}{points}</span>;
+  return <span className={`num inline-flex h-7 items-center rounded-full px-2.5 text-sm font-bold ${tones[tone]}`}>{sign && points > 0 ? '+' : ''}{points}{star ? <span aria-hidden className="ml-0.5">★</span> : null}</span>;
 }
 
 export function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'sky' | 'sun' | 'berry' | 'leaf' | 'tangerine' }) {

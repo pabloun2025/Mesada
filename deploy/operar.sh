@@ -103,6 +103,7 @@ case "${1:-estado}" in
       sql="WITH u AS (UPDATE users SET totp_secret = NULL, totp_pending = NULL, totp_enabled_at = NULL, totp_last_counter = NULL
                       WHERE lower(username) = lower('$user') AND is_superadmin RETURNING id),
                 d AS (DELETE FROM admin_recovery_codes WHERE user_id IN (SELECT id FROM u)),
+                t AS (DELETE FROM admin_trusted_devices WHERE user_id IN (SELECT id FROM u)),
                 s AS (UPDATE sessions SET admin_verified_at = NULL WHERE user_id IN (SELECT id FROM u))
            INSERT INTO admin_audit(actor_id, action, user_id, data) SELECT NULL, 'admin.2fa_reset_ssh', id, '{}' FROM u RETURNING 1"
     fi

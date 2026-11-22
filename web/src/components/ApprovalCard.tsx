@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Check, Image, Minus, Plus, X } from 'lucide-react';
+import { Check, CornerUpLeft, Image, ListChecks, Minus, Plus, ThumbsDown, X } from 'lucide-react';
 import { useReview } from '../lib/hooks';
 import { fmtDate, relative } from '../lib/format';
-import { Avatar, Button, Sheet } from './ui';
+import { Avatar, Button, Field, Sheet } from './ui';
 
 export interface Pending {
   id: string;
@@ -18,11 +18,92 @@ export interface Pending {
   color: string | null;
 }
 
+type Choice = 'partial' | 'return' | 'reject' | 'reject_penalty';
+const CHOICES: { value: Choice; label: string; hint: string; icon: typeof Check }[] = [
+  { value: 'partial', label: 'Premio parcial', hint: 'Das solo una parte de los puntos.', icon: Minus },
+  { value: 'return', label: 'Devolver para que la arregle', hint: 'Vuelve al hijo y puede enviarla otra vez. Cuenta la hora en que la envió la primera vez.', icon: CornerUpLeft },
+  { value: 'reject', label: 'Rechazar sin penalidad', hint: 'No gana nada y ya no se puede enviar.', icon: X },
+  { value: 'reject_penalty', label: 'Rechazar con penalidad', hint: 'No gana nada y se le restan puntos y/o minutos de pantalla.', icon: ThumbsDown },
+];
+const REASONS = ['Falta un poco', 'No está hecha', 'Mal hecha', 'Sin foto'];
+
+/** Hoja de revisión: las acciones además de «Aprobar». El motivo es obligatorio y lo ve el hijo. */
+function ReviewSheet({ p, open, onClose }: { p: Pending; open: boolean; onClose: () => void }) {
+  const review = useReview();
+  const [choice, setChoice] = useState<Choice>('partial');
+  const [points, setPoints] = useState(Math.round(p.points / 2));
+  const [penPoints, setPenPoints] = useState(p.points);
+  const [penMinutes, setPenMinutes] = useState(0);
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  const reason = note.trim();
+  const ok = reason.length > 0 && (choice !== 'reject_penalty' || penPoints > 0 || penMinutes > 0);
+  const label = { partial: `Dar ${points} puntos`, return: 'Devolver para que la arregle', reject: 'Rechazar', reject_penalty: 'Rechazar y restar' }[choice];
+  const submit = () => {
+    setError('');
+    review.mutate(
+      { id: p.id, action: choice, note: reason, points: choice === 'partial' ? points : undefined, penaltyPoints: choice === 'reject_penalty' ? penPoints : undefined, penaltyMinutes: choice === 'reject_penalty' ? penMinutes : undefined },
+      { onSuccess: onClose, onError: (e: Error) => setError(e.message) },
+    );
+  };
+  return (
+    <Sheet open={open} onClose={onClose} title="Revisar tarea" subtitle={`«${p.title}» · ${p.display_name} · vale ${p.points} pts`}
+      footer={
+        <div className="space-y-2">
+          {error ? <p role="alert" className="text-sm font-bold text-berry">{error}</p> : null}
+          <Button className="w-full" variant={choice === 'partial' || choice === 'return' ? 'primary' : 'danger'} disabled={!ok} loading={review.isPending} onClick={submit}>{label}</Button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <div role="radiogroup" aria-label="Qué hacer" className="grid gap-2">
+          {CHOICES.map((c) => (
+            <button key={c.value} type="button" role="radio" aria-checked={choice === c.value} onClick={() => setChoice(c.value)}
+              className={`flex items-start gap-3 rounded-2xl border-2 p-3 text-left transition ${choice === c.value ? 'border-tangerine bg-tangerine-soft dark:bg-tangerine/15' : 'border-[var(--line)]'}`}>
+              <c.icon size={20} className="mt-0.5 shrink-0" aria-hidden />
+              <span><span className="block font-bold">{c.label}</span><span className="block text-sm muted">{c.hint}</span></span>
+            </button>
+          ))}
+        </div>
+
+        {choice === 'partial' ? (
+          <div className="space-y-2">
+            <p className="text-sm font-bold text-[var(--fg-2)]">Puntos a dar (sin bono)</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {[75, 50, 25].map((pc) => (
+                <Button key={pc} size="sm" variant={points === Math.round((p.points * pc) / 100) ? 'primary' : 'secondary'} onClick={() => setPoints(Math.round((p.points * pc) / 100))}>{pc} %</Button>
+              ))}
+              <input className="field num w-24 text-center font-bold" type="number" min={0} max={10000} aria-label="Otra cifra de puntos" value={points} onChange={(e) => setPoints(Math.max(0, Math.floor(Number(e.target.value))))} />
+            </div>
+          </div>
+        ) : null}
+
+        {choice === 'reject_penalty' ? (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Puntos a restar" hint="Pueden dejar el saldo en negativo.">{(id) => <input id={id} className="field num" type="number" min={0} max={10000} value={penPoints} onChange={(e) => setPenPoints(Math.max(0, Math.floor(Number(e.target.value))))} />}</Field>
+            <Field label="Minutos de pantalla" hint="Nunca baja de 0.">{(id) => <input id={id} className="field num" type="number" min={0} max={1440} value={penMinutes} onChange={(e) => setPenMinutes(Math.max(0, Math.floor(Number(e.target.value))))} />}</Field>
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          <p className="text-sm font-bold text-[var(--fg-2)]">Motivo (obligatorio, lo verá {p.display_name})</p>
+          <div className="flex flex-wrap gap-1.5">
+            {REASONS.map((r) => (
+              <button key={r} type="button" onClick={() => setNote(r)} aria-pressed={note === r}
+                className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${note === r ? 'bg-ink text-white dark:bg-white dark:text-ink' : 'bg-[var(--chip)]'}`}>{r}</button>
+            ))}
+          </div>
+          <textarea className="field min-h-20" placeholder="O escribe el motivo…" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} aria-label="Motivo" />
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
 export function ApprovalCard({ p, compact = false }: { p: Pending; compact?: boolean }) {
   const review = useReview();
   const [points, setPoints] = useState(p.points);
   const [rejecting, setRejecting] = useState(false);
-  const [note, setNote] = useState('');
   const [photo, setPhoto] = useState(false);
   const busy = review.isPending;
 
@@ -53,25 +134,13 @@ export function ApprovalCard({ p, compact = false }: { p: Pending; compact?: boo
           <Button variant="secondary" size="sm" onClick={() => setPhoto(true)}><Image size={16} /> Ver foto</Button>
         ) : null}
         <div className="ml-auto flex gap-2">
-          <Button variant="danger" size="sm" disabled={busy} onClick={() => setRejecting(true)} aria-label={`Rechazar «${p.title}» de ${p.display_name}`}><X size={16} /> Repasar</Button>
-          <Button variant="success" size="sm" loading={busy} onClick={() => review.mutate({ id: p.id, approve: true, points })} aria-label={`Aprobar «${p.title}» de ${p.display_name}`}>
+          <Button variant="secondary" size="sm" disabled={busy} onClick={() => setRejecting(true)} aria-label={`Revisar «${p.title}» de ${p.display_name}`}><ListChecks size={16} /> Otras opciones</Button>
+          <Button variant="success" size="sm" loading={busy} onClick={() => review.mutate({ id: p.id, action: 'approve', points })} aria-label={`Aprobar «${p.title}» de ${p.display_name}`}>
             <Check size={16} /> Aprobar
           </Button>
         </div>
       </div>
-      <Sheet
-        open={rejecting}
-        onClose={() => setRejecting(false)}
-        title="¿Qué falta?"
-        footer={
-          <Button className="w-full" variant="danger" loading={busy} onClick={() => review.mutate({ id: p.id, approve: false, note: note || undefined }, { onSuccess: () => setRejecting(false) })}>
-            Devolver para repasar
-          </Button>
-        }
-      >
-        <p className="mb-3 muted">{p.display_name} verá este mensaje y podrá volver a marcarla.</p>
-        <textarea className="field min-h-24" placeholder="Por ejemplo: faltan los vasos del salón…" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} aria-label="Motivo" />
-      </Sheet>
+      <ReviewSheet p={p} open={rejecting} onClose={() => setRejecting(false)} />
       <Sheet open={photo} onClose={() => setPhoto(false)} title={p.title}>
         <img src={`/api/instances/${p.id}/photo`} alt={`Foto de ${p.display_name} para «${p.title}»`} loading="lazy" className="w-full rounded-2xl" />
       </Sheet>

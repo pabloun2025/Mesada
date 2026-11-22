@@ -6,6 +6,7 @@ import { useMe } from './lib/session';
 import { Layout } from './components/Layout';
 import { Loading } from './components/ui';
 import { Login } from './pages/Login';
+import { Welcome } from './pages/Welcome';
 import { Setup } from './pages/Setup';
 import { AcceptInvitation, Forgot, Reset } from './pages/AccountRecovery';
 
@@ -27,6 +28,11 @@ const Notifications = lazy(() => import('./pages/Notifications'));
 const Extras = lazy(() => import('./pages/Extras'));
 const Admin = lazy(() => import('./pages/Admin'));
 
+const KNOWN = 'mesada:returning';
+const knownDevice = () => {
+  try { return localStorage.getItem(KNOWN) === '1'; } catch { return false; }
+};
+
 export function App() {
   const me = useMe();
   const setup = useQuery({ queryKey: ['setup'], queryFn: () => api('/setup/status'), enabled: me.data === null });
@@ -43,11 +49,15 @@ export function App() {
         <Route path="/restablecer" element={<Reset />} />
         <Route path="/invitacion" element={<AcceptInvitation />} />
         <Route path="/configurar" element={setup.data?.registrationOpen ? <Setup /> : <Navigate to="/" replace />} />
-        <Route path="*" element={setup.data?.needsSetup ? <Navigate to="/configurar" replace /> : <Login canRegister={!!setup.data?.registrationOpen} />} />
+        <Route path="/bienvenida" element={<Welcome canRegister={!!setup.data?.registrationOpen} />} />
+        <Route path="/entrar" element={<Login canRegister={!!setup.data?.registrationOpen} />} />
+        {/* Quien nunca ha entrado en este dispositivo ve la bienvenida; quien ya lo hizo, directo el acceso. */}
+        <Route path="*" element={setup.data?.needsSetup ? <Navigate to="/configurar" replace /> : knownDevice() ? <Login canRegister={!!setup.data?.registrationOpen} /> : <Welcome canRegister={!!setup.data?.registrationOpen} />} />
       </Routes>
     );
   }
 
+  try { localStorage.setItem(KNOWN, '1'); } catch { /* sin almacenamiento: se verá la bienvenida */ }
   const adult = me.data.user.role === 'adult';
   return (
     <Suspense fallback={<Loading />}>

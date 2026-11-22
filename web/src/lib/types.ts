@@ -42,7 +42,8 @@ export interface Family {
   bank_savings_rate_percent: number;
 }
 
-export type InstanceStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'expired';
+export type InstanceStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'expired' | 'declined';
+export type ReviewOutcome = 'approved' | 'partial' | 'returned' | 'declined' | 'penalized';
 
 export interface Instance {
   id: string;
@@ -56,6 +57,9 @@ export interface Instance {
   child_note: string | null;
   has_photo: boolean;
   review_note: string | null;
+  review_outcome: ReviewOutcome | null;
+  penalty_points: number;
+  penalty_screen: number;
   title: string;
   icon: string;
   description: string;

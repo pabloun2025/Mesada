@@ -7,6 +7,7 @@ Instaladas a mano (copia de la carpeta oficial), solo las necesarias:
 - `agent-browser` (vercel-labs/agent-browser): stub; requiere el CLI global `npm i -g agent-browser`. Ejecuta `agent-browser skills get core` antes de usarlo.
 - `replica` (albertirgi/replica): `npm install --prefix .claude/skills/replica/scripts` y luego `node .claude/skills/replica/scripts/replica.mjs doctor`.
 - `frontend-design` (anthropics/skills), `react-best-practices` y `web-design-guidelines` (vercel-labs/agent-skills).
+- `ui-ux-pro-max` (nextlevelbuilder/ui-ux-pro-max-skill): reglas de UI/UX y buscador de estilos; `python3 .claude/skills/ui-ux-pro-max/scripts/search.py "<consulta>" --design-system`. Solo Python, sin red.
 - `playwright-cli` (microsoft/playwright-cli): requiere `npm i -g @playwright/cli`.
 - superpowers (obra/superpowers) ya viene como plugin del entorno.
 

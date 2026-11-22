@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Clock, Share2, X } from 'lucide-react';
 import { Avatar, Button } from './ui';
+import { GoldCoins } from './Coins';
 
 export interface ReceiptData {
   title: string;
@@ -15,6 +16,8 @@ export interface ReceiptData {
   notice?: { title: string; sub?: string; avatar?: { name: string; avatar?: string | null; color?: string | null } };
   ref: string;
   at: Date;
+  /** Monedas de adorno; por defecto, en los recibos con importe en euros. */
+  coins?: boolean;
 }
 
 const Ctx = createContext<(r: ReceiptData) => void>(() => {});
@@ -83,7 +86,8 @@ function ReceiptView({ r, onClose }: { r: ReceiptData; onClose: () => void }) {
         </div>
 
         <div className="drop-shadow-[0_22px_20px_rgb(20_42_92/0.25)]">
-          <article className="receipt-paper">
+          <article className="receipt-paper relative">
+            {r.coins ?? r.amount.includes('€') ? <GoldCoins size={58} className="pointer-events-none absolute top-3 right-3" /> : null}
             <div className="relative mx-auto flex size-[68px] items-center justify-center rounded-full bg-leaf-soft text-leaf-deep before:absolute before:-inset-[7px] before:rounded-full before:border-2 before:border-leaf-soft before:content-['']">
               <Check size={34} strokeWidth={3} aria-hidden className="seal-icon" />
             </div>
