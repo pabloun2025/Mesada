@@ -167,7 +167,7 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
         {d.recurrence === 'daily' || d.recurrence === 'weekly' ? (
           <div>
             <p className="mb-2 text-sm muted">{d.recurrence === 'daily' ? 'Días (vacío = todos)' : 'Días de la semana'}</p>
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid grid-cols-4 gap-1.5 min-[440px]:grid-cols-7">{/* 4+3 en móvil: a 320 px siete columnas dejan botones de ~40 px */}
               {WEEKDAYS.map((w, i) => (
                 <button key={w} type="button" aria-pressed={d.weekdays.includes(i + 1)} aria-label={WEEKDAYS_LONG[i]} onClick={() => set('weekdays', (toggleIn(d.weekdays, i + 1) as number[]).sort())}
                   className={`num h-11 rounded-full font-bold transition ${d.weekdays.includes(i + 1) ? 'bg-ink text-white dark:bg-white dark:text-ink' : 'bg-[var(--chip)] text-[var(--fg-2)]'}`}>

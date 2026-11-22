@@ -3,13 +3,18 @@ import type { AuthUser } from './auth.js';
 import { addDays } from './dates.js';
 import { badRequest, conflict, forbidden, notFound } from './errors.js';
 import { familyToday, getFamily } from './family.js';
-import { addPoints } from './ledger.js';
+import { addPoints, lockUser } from './ledger.js';
 import { addScreen } from './screen.js';
 import { audit } from './audit.js';
 import { notify, notifyAdults } from './notify/dispatch.js';
 import { evaluateBadges } from './gamification.js';
 import { dayEnd, deadlineAt, isHoliday, reducedPoints } from './deadline.js';
-import { grantBonus } from './bonus.js';
+import { grantBonus, voidBonus } from './bonus.js';
+import { applyRecovery, reverseRecovery } from './screen-adjust.js';
+import { todayIn } from './dates.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { config } from './config.js';
 import { spawnRepeats } from './instances.js';
 
 interface InstanceRow {
@@ -36,6 +41,12 @@ interface InstanceRow {
   repeatable: boolean;
   max_per_day: number | null;
   cooldown_days: number | null;
+  unmark_count: number;
+  completed_at: string | null;
+  reviewed_by: string | null;
+  returned_at: string | null;
+  returned_note: string | null;
+  photo_path: string | null;
 }
 
 async function loadInstance(db: Db, id: string, familyId: string, lock = false) {
@@ -58,6 +69,9 @@ async function canComplete(db: Db, inst: InstanceRow, user: AuthUser) {
   return !!r;
 }
 
+/** La clave de los puntos lleva el nº de desmarcados: tras desmarcar y volver a marcar, se conceden otra vez. */
+const awardKey = (inst: { id: string; unmark_count: number }) => (inst.unmark_count ? `task:${inst.id}:u${inst.unmark_count}` : `task:${inst.id}`);
+
 async function award(db: Db, inst: InstanceRow, userId: string, points: number, actorId: string | null) {
   await addPoints(db, {
     familyId: inst.family_id,
@@ -67,7 +81,7 @@ async function award(db: Db, inst: InstanceRow, userId: string, points: number, 
     refId: inst.id,
     note: inst.title,
     createdBy: actorId,
-    idempotencyKey: `task:${inst.id}`,
+    idempotencyKey: awardKey(inst),
   });
 }
 
@@ -136,7 +150,8 @@ export async function completeInstance(
     );
     if (autoApprove) {
       await award(db, inst, user.id, points, null);
-      await grantBonus(db, { instanceId: inst.id, userId: user.id, familyId: user.familyId, actorId: null, onTime });
+      await grantBonus(db, { instanceId: inst.id, userId: user.id, familyId: user.familyId, actorId: null, onTime, seq: inst.unmark_count + 1 });
+      if (inst.is_extra) await applyRecovery(db, inst, user.id, today, null);
       await evaluateBadges(db, user.id, today, fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [user.id]))!.weekly_goal_points);
     } else {
       await notifyAdults(db, user.familyId, { event: 'task_submitted', title: `${user.displayName} ha terminado «${inst.title}»`, body: 'Pendiente de validar', link: '/validar', dedupeKey: `submitted:${inst.id}:${Date.now()}` });
@@ -185,7 +200,8 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
       );
       await award(db, inst, beneficiary, points, adult.id);
       if (inst.repeatable) await spawnRepeats(db, adult.familyId, inst.due_date, inst.task_id);
-      const grant = await grantBonus(db, { instanceId: inst.id, userId: beneficiary, familyId: adult.familyId, actorId: adult.id, onTime: inst.on_time });
+      const grant = await grantBonus(db, { instanceId: inst.id, userId: beneficiary, familyId: adult.familyId, actorId: adult.id, onTime: inst.on_time, seq: inst.unmark_count + 1 });
+      if (inst.is_extra) await applyRecovery(db, inst, beneficiary, familyToday(fam), adult.id);
       if (points !== inst.points) {
         await audit(db, adult.familyId, adult.id, 'task.points_changed', 'task_instance', inst.id, { from: inst.points, to: points });
       }
@@ -208,6 +224,7 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
       );
       await award(db, inst, beneficiary, points, adult.id);
       if (inst.repeatable) await spawnRepeats(db, adult.familyId, inst.due_date, inst.task_id);
+      if (inst.is_extra) await applyRecovery(db, inst, beneficiary, familyToday(fam), adult.id);
       // Sin bono: ni el visible ni la sorpresa (que no se revela ni se gasta) se conceden con un premio parcial.
       await notify(db, { userId: beneficiary, event: 'task_approved', title: `«${inst.title}»: premio parcial`, body: `+${points} de ${inst.points} puntos · ${note}`, link: '/', dedupeKey: `approved:${inst.id}` });
       await evaluateBadges(db, beneficiary, familyToday(fam), fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [beneficiary]))!.weekly_goal_points);
@@ -216,7 +233,7 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
     }
 
     if (action === 'return') {
-      await db.query(`UPDATE task_instances SET status = 'rejected', review_outcome = 'returned', reviewed_by = $2, reviewed_at = now(), review_note = $3 WHERE id = $1`, [inst.id, adult.id, note ?? null]);
+      await db.query(`UPDATE task_instances SET status = 'rejected', review_outcome = 'returned', reviewed_by = $2, reviewed_at = now(), review_note = $3, returned_at = now(), returned_note = $3 WHERE id = $1`, [inst.id, adult.id, note ?? null]);
       await notify(db, { userId: beneficiary, event: 'task_rejected', title: `«${inst.title}» necesita un repaso`, body: note ?? '', link: '/' });
       await audit(db, adult.familyId, adult.id, 'task.return', 'task_instance', inst.id, { note: note ?? null });
       return { id: inst.id, status: 'rejected' };
@@ -237,7 +254,7 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
       }
       if (minutes > 0) {
         // Los minutos se recortan al saldo: nunca bajan de 0 (D26/D27).
-        const r = await addScreen(db, { familyId: adult.familyId, userId: beneficiary, delta: -minutes, kind: 'penalty', refId: inst.id, note: `Penalidad: ${inst.title}`, createdBy: adult.id, idempotencyKey: `penalty-screen:${inst.id}` });
+        const r = await addScreen(db, { familyId: adult.familyId, userId: beneficiary, delta: -minutes, kind: 'penalty', refId: inst.id, note: `«${inst.title}» rechazada`, createdBy: adult.id, idempotencyKey: `penalty-screen:${inst.id}` });
         penaltyApplied = -r.applied;
       }
     }
@@ -250,4 +267,79 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
     await audit(db, adult.familyId, adult.id, action === 'reject' ? 'task.reject' : 'task.reject_penalty', 'task_instance', inst.id, { note, penaltyPoints, penaltyMinutes: penaltyApplied });
     return { id: inst.id, status: 'declined', penaltyPoints, penaltyMinutes: penaltyApplied };
   });
+}
+
+/**
+ * El hijo desmarca una tarea que marcó por error (I17). Vuelve a pendiente como si nunca la hubiera marcado:
+ * se deshacen puntos, bono y minutos con movimientos compensatorios (los libros no se editan), se borra la hora de envío
+ * (si la vuelve a marcar cuenta la hora nueva) y, si es compartida, «cuando haga falta», repetible o extra, queda libre otra vez.
+ * Solo vale mientras ningún adulto la haya validado; si no pedía validación, hasta el final del día en que se marcó.
+ * Si un adulto la había devuelto para repasar, vuelve a «devuelta» y conserva la primera hora de envío.
+ */
+export async function unmarkInstance(user: AuthUser, instanceId: string, opts: { now?: Date } = {}) {
+  if (user.role !== 'child') throw forbidden('Solo el hijo puede desmarcar su tarea');
+  const now = opts.now ?? new Date();
+  const out = await tx(async (db) => {
+    const fam = await getFamily(db, user.familyId);
+    const today = familyToday(fam, now);
+    const inst = await loadInstance(db, instanceId, user.familyId, true);
+    if (inst.check_mode) throw forbidden('Esta tarea la marca un adulto');
+    if (!['submitted', 'approved'].includes(inst.status)) throw conflict('Esta tarea no está marcada', 'not_marked');
+    if (inst.completed_by !== user.id) throw forbidden('Solo quien la marcó puede desmarcarla');
+    if (inst.status === 'approved') {
+      if (inst.reviewed_by) throw conflict('Un adulto ya la ha validado', 'already_validated');
+      if (!inst.completed_at || todayIn(fam.timezone, new Date(inst.completed_at)) !== today) throw conflict('Ya ha pasado el día en que la marcaste', 'day_over');
+    }
+    if (inst.repeatable) {
+      const later = await one(db, `SELECT 1 FROM task_instances WHERE task_id = $1 AND due_date = $2 AND assignee_id IS NOT DISTINCT FROM $3::uuid AND repeat_no > (SELECT repeat_no FROM task_instances WHERE id = $4) AND status IN ('submitted','approved')`, [inst.task_id, inst.due_date, inst.assignee_id, inst.id]);
+      if (later) throw conflict('Primero desmarca la última vez que la hiciste', 'later_repeat_done');
+    }
+    if (inst.is_extra && inst.status === 'approved') {
+      const open = await one(db, `SELECT 1 FROM task_instances WHERE task_id = $1 AND is_extra AND id <> $2 AND status IN ('pending','submitted','rejected')`, [inst.task_id, inst.id]);
+      if (open) throw conflict('Este trabajo ya se ha vuelto a publicar', 'reactivated');
+    }
+    const grant = await one(db, 'SELECT fulfilled_at FROM bonus_grants WHERE instance_id = $1 AND voided_at IS NULL', [inst.id]);
+    if (grant?.fulfilled_at) throw conflict('Ya se te entregó el premio de esta tarea', 'bonus_fulfilled');
+
+    await lockUser(db, user.id);
+    const n = inst.unmark_count + 1;
+    let pointsBack = 0;
+    if (inst.status === 'approved') {
+      const earned = await one<{ delta: number }>(db, 'SELECT delta FROM points_ledger WHERE idempotency_key = $1', [awardKey(inst)]);
+      if (earned && earned.delta !== 0) {
+        pointsBack = earned.delta;
+        await addPoints(db, { familyId: inst.family_id, userId: user.id, delta: -earned.delta, kind: 'adjustment', refId: inst.id, note: `Desmarcada: «${inst.title}»`, createdBy: user.id, idempotencyKey: `unmark:${inst.id}:${n}`, reversesEarning: true });
+      }
+      await voidBonus(db, { instanceId: inst.id, userId: user.id, familyId: inst.family_id, actorId: user.id, onTime: null, seq: n, releaseClaim: true, reason: 'tarea desmarcada' });
+      if (inst.is_extra) await reverseRecovery(db, { ...inst, unmark_count: inst.unmark_count }, user.id, today, user.id);
+    }
+
+    if (inst.returned_at) {
+      // Devuelta por un adulto: vuelve a «devuelta» con su motivo y su primera hora de envío.
+      await db.query(
+        `UPDATE task_instances SET status = 'rejected', review_outcome = 'returned', review_note = returned_note, reviewed_at = returned_at,
+                completed_by = NULL, completed_at = NULL, child_note = NULL, photo_path = NULL, deadline_at = NULL, on_time = NULL, unmark_count = $2 WHERE id = $1`,
+        [inst.id, n],
+      );
+    } else {
+      await db.query(
+        `UPDATE task_instances SET status = 'pending', review_outcome = NULL, review_note = NULL, reviewed_by = NULL, reviewed_at = NULL, first_submitted_at = NULL,
+                points = $3, completed_by = NULL, completed_at = NULL, child_note = NULL, photo_path = NULL, deadline_at = NULL, on_time = NULL, unmark_count = $2 WHERE id = $1`,
+        [inst.id, n, inst.task_points],
+      );
+    }
+    // Una repetición ya abierta detrás de esta sobra: la que queda abierta es esta.
+    if (inst.repeatable) {
+      await db.query(
+        `DELETE FROM task_instances WHERE task_id = $1 AND due_date = $2 AND assignee_id IS NOT DISTINCT FROM $3::uuid AND NOT is_extra AND status = 'pending'
+            AND repeat_no > (SELECT repeat_no FROM task_instances WHERE id = $4)`,
+        [inst.task_id, inst.due_date, inst.assignee_id, inst.id],
+      );
+    }
+    // Sin aviso a los adultos: solo queda en el historial.
+    await audit(db, user.familyId, user.id, 'task.unmark', 'task_instance', inst.id, { title: inst.title, wasStatus: inst.status, pointsBack });
+    return { id: inst.id, status: inst.returned_at ? 'rejected' : 'pending', pointsBack, photo: inst.photo_path };
+  });
+  if (out.photo) fs.rmSync(path.join(config.uploadDir, out.photo), { force: true });
+  return { id: out.id, status: out.status, pointsBack: out.pointsBack };
 }

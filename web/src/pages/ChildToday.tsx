@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Camera, CalendarCheck, Check, ChevronRight, Database, Flame, Hammer, Hourglass, PartyPopper, Smartphone, Star } from 'lucide-react';
+import { Camera, CalendarCheck, Check, ChevronRight, Database, Flame, Hammer, Hourglass, PartyPopper, PauseCircle, Smartphone, Star } from 'lucide-react';
 import { api } from '../lib/api';
 import { addDays, euros, fmtDate, weekdayLong } from '../lib/format';
-import { useInvalidateAll } from '../lib/hooks';
+import { useInvalidateAll, useUndoToast } from '../lib/hooks';
 import { useSession } from '../lib/session';
-import type { ExtraBoardItem, Instance, Progress, Wallet, BonusGrant } from '../lib/types';
+import type { ExtraBoardItem, Instance, Progress, ScreenView, Wallet, BonusGrant } from '../lib/types';
 import { minutesLabel } from '../lib/deadline';
 import { Button, Empty, Loading, SectionTitle, Sheet, useToast } from '../components/ui';
 import { LogScreenSheet } from '../components/MoneySheets';
@@ -17,6 +17,7 @@ import { TaskRow } from '../components/TaskRow';
 export default function ChildToday() {
   const { user, family } = useSession();
   const toast = useToast();
+  const undoToast = useUndoToast();
   const invalidate = useInvalidateAll();
   const list = useQuery({ queryKey: ['instances', 'mine', 'today'], queryFn: () => api<{ today: string; instances: Instance[] }>('/instances') });
   const today = list.data?.today;
@@ -28,6 +29,7 @@ export default function ChildToday() {
   const wallet = useQuery({ queryKey: ['wallet', user.id], queryFn: () => api<{ wallet: Wallet }>(`/wallet/${user.id}`) });
   const grants = useQuery({ queryKey: ['bonus-grants', 'mine'], queryFn: () => api<{ grants: BonusGrant[] }>('/bonus-grants') });
   const progress = useQuery({ queryKey: ['progress', user.id], queryFn: () => api<Progress>(`/progress/${user.id}`) });
+  const screen = useQuery({ queryKey: ['screen', user.id], queryFn: () => api<ScreenView>(`/screen/${user.id}`) });
   const extras = useQuery({ queryKey: ['extras'], queryFn: () => api<{ board: ExtraBoardItem[] }>('/extras') });
   const [logOpen, setLogOpen] = useState(false);
   const [photoFor, setPhotoFor] = useState<Instance | null>(null);
@@ -51,7 +53,7 @@ export default function ChildToday() {
       return api(`/instances/${inst.id}/complete`, { method: 'POST', body: {} });
     },
     onSuccess: (r, { inst }) => {
-      toast(r.status === 'approved' ? `¡+${r.points} puntos!` : r.onTime === false ? `«${inst.title}» enviada, con retraso. Falta que la validen.` : `«${inst.title}» enviada. Falta que la validen.`);
+      undoToast(inst.id, r.status === 'approved' ? `Hecha · ¡+${r.points} puntos!` : r.onTime === false ? `Hecha · «${inst.title}» enviada, con retraso. Falta que la validen.` : `Hecha · «${inst.title}» enviada. Falta que la validen.`);
       setPhotoFor(null);
       setFile(null);
       invalidate();
@@ -106,6 +108,11 @@ export default function ChildToday() {
             {screenMin != null ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
                 <Smartphone size={16} aria-hidden /> {minutesLabel(screenMin)} de pantalla
+              </span>
+            ) : null}
+            {screen.data?.pause ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sun px-3 py-1 text-sm font-bold text-ink">
+                <PauseCircle size={16} aria-hidden /> {screen.data.pause.label}
               </span>
             ) : null}
             {screenMin != null ? (

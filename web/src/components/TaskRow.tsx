@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Camera, Check, Clock, Hourglass, RotateCcw, ShieldCheck, Users, X } from 'lucide-react';
+import { Camera, Check, Clock, Hourglass, RotateCcw, ShieldCheck, Undo2, Users, X } from 'lucide-react';
 import type { Instance } from '../lib/types';
 import { remaining, useNow } from '../lib/deadline';
 import { backLabel, euros } from '../lib/format';
 import { useSession } from '../lib/session';
+import { useUnmark } from '../lib/hooks';
 import { Avatar, Badge, PointsPill } from './ui';
 import { BonusChip } from './BonusChip';
 
@@ -57,6 +58,7 @@ export function TaskRow({
   celebrate?: boolean;
 }) {
   const [justDone, setJustDone] = useState(false);
+  const unmark = useUnmark();
   const { family } = useSession();
   const euroOf = (pts: number) => euros(Math.floor((pts * family.rate_cents) / family.rate_points));
   const waiting = !!inst.blocked_until;
@@ -107,6 +109,17 @@ export function TaskRow({
         </div>
         {(inst.status === 'rejected' || inst.status === 'declined' || inst.review_outcome === 'partial') && inst.review_note ? (
           <p className={`mt-1.5 text-sm ${inst.review_outcome === 'partial' ? 'text-sun-ink dark:text-sun' : 'text-berry-deep'}`}>«{inst.review_note}»</p>
+        ) : null}
+        {inst.can_unmark ? (
+          <button
+            type="button"
+            disabled={unmark.isPending}
+            onClick={() => unmark.mutate(inst.id)}
+            aria-label={`Desmarcar «${inst.title}»`}
+            className="mt-1 -ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-bold text-tangerine-deep underline underline-offset-4 hover:bg-[var(--chip)] disabled:opacity-50"
+          >
+            <Undo2 size={16} aria-hidden /> Desmarcar
+          </button>
         ) : null}
         {inst.status === 'declined' && (inst.penalty_points || inst.penalty_screen) ? (
           <p className="mt-1 text-sm font-bold text-berry-deep">

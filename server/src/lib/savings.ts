@@ -76,7 +76,7 @@ export async function goalDeposit(actor: AuthUser, goalId: string, p: { cents: n
     const a = await addMoney(db, { familyId: actor.familyId, userId: g.user_id, deltaCents: -p.cents, kind: 'transfer', refId: goalId, note: `Ahorro: ${g.title}`, createdBy: actor.id, idempotencyKey: key ? `${key}:out` : null });
     if (a.duplicate) return { duplicate: true, ...(await goalAmounts(db, goalId)) };
     await addMoney(db, { familyId: actor.familyId, userId: g.user_id, account: 'savings', goalId, deltaCents: p.cents, kind: 'transfer', refId: goalId, note: `Ahorro: ${g.title}`, createdBy: actor.id, idempotencyKey: key ? `${key}:in` : null });
-    await audit(db, actor.familyId, actor.id, 'savings.deposit', 'savings_goal', goalId, { cents: p.cents, title: g.title });
+    await audit(db, actor.familyId, actor.id, 'savings.deposit', 'savings_goal', goalId, { cents: p.cents, title: g.title, for: g.user_id });
     const fam = await getFamily(db, actor.familyId);
     await evaluateBadges(db, g.user_id, familyToday(fam), fam.timezone, 0);
     return { duplicate: false, entry_id: a.id ?? null, ...(await goalAmounts(db, goalId)) };
@@ -98,7 +98,7 @@ export async function goalWithdrawEarly(actor: AuthUser, goalId: string) {
     if (a.balance >= g.target_cents) throw conflict('Ya has llegado a la meta: usa «Canjear meta» o pide pasarlo a efectivo', 'goal_reached');
     if (a.balance <= 0) throw conflict('No hay nada que sacar', 'nothing_to_withdraw');
     await moveOut(db, actor, g, a, `gout:${randomUUID()}`, 'Ahorro sacado antes de la meta');
-    await audit(db, actor.familyId, actor.id, 'savings.withdraw', 'savings_goal', goalId, { principal: a.principal, forfeited: a.interest, title: g.title });
+    await audit(db, actor.familyId, actor.id, 'savings.withdraw', 'savings_goal', goalId, { principal: a.principal, forfeited: a.interest, title: g.title, for: g.user_id });
     return { principal_cents: a.principal, forfeited_cents: a.interest };
   });
 }
@@ -171,7 +171,7 @@ export async function decideGoalRequest(adult: AuthUser, id: string, o: { approv
     const note = o.note?.trim() ?? '';
     if (!o.approve) {
       const upd = await one(db, `UPDATE goal_requests SET status = 'rejected', decision_note = $2, decided_by = $3, decided_at = now() WHERE id = $1 RETURNING *`, [id, note, adult.id]);
-      await audit(db, adult.familyId, adult.id, 'goal.reject', 'goal_request', id, { note });
+      await audit(db, adult.familyId, adult.id, 'goal.reject', 'goal_request', id, { note, for: r.user_id });
       await notify(db, { userId: r.user_id, event: 'goal_decided', title: `${adult.displayName} no ha aceptado tu petición para «${r.goal_title}»`, body: note, link: '/mesada', dedupeKey: `goal-rejected:${id}` });
       return { request: upd, duplicate: false };
     }
@@ -192,7 +192,7 @@ export async function decideGoalRequest(adult: AuthUser, id: string, o: { approv
         `UPDATE goal_requests SET status = 'approved', price_cents = $2, settle_cents = $3, decision_note = $4, decided_by = $5, decided_at = now() WHERE id = $1 RETURNING *`,
         [id, price, settle, note, adult.id],
       );
-      await audit(db, adult.familyId, adult.id, 'goal.redeem', 'goal_request', id, { title: g.title, saved: a.balance, price, settle });
+      await audit(db, adult.familyId, adult.id, 'goal.redeem', 'goal_request', id, { title: g.title, saved: a.balance, price, settle, for: r.user_id });
       await notify(db, {
         userId: r.user_id, event: 'goal_decided', title: `¡«${g.title}» comprada!`,
         body: settle > 0 ? `Sobraron ${fmtEur(settle)} y vuelven a tu cuenta de dinero.` : settle < 0 ? `Faltaron ${fmtEur(-settle)}: se descuentan de tu cuenta de dinero.` : 'Justo lo que tenías ahorrado.',
@@ -207,7 +207,7 @@ export async function decideGoalRequest(adult: AuthUser, id: string, o: { approv
       `UPDATE goal_requests SET status = 'approved', settle_cents = $2, forfeited_cents = $3, decision_note = $4, decided_by = $5, decided_at = now() WHERE id = $1 RETURNING *`,
       [id, a.principal, a.interest, note, adult.id],
     );
-    await audit(db, adult.familyId, adult.id, 'goal.cashout', 'goal_request', id, { title: g.title, principal: a.principal, forfeited: a.interest });
+    await audit(db, adult.familyId, adult.id, 'goal.cashout', 'goal_request', id, { title: g.title, principal: a.principal, forfeited: a.interest, for: r.user_id });
     await notify(db, {
       userId: r.user_id, event: 'goal_decided', title: `«${g.title}» pasada a tu cuenta de dinero`,
       body: `${fmtEur(a.principal)} vuelven a tu cuenta${a.interest ? ` y pierdes ${fmtEur(a.interest)} de interés` : ''}.`, link: '/mesada', dedupeKey: `goal-approved:${id}`,

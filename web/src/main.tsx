@@ -6,6 +6,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { App } from './App';
 import { ToastProvider } from './components/ui';
 import { ReceiptProvider } from './components/Receipt';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles.css';
 
 registerSW({ immediate: true });
@@ -22,7 +23,9 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <ToastProvider>
           <ReceiptProvider>
-            <App />
+            <ErrorBoundary>
+              <App />
+            </ErrorBoundary>
           </ReceiptProvider>
         </ToastProvider>
       </BrowserRouter>

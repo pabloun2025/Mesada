@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Camera, Hammer, Hourglass, Pencil, Plus, Trash2, Undo2 } from 'lucide-react';
 import { api, del, post, put } from '../lib/api';
 import { fmtDate } from '../lib/format';
-import { useInvalidateAll } from '../lib/hooks';
+import { useInvalidateAll, useUndoToast, useUnmark } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import type { ExtraBoardItem, ExtraCatalogItem } from '../lib/types';
 import { Avatar, Badge, Button, Empty, Field, IconButton, Loading, PageHeader, PointsPill, SectionTitle, Sheet, Toggle, useToast } from '../components/ui';
@@ -106,6 +106,8 @@ function ActivateSheet({ item, onClose }: { item: ExtraCatalogItem; onClose: () 
 
 function BoardCard({ it, adult }: { it: ExtraBoardItem; adult: boolean }) {
   const toast = useToast();
+  const undoToast = useUndoToast();
+  const unmark = useUnmark();
   const invalidate = useInvalidateAll();
   const fileRef = useRef<HTMLInputElement>(null);
   const onErr = (e: Error) => { toast(e.message, 'error'); invalidate(); };
@@ -117,7 +119,7 @@ function BoardCard({ it, adult }: { it: ExtraBoardItem; adult: boolean }) {
       if (photo) { const fd = new FormData(); fd.append('photo', photo); return api(`/instances/${it.id}/complete`, { method: 'POST', form: fd }); }
       return post(`/instances/${it.id}/complete`);
     },
-    onSuccess: (r: any) => { toast(r.status === 'approved' ? `¡+${r.points} puntos!` : 'Enviada. Falta que la validen.'); invalidate(); },
+    onSuccess: (r: any) => { undoToast(it.id, r.status === 'approved' ? `Hecha · ¡+${r.points} puntos!` : 'Hecha · Enviada. Falta que la validen.'); invalidate(); },
     onError: onErr,
   });
   const free = !it.assignee_id && it.status === 'pending';
@@ -152,6 +154,7 @@ function BoardCard({ it, adult }: { it: ExtraBoardItem; adult: boolean }) {
             </Button>
           </>
         ) : null}
+        {!adult && it.can_unmark ? <Button size="sm" variant="secondary" loading={unmark.isPending} onClick={() => unmark.mutate(it.id)}><Undo2 size={16} /> Desmarcar</Button> : null}
         {adult && it.assignee_id && working ? <Button size="sm" variant="secondary" loading={release.isPending} onClick={() => release.mutate()}><Undo2 size={16} /> Soltar</Button> : null}
         {adult && working ? <Button size="sm" variant="ghost" loading={remove.isPending} onClick={() => confirm(`¿Quitar «${it.title}» del tablón?`) && remove.mutate()}>Quitar</Button> : null}
       </div>

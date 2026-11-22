@@ -1,54 +1,20 @@
 import { useState } from 'react';
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
-import { Banknote, CalendarCheck2, MonitorSmartphone, ReceiptText, SlidersHorizontal } from 'lucide-react';
+import { Banknote, CalendarCheck2, MonitorSmartphone, PauseCircle, ReceiptText, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { api, newKey, post } from '../lib/api';
 import { euros, fmtDate, parseEuros } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import type { Bank, BankSummary, Goal, User, Wallet } from '../lib/types';
 import { Avatar, Badge, Button, Field, Loading, PageHeader, SectionTitle, Segmented, Sheet, useToast } from '../components/ui';
+import { ScreenAdjustSheet } from '../components/ScreenAdjustSheet';
 import { Pips } from '../components/AmountSheet';
 import { BankApprovals, useBankApprovals } from '../components/BankApprovals';
 import { ScreenList } from '../components/Ledger';
 import { GoalProduct, LoanProduct, Statement } from '../components/Bank';
 import { minutesLabel } from '../lib/deadline';
-import { CategoryPicker, PaySheet } from '../components/MoneySheets';
-import type { ScreenCategory } from '../lib/types';
-
-/** Gastar o ajustar minutos de pantalla: el saldo nunca baja de 0. */
-function ScreenSheet({ child, minutes, onClose }: { child: User; minutes: number; onClose: () => void }) {
-  const [mode, setMode] = useState<'spend' | 'give' | 'take'>('spend');
-  const [category, setCategory] = useState<ScreenCategory>('videojuegos');
-  const [value, setValue] = useState('');
-  const [note, setNote] = useState('');
-  const [error, setError] = useState('');
-  const toast = useToast();
-  const invalidate = useInvalidateAll();
-  const save = useMutation({
-    mutationFn: () => {
-      const n = Number(value);
-      if (!Number.isInteger(n) || n <= 0) throw new Error('Escribe los minutos');
-      if (mode === 'spend') return post('/screen/spend', { userId: child.id, minutes: n, category, note });
-      if (!note.trim()) throw new Error('Indica el motivo');
-      return post('/screen/adjust', { userId: child.id, delta: mode === 'give' ? n : -n, note });
-    },
-    onSuccess: (r) => { toast(`Hecho. Le quedan ${minutesLabel(r.balance)}`); invalidate(); onClose(); },
-    onError: (e: Error) => setError(e.message),
-  });
-  return (
-    <Sheet open onClose={onClose} title={`Pantalla de ${child.display_name}`} footer={<Button className="w-full" loading={save.isPending} onClick={() => save.mutate()}>{mode === 'spend' ? 'Gastar minutos' : 'Guardar'}</Button>}>
-      <div className="space-y-4">
-        <p className="muted">Saldo: <strong className="num text-[var(--fg)]">{minutesLabel(minutes)}</strong></p>
-        <Segmented label="Qué hacer" value={mode} onChange={setMode} options={[{ value: 'spend', label: 'Gastar' }, { value: 'give', label: 'Dar' }, { value: 'take', label: 'Quitar' }]} />
-        <Field label="Minutos">{(id) => <input id={id} className="field num text-xl font-bold" inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
-        {mode === 'spend' ? <CategoryPicker value={category} onChange={setCategory} /> : null}
-        <Field label={mode === 'spend' ? 'Nota (opcional)' : 'Motivo'}>{(id) => <input id={id} className="field" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder={mode === 'spend' ? 'Consola, tablet…' : ''} />}</Field>
-        {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
-        <div className="border-t border-[var(--line)] pt-3"><ScreenList userId={child.id} /></div>
-      </div>
-    </Sheet>
-  );
-}
+import { GiveScreenSheet, PaySheet } from '../components/MoneySheets';
+import type { ScreenView } from '../lib/types';
 
 function AdjustSheet({ child, onClose }: { child: User; onClose: () => void }) {
   const [type, setType] = useState<'points' | 'money'>('points');
@@ -104,7 +70,16 @@ function BalanceTile({ tone, label, value, note }: { tone: 'money' | 'points'; l
 }
 
 /** Panel de banca de un hijo: sus dos cuentas, retiros de la semana, préstamo, metas y acciones. */
-function KidPanel({ child: k, wallet: w, pending, onSheet }: { child: User; wallet?: Wallet; pending: number; onSheet: (kind: 'pay' | 'adjust' | 'history' | 'screen', w: Wallet, bank?: Bank) => void }) {
+function KidPanel({ child: k, wallet: w, pending, onSheet }: { child: User; wallet?: Wallet; pending: number; onSheet: (kind: 'pay' | 'adjust' | 'history' | 'screen' | 'screen-adjust' | 'screen-history', w: Wallet, bank?: Bank) => void }) {
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const screenQ = useQuery({ queryKey: ['screen', k.id], queryFn: () => api<ScreenView>(`/screen/${k.id}`) });
+  const endPause = useMutation({
+    mutationFn: (id: string) => post(`/screen/adjustments/${id}/end`),
+    onSuccess: () => { toast('Pausa terminada'); invalidate(); },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  const pause = screenQ.data?.pause ?? null;
   const bankQ = useQuery({ queryKey: ['bank', k.id], queryFn: () => api<{ bank: Bank }>(`/bank/${k.id}`) });
   const goalsQ = useQuery({ queryKey: ['goals', k.id], queryFn: () => api<{ goals: Goal[] }>(`/goals/${k.id}`) });
   const bank = bankQ.data?.bank;
@@ -131,11 +106,22 @@ function KidPanel({ child: k, wallet: w, pending, onSheet }: { child: User; wall
             {bank.loan ? <LoanProduct loan={bank.loan} mine={false} compact /> : <p className="rounded-[1.1rem] border border-[var(--line)] bg-[var(--bg)] px-3.5 py-2.5 text-sm text-[var(--fg-3)]">Sin préstamo</p>}
             {goals.length ? <ul className="grid gap-2.5">{goals.map((g) => <GoalProduct key={g.id} goal={g} mine={false} compact />)}</ul> : null}
           </div>
-          <p className="mt-3 flex items-center gap-2 text-sm text-[var(--fg-2)]"><MonitorSmartphone size={16} aria-hidden /> Pantalla: <b className="num text-[var(--fg)]">{minutesLabel(w.screen_minutes)}</b></p>
+          <p className="mt-3 flex flex-wrap items-center gap-x-2 text-sm text-[var(--fg-2)]">
+            <MonitorSmartphone size={16} aria-hidden /> Pantalla: <b className="num text-[var(--fg)]">{minutesLabel(w.screen_minutes)}</b>
+            {screenQ.data && screenQ.data.buckets.plan.minutes > 0 ? <span className="num">· plan {minutesLabel(screenQ.data.buckets.plan.minutes)}</span> : null}
+            <button type="button" onClick={() => onSheet('screen-history', w)} className="inline-flex min-h-11 items-center font-bold text-tangerine-deep underline underline-offset-4">Ver historial</button>
+          </p>
+          {pause ? (
+            <p className="flex flex-wrap items-center gap-2 rounded-2xl bg-sun-soft px-3.5 py-2 text-sm font-bold text-sun-ink dark:bg-sun/15 dark:text-[#ffd979]">
+              <PauseCircle size={16} aria-hidden /> <span className="min-w-0 flex-1">{pause.label} · {pause.reason}</span>
+              <Button size="sm" variant="secondary" loading={endPause.isPending} onClick={() => endPause.mutate(pause.id)}>Terminar pausa</Button>
+            </p>
+          ) : null}
           <p className="mt-1 text-xs text-[var(--fg-3)]">Convertido en total {euros(w.cents_converted_total)} · pagado {euros(w.cents_paid_total)}</p>
-          <div className="mt-4 grid grid-cols-2 gap-2 min-[560px]:grid-cols-4 min-[1100px]:grid-cols-2 min-[1500px]:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-2 min-[560px]:grid-cols-3 min-[1100px]:grid-cols-2 min-[1500px]:grid-cols-3">
             <Button variant="success" size="sm" className="h-11" disabled={w.cents_pending <= 0} onClick={() => onSheet('pay', w)}><Banknote size={17} aria-hidden /> Pagar</Button>
             <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('screen', w)}><MonitorSmartphone size={17} aria-hidden /> Dar pantalla</Button>
+            <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('screen-adjust', w)}><Sparkles size={17} aria-hidden /> Ajuste de pantalla</Button>
             <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('adjust', w)}><SlidersHorizontal size={17} aria-hidden /> Ajustar</Button>
             <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('history', w, bank)}><ReceiptText size={17} aria-hidden /> Extracto</Button>
           </div>
@@ -169,7 +155,7 @@ export default function Allowance() {
   const summary = useQuery({ queryKey: ['bank-summary'], queryFn: () => api<{ summary: BankSummary }>('/bank-summary') });
   const settlements = useQuery({ queryKey: ['settlements'], queryFn: () => api('/settlements') });
   const approvals = useBankApprovals();
-  const [sheet, setSheet] = useState<{ kind: 'pay' | 'adjust' | 'history' | 'screen'; child: User; wallet: Wallet; bank?: Bank } | null>(null);
+  const [sheet, setSheet] = useState<{ kind: 'pay' | 'adjust' | 'history' | 'screen' | 'screen-adjust' | 'screen-history'; child: User; wallet: Wallet; bank?: Bank } | null>(null);
   const [closing, setClosing] = useState(false);
   const toast = useToast();
   const invalidate = useInvalidateAll();
@@ -218,24 +204,25 @@ export default function Allowance() {
 
       <section className="mt-8">
         <SectionTitle>Cierres anteriores</SectionTitle>
-        <div className="card overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="text-[var(--fg-3)]">
-              <tr><th className="p-3 font-bold">Periodo</th><th className="p-3 font-bold">Quién</th><th className="p-3 text-right font-bold">Puntos</th><th className="p-3 text-right font-bold">Euros</th></tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {(settlements.data?.settlements ?? []).map((s: any) => (
-                <tr key={s.id}>
-                  <td className="p-3">{fmtDate(s.period_start)} – {fmtDate(s.period_end)}</td>
-                  <td className="p-3 font-bold">{s.display_name}</td>
-                  <td className="num p-3 text-right">{s.points_converted}</td>
-                  <td className="num p-3 text-right font-bold">{euros(s.cents)} {s.capped ? <Badge tone="sun">límite</Badge> : null}</td>
-                </tr>
-              ))}
-              {!settlements.data?.settlements?.length ? <tr><td colSpan={4} className="p-6 text-center muted">Todavía no hay cierres.</td></tr> : null}
-            </tbody>
-          </table>
-        </div>
+        {settlements.data?.settlements?.length ? (
+          <ul className="card divide-y divide-[var(--line)]">
+            {settlements.data.settlements.map((s: any) => (
+              <li key={s.id} className="flex items-center gap-3 p-3.5">
+                <span aria-hidden className="flex size-11 shrink-0 items-center justify-center rounded-full bg-leaf-soft text-leaf-deep dark:bg-leaf/20 dark:text-[#7fe0b2]"><CalendarCheck2 size={20} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-bold">{s.display_name}</span>
+                  <span className="block text-sm muted">{fmtDate(s.period_start)} – {fmtDate(s.period_end)} · <span className="num">{s.points_converted}</span> pts</span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end gap-0.5">
+                  <span className="num text-lg font-extrabold text-leaf-text">{euros(s.cents)}</span>
+                  {s.capped ? <Badge tone="sun">límite</Badge> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="card p-6 text-center muted">Todavía no hay cierres.</p>
+        )}
       </section>
 
       <Sheet open={closing} onClose={() => setClosing(false)} title={`Cerrar la ${periodName} anterior`}
@@ -243,7 +230,11 @@ export default function Allowance() {
         <p className="muted">Los puntos disponibles de cada hijo se convertirán en euros ({family.rate_points} pts = {euros(family.rate_cents)}){family.cap_cents != null ? `, con un máximo de ${euros(family.cap_cents)} por ${periodName}. Lo que pase del límite se queda en puntos` : ''}. Cada {periodName} solo se puede cerrar una vez.</p>
       </Sheet>
       {sheet?.kind === 'pay' ? <PaySheet child={sheet.child} wallet={sheet.wallet} onClose={() => setSheet(null)} /> : null}
-      {sheet?.kind === 'screen' ? <ScreenSheet child={sheet.child} minutes={sheet.wallet.screen_minutes} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'screen' ? <GiveScreenSheet child={sheet.child} minutes={sheet.wallet.screen_minutes} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'screen-adjust' ? <ScreenAdjustSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'screen-history' ? (
+        <Sheet open onClose={() => setSheet(null)} title={`Pantalla de ${sheet.child.display_name}`} subtitle={<>Saldo: <b className="num text-[var(--fg)]">{minutesLabel(sheet.wallet.screen_minutes)}</b></>}><ScreenList userId={sheet.child.id} /></Sheet>
+      ) : null}
       {sheet?.kind === 'adjust' ? <AdjustSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
       {sheet?.kind === 'history' ? (
         <Sheet open onClose={() => setSheet(null)} title={`Extracto de ${sheet.child.display_name}`}><Statement userId={sheet.child.id} loan={sheet.bank?.loan} /></Sheet>

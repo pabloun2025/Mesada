@@ -39,3 +39,33 @@ export function useDecideRedemption() {
     onError: (e: Error) => toast(e.message, 'error'),
   });
 }
+
+/** Muestra «Hecha · Deshacer» durante unos segundos tras marcar una tarea; «Deshacer» la deja como si no se hubiera marcado. */
+export function useUndoToast() {
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  return (instanceId: string, text: string) =>
+    toast(text, 'ok', {
+      ms: 6000,
+      action: {
+        label: 'Deshacer',
+        onClick: () => {
+          post(`/instances/${instanceId}/unmark`).then(
+            () => { toast('Desmarcada: vuelve a estar por hacer'); invalidate(); },
+            (e: Error) => { toast(e.message, 'error'); invalidate(); },
+          );
+        },
+      },
+    });
+}
+
+/** Desmarcar desde la fila de la tarea. */
+export function useUnmark() {
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (id: string) => post(`/instances/${id}/unmark`),
+    onSuccess: () => { toast('Desmarcada: vuelve a estar por hacer'); invalidate(); },
+    onError: (e: Error) => { toast(e.message, 'error'); invalidate(); },
+  });
+}

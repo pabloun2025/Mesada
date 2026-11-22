@@ -42,7 +42,7 @@ export async function checkInstance(adult: AuthUser, instanceId: string, met: bo
     // 1) Deshacer la decisión anterior, si la había.
     if (inst.check_met === true) {
       if (inst.points > 0) {
-        await addPoints(db, { familyId: adult.familyId, userId: kid, delta: -inst.points, kind: 'adjustment', refId: inst.id, note: `Corrección: «${inst.title}» no cumplida`, createdBy: adult.id, idempotencyKey: `task-rev:${inst.id}:${seq}` });
+        await addPoints(db, { familyId: adult.familyId, userId: kid, delta: -inst.points, kind: 'adjustment', refId: inst.id, note: `Corrección: «${inst.title}» no cumplida`, createdBy: adult.id, idempotencyKey: `task-rev:${inst.id}:${seq}`, reversesEarning: true });
       }
       if (inst.check_minutes_applied > 0) {
         await addScreen(db, { familyId: adult.familyId, userId: kid, delta: -inst.check_minutes_applied, kind: 'adjustment', refId: inst.id, note: `Corrección: «${inst.title}» no cumplida`, createdBy: adult.id, idempotencyKey: `task-min-rev:${inst.id}:${seq}` });

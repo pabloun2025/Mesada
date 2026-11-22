@@ -1,6 +1,7 @@
 import { many, one, type Db } from './db.js';
 import { addDays, startOfWeek } from './dates.js';
 import { notify } from './notify/dispatch.js';
+import { LIFETIME_POINTS_SQL } from './ledger.js';
 
 export const LEVEL_TITLES = ['Novato', 'Aprendiz', 'Colaborador', 'Constante', 'Fiable', 'Experto', 'Crack', 'Maestro', 'Referente', 'Leyenda'];
 
@@ -34,7 +35,7 @@ export const BADGES: Record<string, { title: string; description: string; icon: 
 export async function lifetimePoints(db: Db, userId: string) {
   const r = await one<{ p: number }>(
     db,
-    `SELECT COALESCE(SUM(delta),0)::int AS p FROM points_ledger WHERE user_id = $1 AND kind IN ('task','bonus') AND delta > 0`,
+    `SELECT ${LIFETIME_POINTS_SQL} AS p FROM points_ledger WHERE user_id = $1`,
     [userId],
   );
   return r!.p;

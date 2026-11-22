@@ -37,7 +37,7 @@ export async function syncHonesty(db: Db, familyId: string, userId: string, day:
     return { granted: true, changed: true };
   }
   if (!eligible && granted) {
-    const r = await addPoints(db, { familyId, userId, delta: -HONESTY_POINTS, kind: 'adjustment', note: 'Puntos de honestidad retirados', createdBy: actorId, idempotencyKey: `honesty-rev:${userId}:${day}:${grants - 1}` });
+    const r = await addPoints(db, { familyId, userId, delta: -HONESTY_POINTS, kind: 'adjustment', note: 'Puntos de honestidad retirados', createdBy: actorId, idempotencyKey: `honesty-rev:${userId}:${day}:${grants - 1}`, reversesEarning: true });
     await db.query('UPDATE honesty_days SET granted = false WHERE user_id = $1 AND day = $2', [userId, day]);
     await notify(db, { userId, event: 'points_adjusted', title: `−${HONESTY_POINTS} puntos`, body: 'Ese día ya no cuenta como pantalla anotada con honestidad.', link: '/progreso', dedupeKey: r.id ? `points:${r.id}` : null });
     return { granted: false, changed: true };

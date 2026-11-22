@@ -222,7 +222,7 @@ export async function decideLoan(adult: AuthUser, id: string, o: { approve: bool
     await lockUser(db, l.user_id);
     if (!o.approve) {
       const upd = await one(db, `UPDATE loans SET status = 'rejected', decision_note = $2, decided_by = $3, decided_at = now() WHERE id = $1 RETURNING *`, [id, note, adult.id]);
-      await audit(db, adult.familyId, adult.id, 'loan.reject', 'loan', id, { note });
+      await audit(db, adult.familyId, adult.id, 'loan.reject', 'loan', id, { note, for: l.user_id });
       await notify(db, { userId: l.user_id, event: 'loan_decided', title: `${adult.displayName} no ha aceptado tu préstamo de ${fmtEur(l.amount_cents)}`, body: note, link: '/mesada', dedupeKey: `loan-rejected:${id}` });
       return { loan: upd, duplicate: false };
     }
@@ -236,7 +236,7 @@ export async function decideLoan(adult: AuthUser, id: string, o: { approve: bool
       [id, firstWeek, note, adult.id],
     );
     await addMoney(db, { familyId: adult.familyId, userId: l.user_id, deltaCents: l.amount_cents, kind: 'loan', refId: id, note: 'Préstamo', createdBy: adult.id, idempotencyKey: `loan:${id}` });
-    await audit(db, adult.familyId, adult.id, 'loan.approve', 'loan', id, { cents: l.amount_cents, weeks: l.weeks });
+    await audit(db, adult.familyId, adult.id, 'loan.approve', 'loan', id, { cents: l.amount_cents, weeks: l.weeks, for: l.user_id });
     const first = installmentCents(l.amount_cents, l.weeks, 1);
     await notify(db, {
       userId: l.user_id, event: 'loan_decided', title: `${adult.displayName} ha aprobado tu préstamo de ${fmtEur(l.amount_cents)}`,

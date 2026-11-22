@@ -7,7 +7,7 @@ import { audit } from '../lib/audit.js';
 import { familyToday, getFamily } from '../lib/family.js';
 import { ensureInstancesThrottled } from '../lib/instances.js';
 import { notify } from '../lib/notify/dispatch.js';
-import { bonusBody, claimedTasks, dateStr, shapeBonus } from './tasks.js';
+import { bonusBody, canUnmark, claimedTasks, dateStr, shapeBonus } from './tasks.js';
 
 /**
  * Trabajos extra (I11). El catálogo son filas de `tasks` con is_extra (sin asignados); cada activación es una
@@ -34,7 +34,7 @@ const CATALOG_SELECT = `
 
 const BOARD_SELECT = `
   SELECT i.id, i.task_id, i.status, i.points, i.due_date, i.extra_deadline, i.reserved_at, i.assignee_id, i.completed_by,
-         (i.photo_path IS NOT NULL) AS has_photo, i.review_note,
+         (i.photo_path IS NOT NULL) AS has_photo, i.review_note, i.completed_at, (i.reviewed_by IS NOT NULL) AS adult_reviewed,
          t.title, t.icon, t.description, t.requires_photo, t.requires_approval, t.points AS task_points,
          t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise, t.bonus_on_time_only,
          rw.title AS bonus_reward_title,
@@ -69,9 +69,11 @@ export default async function extraRoutes(app: FastifyInstance) {
     await ensureInstancesThrottled(getPool(), u.familyId); // retira las de plazo vencido
     const rows = await many(getPool(), BOARD_SELECT, [u.familyId]);
     const claimed = u.role === 'child' ? await claimedTasks(u.id) : new Set<string>();
+    const fam = await getFamily(getPool(), u.familyId);
+    const today = familyToday(fam);
     const board = rows.map((r) => {
       const s = shapeBonus(r, u.role, claimed, r.task_id) as any;
-      return { ...s, mine: r.assignee_id === u.id || r.completed_by === u.id };
+      return { ...s, mine: r.assignee_id === u.id || r.completed_by === u.id, can_unmark: canUnmark(u, r, fam.timezone, today) };
     });
     if (u.role === 'child') return { board };
     const catalog = (await many(getPool(), `${CATALOG_SELECT} WHERE t.family_id = $1 AND t.is_extra AND t.active ORDER BY t.title`, [u.familyId])).map((r) => shapeBonus(r, 'adult', new Set(), r.id));

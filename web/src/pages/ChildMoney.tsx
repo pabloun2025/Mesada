@@ -11,7 +11,8 @@ import { LogScreenSheet, RequestScreenSheet } from '../components/MoneySheets';
 import { AccountRail, AdvanceSheet, AtmButtons, BalanceTrend, ExchangeSheet, GoalProduct, LoanProduct, LoanSheet, NewGoalSheet, SaveSheet, Statement, WithdrawSheet, type AtmKey } from '../components/Bank';
 import { Badge, Button, Loading, PageHeader, SectionTitle, useToast } from '../components/ui';
 import { ScreenList } from '../components/Ledger';
-import { minutesLabel } from '../lib/deadline';
+import { ScreenBalance } from '../components/ScreenPanel';
+import type { ScreenView } from '../lib/types';
 
 /** «Mi banco»: tarjetas de cuenta, acciones redondas, gráfica del saldo, productos (préstamo y ahorros) y extracto. */
 export default function ChildMoney() {
@@ -19,6 +20,7 @@ export default function ChildMoney() {
   const bankQ = useQuery({ queryKey: ['bank', user.id], queryFn: () => api<{ bank: Bank }>(`/bank/${user.id}`) });
   const walletQ = useQuery({ queryKey: ['wallet', user.id], queryFn: () => api<{ wallet: Wallet }>(`/wallet/${user.id}`) });
   const goalsQ = useQuery({ queryKey: ['goals', user.id], queryFn: () => api<{ goals: Goal[] }>(`/goals/${user.id}`) });
+  const screenQ = useQuery({ queryKey: ['screen', user.id], queryFn: () => api<ScreenView>(`/screen/${user.id}`) });
   const requests = useQuery({ queryKey: ['payout-requests', 'mine'], queryFn: () => api<{ requests: PayoutRequest[] }>('/payout-requests') });
   const [sheet, setSheet] = useState<AtmKey | 'screen' | 'log' | 'goal' | null>(null);
   const [depositGoal, setDepositGoal] = useState<string | undefined>();
@@ -111,10 +113,9 @@ export default function ChildMoney() {
       <section className="mt-7">
         <SectionTitle>Mi tiempo de pantalla</SectionTitle>
         <div className="card p-4">
-          <p className="mb-2 text-sm font-bold muted">Te quedan</p>
-          <p className="num mb-3 text-3xl font-extrabold">{minutesLabel(w.screen_minutes)}</p>
-          <div className="mb-4 flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" disabled={w.screen_minutes <= 0 || hasPending('screen')} onClick={() => setSheet('screen')}><MonitorPlay size={16} /> Pedir pantalla</Button>
+          <ScreenBalance userId={user.id} view={screenQ.data} />
+          <div className="my-4 flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" disabled={w.screen_minutes <= 0 || hasPending('screen') || !!screenQ.data?.pause} onClick={() => setSheet('screen')}><MonitorPlay size={16} /> Pedir pantalla</Button>
             <Button size="sm" variant="secondary" onClick={() => setSheet('log')}><NotebookPen size={16} /> Anotar pantalla</Button>
           </div>
           <ScreenList userId={user.id} />

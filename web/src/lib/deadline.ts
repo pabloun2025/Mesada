@@ -19,3 +19,6 @@ export function remaining(ms: number) {
 }
 
 export const minutesLabel = (n: number) => (n >= 60 && n % 60 === 0 ? `${n / 60} h` : `${n} min`);
+
+/** «2 h 10 min», «45 min», «3 h»: para desgloses donde una hora y pico no debe redondearse. */
+export const minutesHM = (n: number) => (n < 60 ? `${n} min` : n % 60 ? `${Math.floor(n / 60)} h ${n % 60} min` : `${n / 60} h`);
