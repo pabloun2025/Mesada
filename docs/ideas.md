@@ -246,3 +246,13 @@ Hoy la meta está escondida en «Mi banco › Mis productos». Pasa a ser una «
   - «Te faltan X semanas», calculado con lo que suele ganar por semana.
   - Ahorro automático: un % de cada cierre de semana va solo a la meta.
   - Aporte de los padres: el adulto suma un empujón (p. ej. 1 € por cada 4 € ahorrados).
+
+## I20 · Otros adultos, parientes y moneda (22/11) — pendiente, programar tras I19
+
+- **Quién añade:** el adulto que organiza la familia puede añadir otro adulto (madre, padre, pareja) y parientes (abuelos, tíos…).
+- **Parentesco:** se elige de una lista: Madre, Padre, Pareja, Abuelo/a, Tío/a u Otro (texto libre). Se ve en Familia y en los avisos.
+- **Permisos:**
+  - Madre, padre y pareja: adulto completo, como hoy.
+  - Pariente: **ver y animar**. Ve el progreso de los niños, puede felicitar y dar premios o aportes. No valida tareas, no toca el dinero, los ajustes ni los miembros, y no borra datos.
+- **Datos de contacto:** el organizador pone el correo y el teléfono del otro adulto. A esa persona le llega una invitación por correo con un enlace para crear su contraseña. Después puede cambiar sus datos en Mi perfil.
+- **Moneda:** por familia, € o $. Se elige al crear la familia y se puede cambiar en Ajustes. Cambia el símbolo y el formato (6,00 € / $6.00); no convierte importes. Afecta a la app, los avisos, el ZIP de datos y los textos.
