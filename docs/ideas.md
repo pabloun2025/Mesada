@@ -193,3 +193,22 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
   - **Rechazar sin penalidad:** no gana nada.
   - **Rechazar con penalidad:** resta puntos (por defecto, los de la tarea) y/o minutos de pantalla; la cantidad se pone al rechazar.
 - El motivo es obligatorio, con frases rápidas («Falta un poco», «No está hecha», «Mal hecha»…) o texto libre. El hijo lo ve.
+
+## I16. Plan semanal de pantalla, caducidad y «Ajustes de pantalla» (22/11)
+**Estado: decidida, sin programar.**
+- **Plan semanal (recarga):** cada hijo tiene su cantidad (p. ej., Ana 5 h, Leo 3 h); se puede apagar para un hijo.
+  - Se carga solo cada lunes a las 00:00. Lo que no se usa se pierde el lunes siguiente (vale todo el fin de semana).
+- **Minutos ganados en tareas:** caducan el primer lunes después de 30 días (entre 30 y 36 días; siempre pasa un fin de semana).
+  - Los minutos que ya hay hoy en el saldo cuentan como ganados el día que se publique.
+- **Al gastar:** se descuenta primero lo que caduca antes (normalmente el plan de la semana, luego los ganados más antiguos).
+- **«Ajustes de pantalla»** (en vez de penalizaciones, sin sonar a castigo):
+  - Motivos escritos en positivo, lo que se busca: «Llegar a tiempo al cole», «Habitación en orden», «Esfuerzo en los estudios», «Respeto en familia». El padre puede crear más.
+  - Catálogo con la cantidad típica de cada motivo (−15 min, −30 min, 1 día de pausa), que se puede cambiar al aplicarlo.
+  - Puede quitar minutos o poner una **pausa** de uno o varios días:
+    - durante la pausa no puede gastar ni pedir minutos (ve «Pausa hasta el jueves»);
+    - los minutos no caducan durante la pausa (se alarga su caducidad esos días);
+    - sigue ganando minutos con las tareas.
+  - Nota opcional y amable para el hijo.
+  - **Forma de recuperar:** el padre puede ofrecer una tarea extra; al hacerla y validarla, vuelven los minutos (o se acorta la pausa).
+  - Solo lo ven el hijo y los adultos, no los hermanos.
+- Las pérdidas de minutos que ya existen («No cumplida −15 min» y «Rechazar con penalidad») pasan a llamarse «Ajuste de pantalla», con motivo en positivo y en el mismo historial.
