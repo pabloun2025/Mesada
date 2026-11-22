@@ -264,3 +264,7 @@ Formato: contexto → decisión → consecuencias. Las más recientes van al fin
 ### D71. «+N min» en las tareas y minutos que vuelan (23/11)
 **Decisión (I21):** cada ocurrencia lleva `minutes_reward` (comprobación cumplida + bono de pantalla visible; una sorpresa nunca lo desvela) y la fila de la tarea enseña «+15 min» junto a los puntos y los euros; el chip del bono de pantalla visible se oculta para no repetirlo. Al validarse una tarea que da minutos, la app del hijo anima «+15 min» hasta la batería «Ganado» (o el botón «Pantalla» de la barra si no está a la vista); recuerda por aparato hasta qué momento ha visto abonos (la primera vez no anima el historial) y con `prefers-reduced-motion` solo aparece el aviso unos segundos, sin movimiento. «Mi pantalla» enseña las dos baterías: **Semana** (azul, plan gratis que se recarga el lunes) y **Ganado** (dorado, con sus lotes y caducidades); cada barra es lo que queda de lo que entró en esos lotes.
 
+
+## D72 · «Descansos de pantalla», no «castigos» (23/11)
+
+Por petición del dueño, en la interfaz y los avisos no se habla de castigos ni de bloqueos: se llaman **descansos de pantalla** («Programar descanso», «Terminar ya», «el descanso termina o se acorta»). El código interno conserva los nombres `blocks` y `screen_block`.

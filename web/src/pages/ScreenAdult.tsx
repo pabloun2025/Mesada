@@ -19,21 +19,21 @@ function BlockRow({ b, child }: { b: ScreenBlock; child: User }) {
   const invalidate = useInvalidateAll();
   const lift = useMutation({
     mutationFn: () => post(`/screen/blocks/${b.id}/lift`),
-    onSuccess: () => { toast(`Bloqueo levantado a ${child.display_name}`); invalidate(); },
+    onSuccess: () => { toast(`Descanso terminado para ${child.display_name}`); invalidate(); },
     onError: (e: Error) => toast(e.message, 'error'),
   });
   const c = b.challenge;
   return (
     <li className="card space-y-2 p-4">
       <p className="flex items-start gap-2 font-bold"><Lock size={17} className="mt-0.5 shrink-0 text-berry" aria-hidden /> {b.label}</p>
-      <p className="text-sm muted">Motivo: {b.reason}{b.blocked_now ? ' · bloqueado ahora' : ''}</p>
+      <p className="text-sm muted">Motivo: {b.reason}{b.blocked_now ? ' · en descanso ahora' : ''}</p>
       {c ? (
         <p className="text-sm">
-          Reto: «{c.text}» · {c.effect === 'lift' ? 'levanta el bloqueo' : `acorta ${c.days} ${c.days === 1 ? 'día' : 'días'}`}{c.photo_required ? ' · con foto' : ''}{' '}
+          Reto: «{c.text}» · {c.effect === 'lift' ? 'termina el descanso' : `acorta ${c.days} ${c.days === 1 ? 'día' : 'días'}`}{c.photo_required ? ' · con foto' : ''}{' '}
           {c.status === 'submitted' ? <Badge tone="sun">Por validar</Badge> : c.status === 'rejected' ? <Badge tone="berry">Repetir</Badge> : c.status === 'approved' ? <Badge tone="leaf">Cumplido</Badge> : <Badge>Pendiente</Badge>}
         </p>
       ) : null}
-      {b.state === 'active' ? <Button size="sm" variant="secondary" loading={lift.isPending} onClick={() => lift.mutate()} aria-label={`Levantar el bloqueo: ${b.reason}`}><Unlock size={16} aria-hidden /> Levantar</Button> : <Badge>{b.state === 'lifted' ? 'Levantado' : 'Terminado'}</Badge>}
+      {b.state === 'active' ? <Button size="sm" variant="secondary" loading={lift.isPending} onClick={() => lift.mutate()} aria-label={`Terminar ya el descanso: ${b.reason}`}><Unlock size={16} aria-hidden /> Terminar ya</Button> : <Badge>{b.state === 'lifted' ? 'Terminado antes' : 'Terminado'}</Badge>}
     </li>
   );
 }
@@ -113,9 +113,9 @@ function KidScreen({ child }: { child: User }) {
         {row ? <ul><PlanRow key={`${row.minutes_per_week}-${row.enabled}-${(row.allowed_days ?? []).join('')}-${JSON.stringify(row.day_max)}-${row.require_approval}`} row={row} compact /></ul> : null}
       </section>
 
-      <section aria-label="Castigos">
-        <SectionTitle action={<Button size="sm" variant="secondary" onClick={() => setSheet('block')}><Lock size={16} aria-hidden /> Bloquear pantalla</Button>}>Castigos</SectionTitle>
-        {blocks.length ? <ul className="space-y-3">{blocks.map((b) => <BlockRow key={b.id} b={b} child={child} />)}</ul> : <p className="muted">Sin bloqueos. Puedes bloquear días enteros o una franja, con un reto opcional para levantarlo.</p>}
+      <section aria-label="Descansos de pantalla">
+        <SectionTitle action={<Button size="sm" variant="secondary" onClick={() => setSheet('block')}><Lock size={16} aria-hidden /> Programar descanso</Button>}>Descansos de pantalla</SectionTitle>
+        {blocks.length ? <ul className="space-y-3">{blocks.map((b) => <BlockRow key={b.id} b={b} child={child} />)}</ul> : <p className="muted">Sin descansos programados. Puedes reservar días enteros o una franja sin pantalla, con un reto opcional para terminarlo antes.</p>}
       </section>
 
       <section aria-label="Ajustes manuales">
@@ -150,7 +150,7 @@ export default function ScreenAdult() {
   const child = kids.find((k) => k.id === params.get('hijo')) ?? kids[0];
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title="Pantalla" subtitle="Tiempo, temporizador y castigos de cada hijo" action={<Link to="/ajustes" className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-tangerine-deep underline underline-offset-4">Ajustes de pantalla <ArrowRight size={14} aria-hidden /></Link>} />
+      <PageHeader title="Pantalla" subtitle="Tiempo, temporizador y descansos de cada hijo" action={<Link to="/ajustes" className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-tangerine-deep underline underline-offset-4">Ajustes de pantalla <ArrowRight size={14} aria-hidden /></Link>} />
       {!child ? <p className="muted">Todavía no hay hijos.</p> : (
         <>
           {kids.length > 1 ? (

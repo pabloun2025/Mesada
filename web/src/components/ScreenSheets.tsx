@@ -229,18 +229,18 @@ export function BlockSheet({ child, onClose }: { child: User; onClose: () => voi
   });
   return (
     <Sheet
-      open onClose={onClose} title={`Bloquear pantalla a ${child.display_name}`} subtitle="Se verá en su app con el motivo y cuándo termina."
-      footer={<>{error ? <p role="alert" className="mb-2 text-center text-sm font-bold text-berry-deep">{error}</p> : null}<Button size="lg" className="w-full" loading={save.isPending} disabled={!reason.trim() || (withChallenge && !text.trim())} onClick={() => { setError(''); save.mutate(); }}>Poner el bloqueo</Button></>}
+      open onClose={onClose} title={`Descanso de pantalla para ${child.display_name}`} subtitle="Se verá en su app con el motivo y cuándo termina."
+      footer={<>{error ? <p role="alert" className="mb-2 text-center text-sm font-bold text-berry-deep">{error}</p> : null}<Button size="lg" className="w-full" loading={save.isPending} disabled={!reason.trim() || (withChallenge && !text.trim())} onClick={() => { setError(''); save.mutate(); }}>Programar el descanso</Button></>}
     >
       <div className="space-y-5 pt-1">
-        <Segmented label="Tipo de bloqueo" value={kind} onChange={setKind} options={[{ value: 'days', label: 'Días enteros' }, { value: 'window', label: 'Una franja' }]} />
+        <Segmented label="Tipo de descanso" value={kind} onChange={setKind} options={[{ value: 'days', label: 'Días enteros' }, { value: 'window', label: 'Una franja' }]} />
         {kind === 'window' ? (
           <div className="grid grid-cols-2 gap-3">
             <Field label="Desde">{(id) => <input id={id} type="time" className="field num" value={from} onChange={(e) => setFrom(e.target.value)} />}</Field>
             <Field label="Hasta">{(id) => <input id={id} type="time" className="field num" value={to} onChange={(e) => setTo(e.target.value)} />}</Field>
           </div>
         ) : null}
-        <Field label="Último día de bloqueo (incluido)" hint={kind === 'window' ? 'La franja se repite cada día hasta esa fecha.' : undefined}>
+        <Field label="Último día de descanso (incluido)" hint={kind === 'window' ? 'La franja se repite cada día hasta esa fecha.' : undefined}>
           {(id) => <input id={id} type="date" className="field" min={todayPlus(0)} value={endsOn} onChange={(e) => setEndsOn(e.target.value)} />}
         </Field>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Atajos de fecha">
@@ -249,7 +249,7 @@ export function BlockSheet({ child, onClose }: { child: User; onClose: () => voi
           ))}
         </div>
         <Field label="Motivo">{(id) => <input id={id} className="field" value={reason} maxLength={200} placeholder="Notas del cole, gritos…" onChange={(e) => setReason(e.target.value)} />}</Field>
-        <Toggle checked={withChallenge} onChange={setWithChallenge} label="Añadir un reto" description="Si lo cumple y lo validas, el bloqueo se levanta o se acorta." />
+        <Toggle checked={withChallenge} onChange={setWithChallenge} label="Añadir un reto" description="Si lo cumple y lo validas, el descanso termina o se acorta." />
         {withChallenge ? (
           <div className="space-y-4 rounded-2xl border border-[var(--line)] p-3.5">
             <Field label="El reto">{(id) => <input id={id} className="field" value={text} maxLength={300} placeholder="Lee 20 min, ordena tu cuarto…" onChange={(e) => setText(e.target.value)} />}</Field>

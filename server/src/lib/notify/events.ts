@@ -50,7 +50,7 @@ export const EVENTS = {
   screen_ended: { label: 'Se acabó el tiempo de pantalla', audience: 'any', defaults: ['whatsapp'] },
   screen_request: { label: 'Petición de pantalla o de tiempo extra', audience: 'adult', defaults: ['whatsapp'] },
   screen_decided: { label: 'Petición de pantalla resuelta', audience: 'child', defaults: ['whatsapp'] },
-  screen_block: { label: 'Bloqueo de pantalla', audience: 'child', defaults: ['whatsapp'] },
+  screen_block: { label: 'Descanso de pantalla', audience: 'child', defaults: ['whatsapp'] },
   screen_challenge: { label: 'Reto de pantalla por validar', audience: 'adult', defaults: ['whatsapp'] },
   screen_expiring: { label: 'Minutos ganados a punto de caducar', audience: 'child', defaults: [] },
   screen_overrun: { label: 'Pantalla usada de más', audience: 'any', defaults: ['whatsapp'] },
