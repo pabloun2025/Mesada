@@ -87,4 +87,6 @@ done
 docker run --rm --network citas-prod_interna postgres:16.9-alpine wget -qO- http://mesada-app:3000/api/health
 echo
 docker image prune -f >/dev/null || true
+# La caché de construcción crece con cada despliegue (de todos los proyectos): se deja en 3 GB. No toca contenedores ni datos.
+docker builder prune -f --keep-storage 3gb >/dev/null || true
 "${COMPOSE[@]}" ps

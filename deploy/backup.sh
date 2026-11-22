@@ -10,6 +10,8 @@
 set -eu
 
 : "${BACKUP_KEEP_DAYS:=14}" "${BACKUP_INTERVAL_SECONDS:=86400}" "${R2_RETENTION_DAYS:=30}"
+# Con R2 activo y la última subida correcta, el servidor guarda menos días (el resto queda en R2) para ahorrar disco.
+: "${BACKUP_KEEP_DAYS_WITH_R2:=3}"
 : "${R2_PREFIX:=mesada}" "${BACKUP_DIR:=/backups}" "${UPLOADS_DIR:=/data}"
 : "${R2_INCLUDE_PHOTOS:=true}"
 
@@ -104,8 +106,11 @@ backup_once() {
     err "ERROR $ts"
     rm -f "$BACKUP_DIR/mesada-$ts.dump"
   fi
-  find "$BACKUP_DIR" -name 'mesada-*.dump' -mtime +"$BACKUP_KEEP_DAYS" -delete
-  find "$BACKUP_DIR" -name 'fotos-*.tar.gz' -mtime +"$BACKUP_KEEP_DAYS" -delete
+  keep="$BACKUP_KEEP_DAYS"
+  # Solo se recorta si la subida a R2 de las últimas 26 h salió bien: si R2 falla, se conservan los 14 días locales.
+  if r2_enabled && [ -n "$(find "$BACKUP_DIR" -maxdepth 1 -name '.r2-ok' -mmin -1560 2>/dev/null)" ]; then keep="$BACKUP_KEEP_DAYS_WITH_R2"; fi
+  find "$BACKUP_DIR" -name 'mesada-*.dump' -mtime +"$keep" -delete
+  find "$BACKUP_DIR" -name 'fotos-*.tar.gz' -mtime +"$keep" -delete
   find "$BACKUP_DIR" -name '.r2tmp-*' -mmin +60 -delete
 }
 
