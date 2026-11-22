@@ -156,7 +156,7 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Valen como cualquier tarea (puntos y bonos).
 
 ## I12. Imagen nueva en alta y estilo cielo claro (21/11)
-**Estado: decidida, sin programar.** Imagen original en `docs/marca/diplop-cielo-2000.webp` (2000×1125).
+**Estado: construida (22/11), ver D40.** Imagen original en `docs/marca/diplop-cielo-2000.webp` (2000×1125).
 - La imagen nueva (familia con cielo claro, logo DiploP y tarjeta «Mi mesada») se usa en:
   - la pantalla de entrada (en el móvil, un recorte vertical: familia arriba, logo y tarjeta debajo);
   - la vista previa al compartir el enlace (WhatsApp, redes);
@@ -186,7 +186,7 @@ Estado: I1–I3 construidas; las nuevas ideas se recogen aquí antes de programa
 - Cuando vuelve y nadie la hace, no pasa nada: no cuenta como fallo.
 
 ## I15. Revisar una tarea: parcial, devolver o rechazar (22/11)
-**Estado: decidida, sin programar.**
+**Estado: construida (22/11), ver D39.**
 - Al validar una tarea, además de «Aprobar», el adulto puede:
   - **Dar parte del premio:** botones 75 / 50 / 25 % o escribir otra cifra de puntos.
   - **Devolver para que la arregle:** vuelve al hijo; cuenta la hora original (si la marcó a tiempo, sigue a tiempo).

@@ -31,9 +31,10 @@ const REWARD = 'Elegir la peli';
 
 let adult: Page;
 let kid: Page;
+let adminSecret = '';
 
 async function login(page: Page, user: string, pass: string, child = false) {
-  await page.goto('/');
+  await page.goto('/entrar');
   if (child) await page.getByRole('radio', { name: 'Soy hijo/a' }).click();
   await page.getByLabel('Usuario').fill(user);
   await page.getByLabel(child ? 'PIN' : 'Contraseña').fill(pass);
@@ -293,7 +294,7 @@ test.describe.serial('Familia completa', () => {
 
   test('enlace de recuperación de contraseña sin revelar cuentas', async ({ browser }) => {
     const p = await newPhonePage(browser);
-    await p.goto('/');
+    await p.goto('/entrar');
     await p.getByRole('link', { name: '¿Has olvidado la contraseña?' }).click();
     await p.getByLabel('Usuario o correo').fill('no-existe');
     await p.getByRole('button', { name: 'Enviar enlace' }).click();
@@ -322,6 +323,7 @@ test.describe.serial('Familia completa', () => {
     await adult.getByRole('button', { name: 'Continuar' }).click();
     await expect(adult.getByAltText('Código QR para la aplicación de autenticación')).toBeVisible();
     const secret = (await adult.getByTestId('totp-secret').textContent())!;
+    adminSecret = secret;
     await adult.getByLabel('Código de 6 cifras').fill(totp(secret));
     await adult.getByRole('button', { name: 'Activar' }).click();
     await expect(adult.getByText('Códigos de recuperación', { exact: true })).toBeVisible();
@@ -340,6 +342,36 @@ test.describe.serial('Familia completa', () => {
     await expect(adult.getByText('Confirma que eres tú')).toBeVisible();
     // Un hijo no tiene acceso
     expect((await api(kid, 'get', '/admin/status')).status).toBe(403);
+  });
+
+  test('administración recuerda el dispositivo 90 días y se puede olvidar', async ({ browser }) => {
+    const code = () => totp(adminSecret, Date.now() + 30_000); // un código posterior al ya usado
+    await adult.goto('/administracion');
+    await expect(adult.getByText('Confirma que eres tú')).toBeVisible();
+    await expect(adult.getByText('se recordará 90 días')).toBeVisible();
+    await adult.screenshot({ path: `${SHOTS}/36-admin-recordar-dispositivo.png` });
+    await adult.getByLabel('Código').first().fill(code());
+    await adult.getByRole('button', { name: 'Entrar' }).click();
+    await expect(adult.getByRole('radio', { name: 'Resumen' })).toBeVisible();
+    // La verificación de la sesión caduca (12 h), pero este dispositivo sigue recordado: sin código.
+    execFileSync('psql', ['postgres://postgres:postgres@127.0.0.1:5432/mesada_e2e', '-qc', 'UPDATE sessions SET admin_verified_at = NULL']);
+    await adult.goto('/administracion');
+    await expect(adult.getByRole('radio', { name: 'Resumen' })).toBeVisible();
+    await expect(adult.getByText('Dispositivo recordado')).toBeVisible();
+    // Un dispositivo nuevo (otra sesión y sin cookie) sí pide el código.
+    const other = await newAdultPage(browser);
+    await login(other, ADULT.user, ADULT.pass);
+    await expect(other.getByRole('link', { name: 'Administración' }).first()).toBeVisible();
+    await other.goto('/administracion');
+    await expect(other.getByText('Confirma que eres tú')).toBeVisible();
+    await other.context().close();
+    // Olvidar este dispositivo.
+    await adult.getByRole('radio', { name: 'Ajustes' }).click();
+    adult.once('dialog', (d) => d.accept());
+    await adult.getByRole('button', { name: 'Olvidar este dispositivo' }).click();
+    await expect(adult.getByText('Confirma que eres tú')).toBeVisible();
+    await adult.goto('/administracion');
+    await expect(adult.getByText('Confirma que eres tú')).toBeVisible();
   });
 
   test('hora límite y bono visible: el hijo gana minutos de pantalla', async () => {
@@ -801,7 +833,7 @@ test.describe.serial('Familia completa', () => {
     await expect(kid.getByTestId('extra-card')).toContainText('Quitar hierbajos');
     const hugo = await newPhonePage(browser);
     await login(hugo, 'hugo', '1111', true);
-    await expect(hugo.getByRole('heading', { name: /Hoy tienes el día libre|Te queda|Todo hecho/ })).toBeVisible();
+    await expect(hugo.getByRole('heading', { name: /Hoy tienes el día libre|Sin tareas fijas hoy|Te queda|Todo hecho/ })).toBeVisible();
     await hugo.goto('/extras');
     await expect(hugo.getByTestId('extra-card')).toContainText('Quitar hierbajos');
     await kid.getByRole('button', { name: 'Me la pido' }).click();
@@ -877,6 +909,134 @@ test.describe.serial('Familia completa', () => {
     // Aunque lo intente por la API, el servidor lo rechaza.
     const inst = (await api(kid, 'get', '/instances')).body.instances.find((i: any) => i.title === 'Descargar el lavavajillas' && i.status === 'pending');
     expect((await api(kid, 'post', `/instances/${inst.id}/complete`, {})).status).toBe(409);
+  });
+
+  test('revisar una tarea: premio parcial, devolver y reenviar, rechazar con penalidad', async ({ browser }) => {
+    const me = await api(kid, 'get', '/me');
+    const lucia = me.body.user.id;
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+    for (const title of ['Limpiar el baño', 'Regar las plantas', 'Ordenar los zapatos']) {
+      expect((await api(adult, 'post', '/tasks', { title, points: 20, recurrence: 'daily', startDate: today, assignees: [lucia] })).status).toBe(200);
+    }
+    await kid.goto('/');
+    for (const title of ['Limpiar el baño', 'Regar las plantas', 'Ordenar los zapatos']) {
+      await kid.getByRole('button', { name: `Marcar «${title}» como hecha` }).click();
+      await expect(kid.getByText(`«${title}» enviada`)).toBeVisible();
+    }
+    const phone = await newPhonePage(browser);
+    await login(phone, ADULT.user, ADULT.pass);
+    await expect(phone.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    await phone.goto('/validar');
+    const review = async (title: string) => {
+      await phone.getByRole('button', { name: `Revisar «${title}» de ${KID.name}` }).click();
+      return phone.getByRole('dialog');
+    };
+
+    // 1) Premio parcial del 50 %, con motivo obligatorio.
+    let d = await review('Limpiar el baño');
+    await d.getByRole('radio', { name: /Premio parcial/ }).click();
+    await d.getByRole('button', { name: '50 %' }).click();
+    await expect(d.getByRole('button', { name: 'Dar 10 puntos' })).toBeDisabled(); // sin motivo
+    await phone.screenshot({ path: `${SHOTS}/37-revisar-tarea-375.png` });
+    await d.getByRole('button', { name: 'Falta un poco' }).click();
+    await d.getByRole('button', { name: 'Dar 10 puntos' }).click();
+    await expect(phone.getByText('Premio parcial dado')).toBeVisible();
+
+    // 2) Devolver para que la arregle.
+    d = await review('Regar las plantas');
+    await d.getByRole('radio', { name: /Devolver para que la arregle/ }).click();
+    await d.getByRole('button', { name: 'No está hecha' }).click();
+    await d.getByRole('button', { name: 'Devolver para que la arregle' }).last().click();
+    await expect(phone.getByText('Tarea devuelta para que la arregle')).toBeVisible();
+
+    // 3) Rechazar con penalidad: puntos por defecto = los de la tarea, más minutos.
+    d = await review('Ordenar los zapatos');
+    await d.getByRole('radio', { name: /Rechazar con penalidad/ }).click();
+    await expect(d.getByLabel('Puntos a restar')).toHaveValue('20');
+    await d.getByLabel('Puntos a restar').fill('5');
+    await d.getByLabel('Minutos de pantalla').fill('10');
+    await d.getByRole('button', { name: 'Mal hecha' }).click();
+    await d.getByRole('button', { name: 'Rechazar y restar' }).click();
+    await expect(phone.getByText('Tarea rechazada con penalidad')).toBeVisible();
+    await phone.screenshot({ path: `${SHOTS}/38-validar-tras-revisar-375.png`, fullPage: true });
+    await phone.context().close();
+
+    // El hijo ve el resultado y el motivo en su lista.
+    await kid.goto('/');
+    const row = (t: string) => kid.getByRole('listitem').filter({ hasText: t }).first();
+    await expect(row('Limpiar el baño')).toContainText('Premio parcial: +10 de 20');
+    await expect(row('Limpiar el baño')).toContainText('Falta un poco');
+    await expect(row('Regar las plantas')).toContainText('No está hecha');
+    await expect(row('Ordenar los zapatos')).toContainText('Rechazada');
+    await expect(row('Ordenar los zapatos')).toContainText('Mal hecha');
+    await expect(row('Ordenar los zapatos')).toContainText('Se te ha restado 5 puntos');
+    await kid.screenshot({ path: `${SHOTS}/39-hijo-resultado-revision-375.png`, fullPage: true });
+    // La devuelta se puede volver a enviar; la rechazada, no.
+    await expect(row('Ordenar los zapatos').getByRole('button')).toHaveCount(0);
+    await kid.getByRole('button', { name: 'Marcar «Regar las plantas» como hecha' }).click();
+    await expect(kid.getByText('«Regar las plantas» enviada')).toBeVisible();
+    // Ambos libros: puntos y minutos.
+    const w = await api(kid, 'get', `/wallet/${lucia}`);
+    expect(w.body.wallet.screen_minutes).toBeGreaterThanOrEqual(0);
+  });
+
+  test('página de bienvenida y entrada con la imagen «cielo», sin desbordar a 375 y 320 px', async ({ browser }) => {
+    for (const [w, tag] of [[375, '375'], [320, '320']] as const) {
+      const ctx = await browser.newContext({ viewport: { width: w, height: 760 }, deviceScaleFactor: 2, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+      const p = await ctx.newPage();
+      await p.goto('/'); // dispositivo nuevo: se ve la bienvenida
+      await expect(p.getByRole('heading', { level: 1, name: /Tareas de casa, puntos y mesada/ })).toBeVisible();
+      await expect(p.getByRole('heading', { name: 'Cómo funciona' })).toBeVisible();
+      await expect(p.getByRole('heading', { name: 'Para padres' })).toBeVisible();
+      await expect(p.getByRole('heading', { name: 'Para hijos' })).toBeVisible();
+      for (const step of ['Tareas', 'Puntos', 'Dinero o premios']) await expect(p.getByRole('heading', { name: new RegExp(step) }).first()).toBeVisible();
+      await expect(p.getByRole('link', { name: 'Entrar' })).toHaveCount(2); // arriba y al final
+      expect(await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+      await p.screenshot({ path: `${SHOTS}/${tag === '375' ? '40' : '41'}-bienvenida-${tag}.png`, fullPage: true });
+      // «Entrar» lleva al acceso, que tampoco desborda.
+      await p.getByRole('link', { name: 'Entrar' }).first().click();
+      await expect(p.getByLabel('Usuario')).toBeVisible();
+      expect(await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+      await p.screenshot({ path: `${SHOTS}/${tag === '375' ? '42' : '43'}-entrar-${tag}.png`, fullPage: true });
+      await ctx.close();
+    }
+    // Escritorio, imagen apaisada y vista previa al compartir con ruta absoluta.
+    const d = await newAdultPage(browser);
+    await d.goto('/bienvenida');
+    await expect(d.getByRole('heading', { name: 'Cómo funciona' })).toBeVisible();
+    await expect(d.locator('picture source')).toHaveAttribute('srcset', '/brand/hero-sky-wide.webp');
+    await expect(d.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://mesada.veryfacil.org/brand/og-image.jpg');
+    await expect(d.locator('meta[property="og:title"]')).toHaveAttribute('content', 'DiploP');
+    await expect(d.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
+    await d.screenshot({ path: `${SHOTS}/46-bienvenida-escritorio.png`, fullPage: true });
+    await d.context().close();
+    expect((await adult.request.get('/brand/og-image.jpg')).headers()['content-type']).toContain('image/jpeg');
+  });
+
+  test('inicio del hijo: tarjeta «Mi mesada», tres accesos y valor en euros de cada tarea', async () => {
+    await kid.goto('/');
+    const card = kid.getByRole('region', { name: 'Mi mesada' });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('→');
+    await expect(card).toContainText('€');
+    for (const l of ['Mis tareas', 'Mis puntos', 'Mis recompensas']) await expect(card.getByRole('link', { name: l })).toBeVisible();
+    await expect(kid.getByRole('listitem').filter({ hasText: 'Poner el lavavajillas' }).first()).toContainText(/\+\d+\s*★.*\d+,\d\d\s*€/);
+    await card.getByRole('link', { name: 'Mis recompensas' }).click();
+    await expect(kid).toHaveURL(/\/premios/);
+    await kid.goto('/');
+    await expect(card).toBeVisible();
+    for (const [w, n] of [[375, '44'], [320, '45']] as const) {
+      await kid.setViewportSize({ width: w, height: 780 });
+      await expect(card).toBeVisible();
+      await expect(kid.getByRole('listitem').filter({ hasText: 'Poner el lavavajillas' }).first()).toBeVisible();
+      expect(await kid.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+      await kid.screenshot({ path: `${SHOTS}/${n}-hijo-inicio-${w}.png`, fullPage: true });
+    }
+    await kid.setViewportSize({ width: 390, height: 844 });
+    // Monedas doradas en la cuenta de dinero.
+    await kid.goto('/mesada');
+    await expect(kid.getByRole('region', { name: 'Cuenta de dinero' }).locator('svg').last()).toBeVisible();
+    await kid.screenshot({ path: `${SHOTS}/47-hijo-banco-monedas-375.png` });
   });
 
   test('la app es instalable (manifest y service worker)', async () => {

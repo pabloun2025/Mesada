@@ -25,18 +25,18 @@
 
   --color-ink: #142a5c;
   --color-ink-2: #3b4b70;
-  --color-ink-3: #64738f;
-  --color-paper: #f3f6fb;
+  --color-ink-3: #4f5f7d;
+  --color-paper: #eaf3fc;
   --color-surface: #ffffff;
-  --color-line: #e3e8f2;
+  --color-line: #cfe0f0;
   --color-tangerine: #1d5fae;
   --color-tangerine-deep: #154a8c;
-  --color-tangerine-soft: #e5eefa;
+  --color-tangerine-soft: #dcebfa;
   --color-leaf: #1e9e6a;
   --color-leaf-deep: #137a50;
   --color-leaf-soft: #e3f6ec;
   --color-sky: #4f8df7;
-  --color-sky-soft: #e8f0ff;
+  --color-sky-soft: #dceaff;
   --color-berry: #d6336c;
   --color-berry-soft: #fde8ef;
   --color-sun: #ffb800;
@@ -64,7 +64,9 @@
   --fg-2: var(--color-ink-2);
   --fg-3: var(--color-ink-3);
   --line: var(--color-line);
-  --chip: #edf1f8;
+  --chip: #e2edf8;
+  /* Estilo «cielo»: degradado azul claro de fondo (solo en claro). */
+  --bg-image: linear-gradient(180deg, #cde5f8 0%, #e4f0fb 34%, #f1f7fd 100%);
 }
 
 .dark {
@@ -76,6 +78,7 @@
   --fg-3: #8d9abb;
   --line: #24314f;
   --chip: #1d2a4a;
+  --bg-image: none;
   /* El azul de marca se aclara en oscuro para que se lea sobre las tarjetas. */
   --color-tangerine: #6b9fe8;
   --color-tangerine-deep: #9cc0f5;
@@ -89,7 +92,10 @@
     scroll-padding-top: 5rem;
   }
   body {
-    background: var(--bg);
+    background-color: var(--bg);
+    background-image: var(--bg-image);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
     color: var(--fg);
     font-family: var(--font-sans);
     line-height: 1.5;

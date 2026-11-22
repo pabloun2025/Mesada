@@ -9,19 +9,37 @@ export async function resetDb() {
 }
 
 export class Client {
-  cookie = '';
+  /** Jarra de cookies (sesión y, si las hay, otras como la del dispositivo de administración). */
+  jar = new Map<string, string>();
+  get cookie() {
+    return [...this.jar].map(([k, v]) => `${k}=${v}`).join('; ');
+  }
+  set cookie(v: string) {
+    this.jar.clear();
+    for (const part of v.split(';').map((x) => x.trim()).filter(Boolean)) this.jar.set(part.split('=')[0], part.slice(part.indexOf('=') + 1));
+  }
+  private static n = 0;
+  /** IP propia de cada cliente: los límites de ritmo de la API cuentan por IP y las pruebas no deben pisarse. */
+  private ip = `10.${(++Client.n >> 8) & 255}.${Client.n & 255}.1`;
   constructor(private app: FastifyInstance) {}
   async req(method: string, url: string, body?: unknown, headers: Record<string, string> = {}) {
     const res = await this.app.inject({
       method: method as any,
       url,
       payload: body as any,
+      remoteAddress: this.ip,
       headers: { 'x-mesada': '1', ...(this.cookie ? { cookie: this.cookie } : {}), ...headers },
     });
     const set = res.headers['set-cookie'];
     if (set) {
-      const c = (Array.isArray(set) ? set : [set]).find((x) => x.startsWith('mesada_session='));
-      if (c) this.cookie = c.split(';')[0];
+      for (const c of Array.isArray(set) ? set : [set]) {
+        const [pair, ...attrs] = c.split(';');
+        const k = pair.slice(0, pair.indexOf('='));
+        const v = pair.slice(pair.indexOf('=') + 1);
+        // Una cookie vacía o caducada (clearCookie) se borra de la jarra.
+        if (!v || attrs.some((a) => /^\s*max-age=0/i.test(a) || /^\s*expires=thu, 01 jan 1970/i.test(a))) this.jar.delete(k);
+        else this.jar.set(k, v);
+      }
     }
     let json: any;
     try {

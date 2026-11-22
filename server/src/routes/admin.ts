@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { config } from '../lib/config.js';
 import { z } from 'zod';
 import { getPool, one, tx } from '../lib/db.js';
 import { hashPassword, requireAdult, verifyPassword, type AuthUser } from '../lib/auth.js';
@@ -20,6 +21,43 @@ import { lineStatus } from '../lib/notify/whatsapp-line.js';
  */
 
 const VERIFY_HOURS = 12;
+const DEVICE_COOKIE = 'mesada_admin_device';
+const DEVICE_DAYS = 90;
+const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
+
+const deviceCookieOpts = () => ({ path: '/api', httpOnly: true, sameSite: 'strict' as const, secure: config.cookieSecure });
+
+/** Tras un código correcto: token largo y aleatorio en cookie; en la base solo su hash. */
+async function rememberDevice(req: FastifyRequest, reply: FastifyReply, u: AuthUser) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expires = new Date(Date.now() + DEVICE_DAYS * 86400_000);
+  const db = getPool();
+  await db.query('DELETE FROM admin_trusted_devices WHERE user_id = $1 AND expires_at < now()', [u.id]);
+  // Si este navegador ya traía uno, se sustituye en vez de acumular.
+  const old = req.cookies?.[DEVICE_COOKIE];
+  if (old) await db.query('DELETE FROM admin_trusted_devices WHERE user_id = $1 AND token_hash = $2', [u.id, sha256(old)]);
+  await db.query('INSERT INTO admin_trusted_devices(user_id, token_hash, expires_at, user_agent) VALUES ($1,$2,$3,$4)', [
+    u.id, sha256(token), expires, String(req.headers['user-agent'] ?? '').slice(0, 300) || null,
+  ]);
+  reply.setCookie(DEVICE_COOKIE, token, { ...deviceCookieOpts(), expires });
+  await log(req, u, 'device_remembered');
+}
+
+/** ¿Este navegador trae un token vigente de este mismo usuario? (Otro usuario o caducado: no.) */
+async function trustedDeviceId(req: FastifyRequest, userId: string): Promise<string | null> {
+  const token = req.cookies?.[DEVICE_COOKIE];
+  if (!token) return null;
+  const r = await one<{ id: string }>(
+    getPool(),
+    'SELECT id FROM admin_trusted_devices WHERE token_hash = $1 AND user_id = $2 AND expires_at > now()',
+    [sha256(token), userId],
+  );
+  return r?.id ?? null;
+}
+
+async function revokeDevices(userId: string) {
+  await getPool().query('DELETE FROM admin_trusted_devices WHERE user_id = $1', [userId]);
+}
 const MAX_FAILS = 5;
 const LOCK_MS = 15 * 60 * 1000;
 const fails = new Map<string, { n: number; until: number; first: number }>();
@@ -101,7 +139,26 @@ export default async function adminRoutes(app: FastifyInstance) {
     const u = requireAdult(req);
     if (!u.isSuperadmin) return { eligible: false, totpEnabled: false, verified: false };
     const r = await one<{ totp_enabled_at: string | null }>(getPool(), 'SELECT totp_enabled_at FROM users WHERE id = $1', [u.id]);
-    return { eligible: true, totpEnabled: !!r?.totp_enabled_at, verified: !!r?.totp_enabled_at && isVerified(u) };
+    const totpEnabled = !!r?.totp_enabled_at;
+    let verified = totpEnabled && isVerified(u);
+    let deviceTrusted = false;
+    if (totpEnabled) {
+      const dev = await trustedDeviceId(req, u.id);
+      deviceTrusted = !!dev;
+      // Dispositivo recordado: al abrir Administración se verifica la sesión sin pedir el código.
+      // El bloqueo por códigos fallidos sigue mandando: mientras dure, no se confía en el dispositivo.
+      const f = fails.get(u.id);
+      const locked = !!f && f.until > Date.now();
+      if (!verified && dev && !locked) {
+        await tx(async (db) => {
+          await db.query('UPDATE sessions SET admin_verified_at = now() WHERE id = $1', [u.sessionId]);
+          await db.query('UPDATE admin_trusted_devices SET last_used_at = now() WHERE id = $1', [dev]);
+        });
+        await log(req, u, 'device_trusted_login');
+        verified = true;
+      }
+    }
+    return { eligible: true, totpEnabled, verified, deviceTrusted };
   });
 
   app.post('/api/admin/2fa/setup', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
@@ -115,7 +172,7 @@ export default async function adminRoutes(app: FastifyInstance) {
     return { secret, uri: otpauthUri(secret, u.username) };
   });
 
-  app.post('/api/admin/2fa/enable', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
+  app.post('/api/admin/2fa/enable', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const u = requireEligible(req);
     checkLock(u.id);
     const b = z.object({ code: z.string().max(20) }).parse(req.body);
@@ -137,16 +194,19 @@ export default async function adminRoutes(app: FastifyInstance) {
       await db.query('DELETE FROM admin_recovery_codes WHERE user_id = $1', [u.id]);
       for (const c of codes) await db.query('INSERT INTO admin_recovery_codes(user_id, code_hash) VALUES ($1,$2)', [u.id, hashCode(c)]);
       await db.query('UPDATE sessions SET admin_verified_at = now() WHERE id = $1', [u.sessionId]);
+      // Alta o reinicio de la verificación: los dispositivos recordados de antes ya no valen.
+      await db.query('DELETE FROM admin_trusted_devices WHERE user_id = $1', [u.id]);
     });
     fails.delete(u.id);
     await log(req, u, 'admin.2fa_enabled');
+    await rememberDevice(req, reply, u);
     return { recoveryCodes: codes };
   });
 
-  app.post('/api/admin/verify', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
+  app.post('/api/admin/verify', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const u = requireEligible(req);
     checkLock(u.id);
-    const b = z.object({ code: z.string().trim().min(6).max(20) }).parse(req.body);
+    const b = z.object({ code: z.string().trim().min(6).max(20), remember: z.boolean().default(true) }).parse(req.body);
     const row = await one(getPool(), 'SELECT totp_secret, totp_last_counter FROM users WHERE id = $1', [u.id]);
     if (!row.totp_secret) throw badRequest('Activa primero la verificación en dos pasos');
     let ok = false;
@@ -175,13 +235,28 @@ export default async function adminRoutes(app: FastifyInstance) {
     fails.delete(u.id);
     await getPool().query('UPDATE sessions SET admin_verified_at = now() WHERE id = $1', [u.sessionId]);
     await log(req, u, 'admin.verified', {}, { how });
+    if (b.remember) await rememberDevice(req, reply, u);
     const left = await one<{ n: number }>(getPool(), 'SELECT count(*)::int AS n FROM admin_recovery_codes WHERE user_id = $1 AND used_at IS NULL', [u.id]);
     return { ok: true, recoveryCodesLeft: left?.n ?? 0 };
   });
 
-  app.post('/api/admin/lock', async (req) => {
+  app.post('/api/admin/lock', async (req, reply) => {
     const u = requireEligible(req);
     await getPool().query('UPDATE sessions SET admin_verified_at = NULL WHERE id = $1', [u.sessionId]);
+    // Salir de Administración olvida todos los dispositivos de esta persona.
+    await revokeDevices(u.id);
+    reply.clearCookie(DEVICE_COOKIE, deviceCookieOpts());
+    return { ok: true };
+  });
+
+  // «Olvidar este dispositivo»: borra solo el de este navegador; el código se vuelve a pedir aquí.
+  app.post('/api/admin/device/forget', async (req, reply) => {
+    const u = requireEligible(req);
+    const token = req.cookies?.[DEVICE_COOKIE];
+    if (token) await getPool().query('DELETE FROM admin_trusted_devices WHERE user_id = $1 AND token_hash = $2', [u.id, sha256(token)]);
+    await getPool().query('UPDATE sessions SET admin_verified_at = NULL WHERE id = $1', [u.sessionId]);
+    reply.clearCookie(DEVICE_COOKIE, deviceCookieOpts());
+    await log(req, u, 'device_forgotten');
     return { ok: true };
   });
 

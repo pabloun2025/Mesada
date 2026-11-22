@@ -29,7 +29,7 @@ async function progressFor(fam: Family, userId: string) {
       db,
       `SELECT COALESCE(SUM(i.points),0)::int AS max,
               COALESCE(SUM(i.points) FILTER (WHERE i.status = 'approved'),0)::int AS earned,
-              COALESCE(SUM(i.points) FILTER (WHERE i.status IN ('expired','rejected') AND i.due_date < $4),0)::int AS missed,
+              COALESCE(SUM(i.points) FILTER (WHERE i.status IN ('expired','rejected','declined') AND i.due_date < $4),0)::int AS missed,
               COALESCE(SUM(i.points) FILTER (WHERE i.status = 'submitted'),0)::int AS waiting
          FROM task_instances i WHERE i.family_id = $2 AND i.due_date BETWEEN $3 AND $5 AND ${assigned('$1')} AND ${COUNTED}
           AND (i.assignee_id IS NOT NULL OR i.completed_by IS NULL OR i.completed_by = $1)`,

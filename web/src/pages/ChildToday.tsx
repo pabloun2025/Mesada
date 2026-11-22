@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Camera, CalendarCheck, Flame, Hammer, Hourglass, PartyPopper } from 'lucide-react';
+import { Camera, CalendarCheck, Check, ChevronRight, Database, Flame, Hammer, Hourglass, PartyPopper, Star } from 'lucide-react';
 import { api } from '../lib/api';
 import { addDays, euros, fmtDate, weekdayLong } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
@@ -11,6 +11,7 @@ import { minutesLabel } from '../lib/deadline';
 import { Button, Empty, Loading, SectionTitle, Sheet, useToast } from '../components/ui';
 import { LogScreenSheet } from '../components/MoneySheets';
 import { WeekRing } from '../components/Ring';
+import { GoldCoins } from '../components/Coins';
 import { TaskRow } from '../components/TaskRow';
 
 export default function ChildToday() {
@@ -76,6 +77,8 @@ export default function ChildToday() {
   const optional = all.filter((i) => i.recurrence === 'as_needed');
   const items = all.filter((i) => i.recurrence !== 'as_needed');
   const firsts = raw.filter((i) => i.repeat_no === 1 && i.recurrence !== 'as_needed'); // el día cuenta una vez, repita o no
+  const boardCount = extras.data?.board.length ?? 0;
+  const hasOptional = optional.length > 0 || boardCount > 0; // «Cuando haga falta» o trabajos extra a la vista
   const freeExtras = (extras.data?.board ?? []).filter((e) => !e.assignee_id && e.status === 'pending').length;
   const open = items.filter((i) => (i.status === 'pending' || i.status === 'rejected') && !i.check_mode && i.repeat_no === 1);
   const doneCount = firsts.filter((i) => i.status === 'approved' || i.status === 'submitted').length;
@@ -94,7 +97,7 @@ export default function ChildToday() {
         <div className="text-center sm:text-left">
           <p className="text-sm font-bold muted first-letter:uppercase">{today ? weekdayLong(today) : ''}</p>
           <h1 className="mt-1 text-3xl font-extrabold">
-            {firsts.length === 0 ? 'Hoy tienes el día libre' : open.length === 0 ? 'Todo hecho por hoy' : open.length === 1 ? 'Te queda 1 tarea' : `Te quedan ${open.length} tareas`}
+            {firsts.length === 0 ? (hasOptional ? 'Sin tareas fijas hoy' : 'Hoy tienes el día libre') : open.length === 0 ? 'Todo hecho por hoy' : open.length === 1 ? 'Te queda 1 tarea' : `Te quedan ${open.length} tareas`}
           </h1>
           <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--chip)] px-3 py-1 text-sm font-bold">
@@ -116,6 +119,9 @@ export default function ChildToday() {
               </span>
             ) : null}
           </div>
+          {firsts.length === 0 && hasOptional ? (
+            <p className="mt-2 text-sm muted">Mira abajo: hay {optional.length ? 'tareas «Cuando haga falta»' : 'trabajos extra'} por si quieres ayudar.</p>
+          ) : null}
           {p && p.period.maxPoints > 0 ? (
             <p className="mt-3 text-sm muted">
               Si lo haces todo, est{family.settlement_period === 'week' ? 'a semana' : 'e mes'} puedes ganar <strong className="num text-[var(--fg)]">{euros(p.period.maxCents)}</strong>. Llevas {euros(p.period.earnedCents)}.
@@ -124,7 +130,9 @@ export default function ChildToday() {
         </div>
       </section>
 
-      <section className="mb-8">
+      <MiMesada points={wallet.data?.wallet.points_available} cents={wallet.data?.wallet.points_value_cents} />
+
+      {firsts.length === 0 && hasOptional ? null : <section id="para-hoy" className="mb-8 scroll-mt-20">
         <SectionTitle>Para hoy {firsts.length ? <span className="num ml-1 text-base muted">{doneCount}/{firsts.length}</span> : null}</SectionTitle>
         {items.length ? (
           <ul className="space-y-2.5">
@@ -135,7 +143,7 @@ export default function ChildToday() {
         ) : (
           <div className="card"><Empty mascot icon={<PartyPopper />} title="Nada por aquí">Disfruta del día.</Empty></div>
         )}
-      </section>
+      </section>}
 
       {optional.length ? (
         <section className="mb-8">
@@ -204,5 +212,47 @@ export default function ChildToday() {
       {logOpen && screenMin != null ? <LogScreenSheet balance={screenMin} onClose={() => setLogOpen(false)} /> : null}
       {firsts.length > 0 && open.length === 0 ? <p className="mt-6 flex items-center justify-center gap-2 text-sm muted"><CalendarCheck size={16} aria-hidden /> Mañana más.</p> : null}
     </div>
+  );
+}
+
+/** Tarjeta «Mi mesada» (como en la imagen de marca): puntos → euros y tres accesos grandes con ✓ verde. */
+function MiMesada({ points, cents }: { points?: number; cents?: number }) {
+  const links = [
+    { href: '#para-hoy', label: 'Mis tareas', anchor: true },
+    { to: '/progreso', label: 'Mis puntos' },
+    { to: '/premios', label: 'Mis recompensas' },
+  ] as const;
+  return (
+    <section aria-label="Mi mesada" className="mb-8 overflow-hidden rounded-[var(--radius-panel)] border border-[var(--line)] bg-[var(--card)] shadow-[var(--shadow-lift)]">
+      <div className="flex items-center gap-2.5 bg-[#17356b] px-4 py-2.5 text-white">
+        <Database size={22} aria-hidden />
+        <h2 className="text-xl font-extrabold">Mi mesada</h2>
+      </div>
+      <div className="relative p-3.5">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-[var(--chip)] px-3.5 py-3" aria-label={`${points ?? 0} puntos equivalen a ${euros(cents ?? 0)}`}>
+          <span className="num inline-flex items-center gap-1.5 text-2xl font-extrabold"><Star size={24} className="fill-sun text-sun" aria-hidden />{points ?? 0}</span>
+          <span aria-hidden className="text-xl muted">→</span>
+          <span className="num rounded-xl bg-sun-soft px-3 py-0.5 text-2xl font-extrabold text-ink dark:bg-sun/20 dark:text-[#ffd979]">{euros(cents ?? 0)}</span>
+        </p>
+        <GoldCoins size={52} className="pointer-events-none absolute -top-5 right-2 hidden min-[400px]:block" />
+        <ul className="mt-3 grid gap-2">
+          {links.map((l) => {
+            const inner = (
+              <>
+                <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-lg border-2 border-leaf text-leaf"><Check size={22} strokeWidth={3.5} /></span>
+                <span className="flex-1 text-lg font-bold">{l.label}</span>
+                <ChevronRight size={20} className="muted" aria-hidden />
+              </>
+            );
+            const cls = 'flex min-h-14 items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--card)] px-3 transition active:scale-[0.98] hover:bg-[var(--chip)]';
+            return (
+              <li key={l.label}>
+                {'anchor' in l ? <a href={l.href} className={cls}>{inner}</a> : <Link to={l.to} className={cls}>{inner}</Link>}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </section>
   );
 }

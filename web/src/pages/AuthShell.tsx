@@ -1,31 +1,35 @@
 import type { ReactNode } from 'react';
 
+const ALT = 'DiploP: una familia sonriente con su osito; el logotipo y la tarjeta «Mi mesada»';
+
 /**
- * Marco de las pantallas de acceso con la ilustración de la familia DiploP.
- * Móvil: ilustración apaisada arriba (ya trae el logotipo) y formulario debajo.
- * Escritorio: ilustración vertical a la izquierda (también con logotipo) y formulario a la derecha.
+ * Marco de las pantallas de acceso con la imagen «cielo» de DiploP.
+ * Móvil: imagen vertical (familia arriba, logotipo debajo) y el formulario encima de un cielo claro.
+ * Tableta y escritorio: imagen apaisada a todo el ancho y el formulario centrado debajo.
  */
+export function HeroImage({ className = '', priority = true }: { className?: string; priority?: boolean }) {
+  return (
+    <picture>
+      <source media="(min-width: 768px)" srcSet="/brand/hero-sky-wide.webp" width={1600} height={900} />
+      <img
+        src="/brand/hero-sky-tall.webp"
+        alt={ALT}
+        width={900}
+        height={1809}
+        className={`block w-full bg-[#cde5f8] object-cover object-top aspect-[900/1180] md:aspect-[16/9] md:max-h-[34rem] md:object-[50%_22%] ${className}`}
+        fetchPriority={priority ? 'high' : undefined}
+      />
+    </picture>
+  );
+}
+
 export function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[minmax(22rem,30rem)_1fr]">
-      <section className="brand-field relative overflow-hidden lg:sticky lg:top-0 lg:h-dvh">
-        <img
-          src="/brand/hero-wide.webp"
-          alt="DiploP: una familia con su osito, lista para repartir las tareas de casa"
-          width={1046}
-          height={508}
-          className="block aspect-[1046/508] w-full object-cover lg:hidden"
-          fetchPriority="high"
-        />
-        <img
-          src="/brand/hero-tall.webp"
-          alt="DiploP: una familia con su osito, lista para repartir las tareas de casa"
-          width={446}
-          height={948}
-          className="hidden h-full w-full object-cover object-top lg:block"
-        />
+    <div className="min-h-dvh">
+      <section className="relative overflow-hidden bg-[#cde5f8]">
+        <HeroImage />
       </section>
-      <section className="relative -mt-5 flex justify-center rounded-t-[1.75rem] bg-[var(--bg)] px-5 pt-8 pb-10 lg:mt-0 lg:items-center lg:rounded-none lg:px-10">
+      <section className="relative -mt-8 flex justify-center rounded-t-[1.75rem] bg-[var(--bg)] px-5 pt-8 pb-10 md:-mt-10">
         <div className="w-full max-w-sm">
           <h1 className="text-3xl font-extrabold">{title}</h1>
           <p className="mt-1.5 mb-7 muted">{subtitle}</p>

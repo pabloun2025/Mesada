@@ -163,3 +163,131 @@ describe('Administración', () => {
     expect(mock.sent).toHaveLength(1);
   });
 });
+
+describe('Dispositivo recordado 90 días (I9)', () => {
+  const DEVICE = 'mesada_admin_device';
+  const login = async () => {
+    const c = new Client(app);
+    expect((await c.post('/api/auth/login', { username: 'amama', password: 'contrasena-segura' })).status).toBe(200);
+    return c;
+  };
+  const rows = async (userId = F.ids.mama) => (await getPool().query('SELECT * FROM admin_trusted_devices WHERE user_id = $1', [userId])).rows;
+
+  it('tras el código se emite un token (cookie httpOnly, solo /api) y solo se guarda su hash', async () => {
+    const { secret } = await enroll(F.mama);
+    expect(F.mama.jar.get(DEVICE)).toBeTruthy(); // el alta ya lo recuerda
+    const c = await login();
+    const v = await c.post('/api/admin/verify', { code: totp(secret, Date.now() + 30_000) });
+    expect(v.status).toBe(200);
+    const raw = (Array.isArray(v.raw.headers['set-cookie']) ? v.raw.headers['set-cookie'] : [v.raw.headers['set-cookie']]).find((x) => x!.startsWith(`${DEVICE}=`))!;
+    expect(raw).toMatch(/HttpOnly/i);
+    expect(raw).toMatch(/SameSite=Strict/i);
+    expect(raw).toMatch(/Path=\/api/);
+    expect(raw).toMatch(/Max-Age=\d+|Expires=/i);
+    const token = c.jar.get(DEVICE)!;
+    expect(token.length).toBeGreaterThan(30);
+    const stored = await rows();
+    expect(stored.length).toBe(2);
+    expect(JSON.stringify(stored)).not.toContain(token); // nunca en claro
+    const days = (new Date(stored[0].expires_at).getTime() - Date.now()) / 86400_000;
+    expect(days).toBeGreaterThan(89);
+    expect(days).toBeLessThanOrEqual(90);
+    const actions = (await getPool().query('SELECT action FROM admin_audit')).rows.map((r) => r.action);
+    expect(actions).toContain('device_remembered');
+  });
+
+  it('en un dispositivo recordado, Administración se abre sin pedir el código', async () => {
+    await enroll(F.mama);
+    const device = F.mama.jar.get(DEVICE)!;
+    const c = await login(); // sesión nueva, misma «máquina»
+    c.jar.set(DEVICE, device);
+    expect((await c.get('/api/admin/overview')).body.error).toBe('admin_verify_required');
+    const s = await c.get('/api/admin/status');
+    expect(s.body).toMatchObject({ eligible: true, totpEnabled: true, verified: true, deviceTrusted: true });
+    expect((await c.get('/api/admin/overview')).status).toBe(200);
+    expect((await rows())[0].last_used_at).not.toBeNull();
+    expect((await getPool().query(`SELECT 1 FROM admin_audit WHERE action = 'device_trusted_login'`)).rowCount).toBe(1);
+  });
+
+  it('dispositivo nuevo, sin token, caducado o de otro usuario: se pide el código', async () => {
+    await enroll(F.mama);
+    const device = F.mama.jar.get(DEVICE)!;
+    // Nuevo (sin cookie)
+    const fresh = await login();
+    expect((await fresh.get('/api/admin/status')).body).toMatchObject({ verified: false, deviceTrusted: false });
+    // Caducado
+    await getPool().query(`UPDATE admin_trusted_devices SET expires_at = now() - interval '1 minute'`);
+    const old = await login();
+    old.jar.set(DEVICE, device);
+    expect((await old.get('/api/admin/status')).body).toMatchObject({ verified: false, deviceTrusted: false });
+    expect((await old.get('/api/admin/families')).status).toBe(403);
+    // Token inventado
+    const fake = await login();
+    fake.jar.set(DEVICE, 'x'.repeat(43));
+    expect((await fake.get('/api/admin/status')).body.verified).toBe(false);
+  });
+
+  it('el token de un usuario no sirve a otro', async () => {
+    const { secret } = await enroll(F.mama);
+    const device = F.mama.jar.get(DEVICE)!;
+    // Otro adulto con la verificación activada y sin dispositivo propio.
+    await getPool().query('UPDATE users SET is_superadmin = true WHERE id = $1', [F.ids.papa]);
+    const p = F.papaC;
+    p.jar.set(DEVICE, device);
+    expect((await p.get('/api/admin/status')).body).toMatchObject({ eligible: true, totpEnabled: false, verified: false, deviceTrusted: false });
+    const s = await p.post('/api/admin/2fa/setup', { password: 'otra-contrasena' });
+    const e = await p.post('/api/admin/2fa/enable', { code: totp(s.body.secret) });
+    expect(e.status).toBe(200);
+    // Con el token de mamá (hash de mamá) papá no entra tras bloquear su sesión.
+    await p.post('/api/admin/lock');
+    p.jar.set(DEVICE, device);
+    expect((await p.get('/api/admin/status')).body).toMatchObject({ verified: false, deviceTrusted: false });
+    expect(secret).toBeTruthy();
+  });
+
+  it('«Olvidar este dispositivo» borra solo ese token; salir de Administración borra todos', async () => {
+    const { secret } = await enroll(F.mama);
+    const second = await login();
+    expect((await second.post('/api/admin/verify', { code: totp(secret, Date.now() + 30_000) })).status).toBe(200);
+    expect(await rows()).toHaveLength(2);
+    expect((await second.post('/api/admin/device/forget')).status).toBe(200);
+    expect(second.jar.has(DEVICE)).toBe(false);
+    expect(await rows()).toHaveLength(1);
+    expect((await second.get('/api/admin/status')).body).toMatchObject({ verified: false, deviceTrusted: false });
+    // El de mamá sigue valiendo hasta que salga de Administración.
+    const third = await login();
+    third.jar.set(DEVICE, F.mama.jar.get(DEVICE)!);
+    expect((await third.get('/api/admin/status')).body.verified).toBe(true);
+    expect((await F.mama.post('/api/admin/lock')).status).toBe(200);
+    expect(await rows()).toHaveLength(0);
+    const fourth = await login();
+    fourth.jar.set(DEVICE, third.jar.get(DEVICE)!);
+    expect((await fourth.get('/api/admin/status')).body.verified).toBe(false);
+  });
+
+  it('reiniciar la verificación revoca los dispositivos, y sin 2FA activa el token no vale', async () => {
+    await enroll(F.mama);
+    const device = F.mama.jar.get(DEVICE)!;
+    // Reinicio por SSH: se quita el 2FA (el script también borra los tokens, pero aunque no lo hiciera no valdrían).
+    await getPool().query('UPDATE users SET totp_secret = NULL, totp_pending = NULL, totp_enabled_at = NULL, totp_last_counter = NULL WHERE id = $1', [F.ids.mama]);
+    const c = await login();
+    c.jar.set(DEVICE, device);
+    expect((await c.get('/api/admin/status')).body).toMatchObject({ totpEnabled: false, verified: false, deviceTrusted: false });
+    // Al volver a activarla, los tokens antiguos se descartan.
+    const s = await c.post('/api/admin/2fa/setup', { password: 'contrasena-segura' });
+    await c.post('/api/admin/2fa/enable', { code: totp(s.body.secret) });
+    const rest = await rows();
+    expect(rest).toHaveLength(1);
+    expect(rest[0].token_hash).not.toBe(require('node:crypto').createHash('sha256').update(device).digest('hex'));
+  });
+
+  it('el bloqueo por códigos incorrectos sigue funcionando y manda sobre el dispositivo', async () => {
+    await enroll(F.mama);
+    const device = F.mama.jar.get(DEVICE)!;
+    const c = await login();
+    for (let i = 0; i < 5; i++) expect((await c.post('/api/admin/verify', { code: '000000' })).status).toBe(400);
+    expect((await c.post('/api/admin/verify', { code: '000000' })).status).toBe(429);
+    c.jar.set(DEVICE, device);
+    expect((await c.get('/api/admin/status')).body.verified).toBe(false);
+  });
+});

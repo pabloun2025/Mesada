@@ -4,6 +4,7 @@ import { addDays } from './dates.js';
 import { badRequest, conflict, forbidden, notFound } from './errors.js';
 import { familyToday, getFamily } from './family.js';
 import { addPoints } from './ledger.js';
+import { addScreen } from './screen.js';
 import { audit } from './audit.js';
 import { notify, notifyAdults } from './notify/dispatch.js';
 import { evaluateBadges } from './gamification.js';
@@ -29,6 +30,7 @@ interface InstanceRow {
   late_percent: number;
   task_points: number;
   on_time: boolean | null;
+  first_submitted_at: string | null;
   is_extra: boolean;
   extra_deadline: string | null;
   repeatable: boolean;
@@ -112,11 +114,12 @@ export async function completeInstance(
     let points = inst.points;
     let onTime: boolean | null = null;
     if (dl) {
-      if (now >= dayEnd(inst.due_date, fam.timezone)) throw conflict('El plazo de esta tarea ha terminado. Pide a un adulto que la revise.', 'expired');
-      // Si ya la hizo a tiempo y la devolvieron para repasar, no pierde el valor completo.
-      onTime = inst.on_time === true || now <= dl;
+      // Devuelta para repasar: ya se envió una vez dentro de plazo, así que puede reenviarla aunque haya acabado el día.
+      if (!inst.first_submitted_at && now >= dayEnd(inst.due_date, fam.timezone)) throw conflict('El plazo de esta tarea ha terminado. Pide a un adulto que la revise.', 'expired');
+      // La hora límite se juzga con la PRIMERA vez que la envió: si llegó a tiempo, sigue a tiempo al reenviarla.
+      onTime = (inst.first_submitted_at ? new Date(inst.first_submitted_at) : now) <= dl;
       // Tras un rechazo, `inst.points` ya puede venir reducido: se parte de los puntos de la tarea.
-      const base = inst.on_time === null ? inst.points : inst.task_points;
+      const base = inst.first_submitted_at ? inst.task_points : inst.points;
       points = onTime ? base : reducedPoints(base, inst.late_percent);
     }
 
@@ -124,10 +127,10 @@ export async function completeInstance(
     const status = autoApprove ? 'approved' : 'submitted';
     await db.query(
       `UPDATE task_instances
-          SET status = $2, completed_by = $3, completed_at = $6, child_note = $4,
+          SET status = $2, completed_by = $3, completed_at = $6, first_submitted_at = COALESCE(first_submitted_at, $6), child_note = $4,
               photo_path = COALESCE($5, photo_path),
               reviewed_at = CASE WHEN $2 = 'approved' THEN $6::timestamptz END,
-              review_note = NULL, points = $7, deadline_at = $8, on_time = $9
+              review_note = NULL, review_outcome = NULL, points = $7, deadline_at = $8, on_time = $9
         WHERE id = $1`,
       [inst.id, status, user.id, opts.note?.slice(0, 500) ?? null, opts.photoPath ?? null, now, points, dl, onTime],
     );
@@ -144,29 +147,41 @@ export async function completeInstance(
   });
 }
 
-export async function reviewInstance(
-  adult: AuthUser,
-  instanceId: string,
-  decision: { approve: boolean; points?: number; note?: string },
-) {
+export type ReviewAction = 'approve' | 'partial' | 'return' | 'reject' | 'reject_penalty';
+
+export interface ReviewDecision {
+  /** Compatibilidad: `approve: true` = aprobar; `approve: false` = devolver para repasar. */
+  approve?: boolean;
+  action?: ReviewAction;
+  points?: number;
+  note?: string;
+  /** Solo «rechazar con penalidad»: por defecto, los puntos de la tarea. */
+  penaltyPoints?: number;
+  penaltyMinutes?: number;
+}
+
+export async function reviewInstance(adult: AuthUser, instanceId: string, decision: ReviewDecision) {
+  const action: ReviewAction = decision.action ?? (decision.approve === false ? 'return' : 'approve');
+  const note = decision.note?.trim() || undefined;
+  // Con las acciones nuevas el motivo es obligatorio (el hijo lo ve); el «devolver» antiguo sigue admitiéndolo vacío.
+  if (decision.action && action !== 'approve' && !note) throw badRequest('Escribe el motivo: el hijo lo verá', 'reason_required');
   return tx(async (db) => {
     const fam = await getFamily(db, adult.familyId);
     const inst = await loadInstance(db, instanceId, adult.familyId, true);
-    // Un adulto puede validar lo enviado, o dar por hecha una pendiente/vencida.
-    if (!['submitted', 'pending', 'expired', 'rejected'].includes(inst.status)) {
-      throw conflict('Esta tarea ya se ha revisado', 'already_reviewed');
-    }
-    if (inst.check_mode) throw badRequest('Las tareas de comprobación se marcan como cumplidas o no cumplidas', 'check_task');
     const beneficiary = inst.completed_by ?? inst.assignee_id;
-    if (decision.approve) {
+    if (inst.check_mode) throw badRequest('Las tareas de comprobación se marcan como cumplidas o no cumplidas', 'check_task');
+
+    if (action === 'approve') {
+      // Un adulto puede validar lo enviado, o dar por hecha una pendiente/vencida.
+      if (!['submitted', 'pending', 'expired', 'rejected'].includes(inst.status)) throw conflict('Esta tarea ya se ha revisado', 'already_reviewed');
       if (!beneficiary) throw badRequest('Nadie ha marcado esta tarea compartida todavía');
       const points = decision.points ?? inst.points;
       if (!Number.isInteger(points) || points < 0 || points > 10000) throw badRequest('Puntos no válidos');
       await db.query(
-        `UPDATE task_instances SET status = 'approved', points = $2, reviewed_by = $3, reviewed_at = now(), review_note = $4,
+        `UPDATE task_instances SET status = 'approved', review_outcome = 'approved', points = $2, reviewed_by = $3, reviewed_at = now(), review_note = $4,
                 completed_by = COALESCE(completed_by, $5), completed_at = COALESCE(completed_at, now())
           WHERE id = $1`,
-        [inst.id, points, adult.id, decision.note ?? null, beneficiary],
+        [inst.id, points, adult.id, note ?? null, beneficiary],
       );
       await award(db, inst, beneficiary, points, adult.id);
       if (inst.repeatable) await spawnRepeats(db, adult.familyId, inst.due_date, inst.task_id);
@@ -176,20 +191,63 @@ export async function reviewInstance(
       }
       await notify(db, { userId: beneficiary, event: 'task_approved', title: `«${inst.title}» aprobada`, body: `+${points} puntos${grant ? (grant.surprise ? ' · 🎁 ¡y una sorpresa!' : ` · ${grant.label}`) : ''}`, link: '/progreso', dedupeKey: `approved:${inst.id}` });
       await evaluateBadges(db, beneficiary, familyToday(fam), fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [beneficiary]))!.weekly_goal_points);
-    } else {
-      if (inst.status !== 'submitted') throw conflict('Solo se pueden rechazar tareas enviadas', 'not_submitted');
+      await audit(db, adult.familyId, adult.id, 'task.approve', 'task_instance', inst.id, { points, note: note ?? null });
+      return { id: inst.id, status: 'approved' };
+    }
+
+    // El resto solo se aplica a lo que el hijo ha enviado.
+    if (inst.status !== 'submitted') throw conflict('Solo se pueden revisar tareas enviadas', 'not_submitted');
+    if (!beneficiary) throw badRequest('Nadie ha marcado esta tarea compartida todavía');
+
+    if (action === 'partial') {
+      const points = decision.points;
+      if (points === undefined || !Number.isInteger(points) || points < 0 || points > 10000) throw badRequest('Puntos no válidos');
       await db.query(
-        `UPDATE task_instances SET status = 'rejected', reviewed_by = $2, reviewed_at = now(), review_note = $3 WHERE id = $1`,
-        [inst.id, adult.id, decision.note ?? null],
+        `UPDATE task_instances SET status = 'approved', review_outcome = 'partial', points = $2, reviewed_by = $3, reviewed_at = now(), review_note = $4 WHERE id = $1`,
+        [inst.id, points, adult.id, note],
       );
-      if (beneficiary) {
-        await notify(db, { userId: beneficiary, event: 'task_rejected', title: `«${inst.title}» necesita un repaso`, body: decision.note ?? '', link: '/' });
+      await award(db, inst, beneficiary, points, adult.id);
+      if (inst.repeatable) await spawnRepeats(db, adult.familyId, inst.due_date, inst.task_id);
+      // Sin bono: ni el visible ni la sorpresa (que no se revela ni se gasta) se conceden con un premio parcial.
+      await notify(db, { userId: beneficiary, event: 'task_approved', title: `«${inst.title}»: premio parcial`, body: `+${points} de ${inst.points} puntos · ${note}`, link: '/', dedupeKey: `approved:${inst.id}` });
+      await evaluateBadges(db, beneficiary, familyToday(fam), fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [beneficiary]))!.weekly_goal_points);
+      await audit(db, adult.familyId, adult.id, 'task.partial', 'task_instance', inst.id, { points, of: inst.points, note: note ?? null });
+      return { id: inst.id, status: 'approved', outcome: 'partial', points };
+    }
+
+    if (action === 'return') {
+      await db.query(`UPDATE task_instances SET status = 'rejected', review_outcome = 'returned', reviewed_by = $2, reviewed_at = now(), review_note = $3 WHERE id = $1`, [inst.id, adult.id, note ?? null]);
+      await notify(db, { userId: beneficiary, event: 'task_rejected', title: `«${inst.title}» necesita un repaso`, body: note ?? '', link: '/' });
+      await audit(db, adult.familyId, adult.id, 'task.return', 'task_instance', inst.id, { note: note ?? null });
+      return { id: inst.id, status: 'rejected' };
+    }
+
+    // Rechazo definitivo (sin o con penalidad): no cuenta como hecha ni da nada.
+    let penaltyPoints = 0;
+    let penaltyApplied = 0;
+    if (action === 'reject_penalty') {
+      penaltyPoints = decision.penaltyPoints ?? inst.task_points;
+      const minutes = decision.penaltyMinutes ?? 0;
+      if (!Number.isInteger(penaltyPoints) || penaltyPoints < 0 || penaltyPoints > 10000) throw badRequest('Puntos de penalidad no válidos');
+      if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) throw badRequest('Minutos de penalidad no válidos');
+      if (penaltyPoints === 0 && minutes === 0) throw badRequest('Indica cuántos puntos o minutos se restan', 'penalty_required');
+      if (penaltyPoints > 0) {
+        // Puede dejar el saldo por debajo de 0, como el resto del banco (D30).
+        await addPoints(db, { familyId: adult.familyId, userId: beneficiary, delta: -penaltyPoints, kind: 'adjustment', refId: inst.id, note: `Penalidad: ${inst.title}`, createdBy: adult.id, idempotencyKey: `penalty-points:${inst.id}` });
+      }
+      if (minutes > 0) {
+        // Los minutos se recortan al saldo: nunca bajan de 0 (D26/D27).
+        const r = await addScreen(db, { familyId: adult.familyId, userId: beneficiary, delta: -minutes, kind: 'penalty', refId: inst.id, note: `Penalidad: ${inst.title}`, createdBy: adult.id, idempotencyKey: `penalty-screen:${inst.id}` });
+        penaltyApplied = -r.applied;
       }
     }
-    await audit(db, adult.familyId, adult.id, decision.approve ? 'task.approve' : 'task.reject', 'task_instance', inst.id, {
-      points: decision.points ?? inst.points,
-      note: decision.note ?? null,
-    });
-    return { id: inst.id, status: decision.approve ? 'approved' : 'rejected' };
+    await db.query(
+      `UPDATE task_instances SET status = 'declined', review_outcome = $2, penalty_points = $3, penalty_screen = $4, reviewed_by = $5, reviewed_at = now(), review_note = $6 WHERE id = $1`,
+      [inst.id, action === 'reject_penalty' ? 'penalized' : 'declined', penaltyPoints, penaltyApplied, adult.id, note],
+    );
+    const lost = [penaltyPoints ? `−${penaltyPoints} puntos` : '', penaltyApplied ? `−${penaltyApplied} min de pantalla` : ''].filter(Boolean).join(' y ');
+    await notify(db, { userId: beneficiary, event: 'task_rejected', title: `«${inst.title}» rechazada`, body: `${note}${lost ? ` · ${lost}` : ''}`, link: '/' });
+    await audit(db, adult.familyId, adult.id, action === 'reject' ? 'task.reject' : 'task.reject_penalty', 'task_instance', inst.id, { note, penaltyPoints, penaltyMinutes: penaltyApplied });
+    return { id: inst.id, status: 'declined', penaltyPoints, penaltyMinutes: penaltyApplied };
   });
 }

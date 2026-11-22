@@ -12,6 +12,7 @@ import type { BalanceHistory, Bank, BankAction, Goal, Loan, StatementEntry, User
 import { Badge, Button, Empty, Field, Loading, Sheet, useToast } from './ui';
 import { AmountSheet, Pips } from './AmountSheet';
 import { useReceipt } from './Receipt';
+import { GoldCoins } from './Coins';
 
 /** Adultos de la familia: a quién avisamos en los recibos. */
 function useAdultNotice() {
@@ -46,6 +47,7 @@ export function AccountCard({ tone, title, number, children, foot }: { tone: 'mo
   return (
     <section aria-label={title} className={`acct ${money ? 'acct-money' : 'acct-pts'}`}>
       {money ? <Rays color="#ffb800" opacity={0.35} /> : <Rays color="#fff" opacity={0.5} />}
+      {money ? <GoldCoins size={70} className="pointer-events-none absolute right-3 bottom-3 opacity-90" /> : null}
       <div className="flex items-center justify-between text-sm font-bold">
         <span className="flex items-center gap-2"><Landmark size={18} aria-hidden /> DiploP · {title}</span>
         <Nfc size={22} aria-hidden className="opacity-80" />
@@ -643,7 +645,7 @@ export function ExchangeSheet({ bank, onClose }: { bank: Bank; onClose: () => vo
     <AmountSheet
       title="Canjear puntos" subtitle={<>Tienes <b className="text-[var(--fg)]">{bank.points} pts</b></>}
       unit="pts" max={a.max_points} min={a.min_points} chips={[50, 100]} variant="success"
-      after={(v) => <>Recibes <b className="num text-leaf-deep dark:text-[#7fe0b2]">{euros(cents(v))}</b></>}
+      after={(v) => <span className="inline-flex items-center gap-1.5"><GoldCoins size={28} />Recibes <b className="num text-leaf-deep dark:text-[#7fe0b2]">{euros(cents(v))}</b></span>}
       info={<span className="text-center">{bank.rate.points} pts = {euros(bank.rate.cents)}{bank.week.remaining_cents != null ? <> · esta semana te caben {euros(bank.week.remaining_cents)}</> : null}</span>}
       overReason={(m) => `Puedes canjear hasta ${m} pts`} underReason={(m) => `El mínimo son ${m} pts`}
       cta={(v) => (v ? `Canjear ${v} pts` : 'Canjear')}
