@@ -259,12 +259,14 @@ describe('Administración: sistema (D57)', () => {
 
   it('disco, fotos, base y copias (locales y R2) con aviso si la última pasa de 26 h', async () => {
     await enroll(F.mama);
+    // La carpeta de fotos es compartida con otras pruebas: se cuenta la diferencia, no el total.
+    const before = (await F.mama.get('/api/admin/storage')).body.storage.photos.count;
     const id = await photoTask('Para contar');
     await upload(id, await bigPhoto(500, 400));
     put('mesada-20261122-030000.dump', 2, 5000);
     put('fotos-20261122-030000.tar.gz', 2, 800);
     let r = (await F.mama.get('/api/admin/storage')).body;
-    expect(r.storage.photos.count).toBe(1);
+    expect(r.storage.photos.count).toBe(before + 1);
     expect(r.storage.photos.bytes).toBeGreaterThan(0);
     expect(r.storage.dbBytes).toBeGreaterThan(0);
     expect(r.storage.disk.freeBytes).toBeGreaterThan(0);

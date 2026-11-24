@@ -269,7 +269,10 @@ describe('Repetir en el día (I13)', () => {
     const [i] = await open(F.luciaC, t.id);
     await F.luciaC.post(`/api/instances/${i.id}/complete`);
     const p = (await F.luciaC.get(`/api/progress/${F.ids.lucia}`)).body;
-    expect(p.period.maxPoints).toBe(10); // no se infla con las repeticiones
+    // Tarea diaria: 10 por cada día que queda del periodo (hoy incluido); las repeticiones no lo inflan.
+    let days = 0;
+    for (let d = today(); d <= p.period.end; d = addDays(d, 1)) days++;
+    expect(p.period.maxPoints).toBe(10 * days);
     expect(p.streak).toBe(1);
     // Ayer: una hecha y la siguiente pendiente sin hacer; no vence ni cuenta como fallo.
     await pool().query(`DELETE FROM task_instances WHERE task_id = $1 AND due_date <> $2`, [t.id, today()]);
