@@ -100,7 +100,7 @@ describe('I6 canje', () => {
     expect((await F.luciaC.post('/api/bank/exchange', { points: 100 }, h)).body.duplicate).toBe(true);
     expect(await cents(L())).toBe(500);
     const n = (await notes(F.ids.mama, 'points_exchanged'))[0];
-    expect(n.title).toBe('Lucía ha cambiado 100 puntos por 5,00 €');
+    expect(n.title).toContain('Lucía ha cambiado 100 puntos por 5,00 €');
     expect((await notes(F.ids.papa, 'points_exchanged'))).toHaveLength(1);
     // Hasta el tope y no más.
     expect((await F.luciaC.post('/api/bank/exchange', { points: 100 })).status).toBe(200);
@@ -178,7 +178,7 @@ describe('I6 retiro', () => {
     await giveMoney(L(), 1000);
     await F.luciaC.post('/api/payout-requests', { kind: 'money', amountCents: 400 });
     const n = (await notes(F.ids.papa, 'payout_requested'))[0];
-    expect(n.title).toBe('Lucía quiere retirar 4,00 €');
+    expect(n.title).toContain('Lucía quiere retirar 4,00 €');
     expect(n.body).toContain('Tienes que pagárselo');
   });
 
@@ -224,7 +224,7 @@ describe('I6 adelanto', () => {
     const nextMonday = addDays(startOfWeek(today()), 7);
     const next = await capStatus(pool(), fam, L(), nextMonday);
     expect(next).toMatchObject({ weeklyCap: 1000, usedWeek: 500, remaining: 500 });
-    expect((await notes(F.ids.mama, 'advance_taken'))[0].title).toBe('Lucía ha adelantado 5,00 €');
+    expect((await notes(F.ids.mama, 'advance_taken'))[0].title).toContain('Lucía ha adelantado 5,00 €');
     // Y el cierre de ese periodo solo convertiría lo que quede de su tope.
     const bank = (await F.luciaC.get(`/api/bank/${L()}`)).body.bank;
     expect(bank.week.remaining_cents).toBe(0);
@@ -260,7 +260,7 @@ describe('I6 préstamo', () => {
     expect(a.status).toBe(200);
     const loan = a.body.loan;
     expect((await F.luciaC.post('/api/loans', { amountCents: 500, weeks: 2 })).body.error).toBe('loan_open');
-    expect((await notes(F.ids.mama, 'loan_requested'))[0].title).toBe('Lucía pide un préstamo de 20,00 €');
+    expect((await notes(F.ids.mama, 'loan_requested'))[0].title).toContain('Lucía pide un préstamo de 20,00 €');
     expect(await cents(L())).toBe(0); // hasta que lo aprueben no hay dinero
     // Permisos.
     expect((await F.luciaC.post(`/api/loans/${loan.id}/approve`, {})).status).toBe(403);
@@ -454,7 +454,7 @@ describe('I7 ahorro programado', () => {
     expect((await F.luciaC.post(`/api/goals/${g.id}/withdraw`)).body.error).toBe('goal_reached');
     const r = await F.luciaC.post(`/api/goals/${g.id}/redeem`);
     expect(r.status).toBe(200);
-    expect((await notes(F.ids.mama, 'goal_requested'))[0].title).toBe('Lucía quiere canjear su meta «Vinilo»');
+    expect((await notes(F.ids.mama, 'goal_requested'))[0].title).toContain('Lucía quiere canjear su meta «Vinilo»');
     // Con la petición abierta no se mueve nada más.
     expect((await F.luciaC.post(`/api/goals/${g.id}/deposit`, { cents: 100 })).body.error).toBe('goal_pending');
     expect((await F.luciaC.post(`/api/goals/${g.id}/redeem`)).status).toBe(409);

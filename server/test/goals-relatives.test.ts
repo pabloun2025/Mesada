@@ -511,7 +511,7 @@ describe('I20 · pariente: ver y animar, y nada más (cada ruta en el servidor)'
     expect((await abu.c.post('/api/cheers', { toUserId: F.ids.papa, message: 'Hola' })).status).toBe(404); // solo a hijos
     expect((await abu.c.post('/api/cheers', { toUserId: L(), message: '¡Qué orgullo, Lucía!' })).status).toBe(200);
     const n = (await notes(L(), 'cheer'))[0];
-    expect(n).toMatchObject({ title: 'Rosa (Abuelo/a) te felicita', body: '¡Qué orgullo, Lucía!' });
+    expect(n).toMatchObject({ title: expect.stringContaining('Rosa (Abuelo/a) te felicita'), body: '¡Qué orgullo, Lucía!' });
     expect((await notes(F.ids.mama, 'relative_activity'))[0].title).toContain('Rosa (Abuelo/a) ha felicitado a Lucía');
     for (let i = 0; i < 9; i++) await abu.c.post('/api/cheers', { toUserId: L(), message: `Otra ${i}` });
     expect((await abu.c.post('/api/cheers', { toUserId: L(), message: 'Una más' })).body.error).toBe('cheer_limit');
@@ -570,7 +570,7 @@ describe('I20 · correo y teléfono de otros miembros: la cuenta principal o la 
     const log = await many(pool(), `SELECT data FROM audit_log WHERE action = 'notify.contact_update' AND entity_id = $1`, [abu.id]);
     expect(log[0].data).toMatchObject({ for: abu.id, email: 'cambiado', phone: 'cambiado' });
     expect(JSON.stringify(log)).not.toContain('rosa.nueva');
-    expect((await notes(abu.id, 'family_change'))[0]).toMatchObject({ title: 'Mamá ha cambiado tu correo y tu teléfono', link: '/perfil' });
+    expect((await notes(abu.id, 'family_change'))[0]).toMatchObject({ title: expect.stringContaining('Mamá ha cambiado tu correo y tu teléfono'), link: '/perfil' });
     expect(await notes(L(), 'family_change')).toHaveLength(0); // al niño no se le avisa de esto
     // Y el pariente lo puede cambiar él mismo en Mi perfil.
     expect((await abu.c.put('/api/me/email', { email: 'rosa.suya@example.com' })).status).toBe(200);

@@ -145,7 +145,7 @@ export function shapeBonus<T extends Record<string, any>>(row: T, role: 'adult' 
 async function notifyAssigned(db: any, taskId: string, title: string, points: number, assignees: string[]) {
   const kids = await many(db, `SELECT id FROM users WHERE id = ANY($1::uuid[]) AND role = 'child'`, [assignees]);
   for (const k of kids) {
-    await notify(db, { userId: k.id, event: 'task_assigned', title: `Nueva tarea: ${title}`, body: `+${points} puntos`, link: '/', dedupeKey: `assigned:${taskId}:${k.id}` });
+    await notify(db, { userId: k.id, event: 'task_assigned', title: `Nueva tarea: ${title}`, body: `+${points} puntos en juego ✨`, link: '/', dedupeKey: `assigned:${taskId}:${k.id}` });
   }
 }
 

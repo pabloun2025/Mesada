@@ -31,8 +31,8 @@ export async function scheduleReminders(db: Db, familyId: string, now = new Date
       await notify(db, {
         userId: r.user_id,
         event: 'task_reminder',
-        title: r.n === 1 ? 'Te queda 1 tarea de hoy' : `Te quedan ${r.n} tareas de hoy`,
-        body: 'Márcalas en DiploP cuando las termines.',
+        title: r.n === 1 ? '¡Solo te queda 1 tarea de hoy!' : `¡Te quedan ${r.n} tareas de hoy!`,
+        body: 'Cuando las termines, márcalas en DiploP y suma puntos 🚀',
         link: '/',
         dedupeKey: `reminder:${r.user_id}:${today}`,
       });
@@ -60,7 +60,7 @@ export async function scheduleReminders(db: Db, familyId: string, now = new Date
           userId: d.user_id,
           event: 'task_due_soon',
           title: `«${d.title}» vence a las ${deadlineTime(d, today, holiday)}`,
-          body: d.late_percent < 100 ? `Si llegas tarde, vale el ${d.late_percent} % de los puntos.` : 'Todavía estás a tiempo.',
+          body: d.late_percent < 100 ? `Si llegas tarde, vale el ${d.late_percent} % de los puntos.` : '¡Todavía estás a tiempo, tú puedes! 💪',
           link: '/',
           dedupeKey: `duesoon:${d.id}:${d.user_id}`,
         });

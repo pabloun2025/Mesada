@@ -268,7 +268,7 @@ export async function warnSessions(db: Db, now = new Date()) {
   );
   for (const s of rows) {
     await db.query('UPDATE screen_sessions SET warned_at = $2 WHERE id = $1', [s.id, now]);
-    await notify(db, { userId: s.user_id, event: 'screen_warning', title: `Te quedan ${WARN_MINUTES} minutos de pantalla`, body: 'Ve acabando lo que estás haciendo.', link: '/pantalla', dedupeKey: `screen-warn:${s.id}:${s.extended_minutes}` });
+    await notify(db, { userId: s.user_id, event: 'screen_warning', title: `Te quedan ${WARN_MINUTES} minutos de pantalla`, body: 'Ve cerrando lo que estás haciendo 😉', link: '/pantalla', dedupeKey: `screen-warn:${s.id}:${s.extended_minutes}` });
   }
   return rows.length;
 }

@@ -184,7 +184,7 @@ describe('Fin del tiempo y cierre automático (I21)', () => {
     const row = await one(pool(), 'SELECT * FROM screen_sessions WHERE id = $1', [s.id]);
     expect(row).toMatchObject({ status: 'finished', end_reason: 'expired', used_minutes: 30 });
     expect(await screenBalance(pool(), L())).toBe(30);
-    expect((await notes(L(), 'screen_ended'))[0].title).toBe('Se acabó el tiempo de pantalla');
+    expect((await notes(L(), 'screen_ended'))[0].title).toContain('Se acabó el tiempo de pantalla');
     expect((await notes(F.ids.mama, 'screen_ended'))[0].title).toContain('Lucía');
     expect((await notes(F.ids.papa, 'screen_ended'))).toHaveLength(1);
     // Repetirlo no duplica ni cobra otra vez.

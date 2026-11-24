@@ -120,7 +120,7 @@ export async function adjustPoints(adult: AuthUser, p: { userId: string; delta: 
     const r = await addPoints(db, { familyId: adult.familyId, userId: p.userId, delta: p.delta, kind, note: p.note, createdBy: adult.id, idempotencyKey: p.idempotencyKey ? `adj:${adult.familyId}:${p.idempotencyKey}` : null });
     if (r.duplicate) return { duplicate: true };
     await audit(db, adult.familyId, adult.id, 'points.adjust', 'user', p.userId, { delta: p.delta, note: p.note, kind, for: p.userId });
-    await notify(db, { userId: p.userId, event: 'points_adjusted', title: p.delta > 0 ? `+${p.delta} puntos` : `${p.delta} puntos`, body: p.note, link: '/progreso', dedupeKey: r.id ? `points:${r.id}` : null });
+    await notify(db, { userId: p.userId, event: 'points_adjusted', emoji: p.delta > 0 ? '⭐' : '📉', title: p.delta > 0 ? `+${p.delta} puntos` : `${p.delta} puntos`, body: p.note, link: '/progreso', dedupeKey: r.id ? `points:${r.id}` : null });
     return { duplicate: false, balance: await pointsBalance(db, p.userId) };
   });
 }

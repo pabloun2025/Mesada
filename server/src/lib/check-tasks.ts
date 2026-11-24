@@ -84,12 +84,12 @@ export async function checkInstance(adult: AuthUser, instanceId: string, met: bo
 
     if (met) {
       const parts = [inst.points > 0 ? `+${inst.points} puntos` : '', minutesApplied ? `+${minutesApplied} min de pantalla` : '', grant ? (grant.surprise ? '🎁 ¡y una sorpresa!' : grant.label) : ''].filter(Boolean);
-      await notify(db, { userId: kid, event: 'task_approved', title: `«${inst.title}» cumplida`, body: parts.join(' · '), link: '/', dedupeKey: `check:${inst.id}:${seq}` });
+      await notify(db, { userId: kid, event: 'task_approved', title: `¡«${inst.title}» cumplida! Bien hecho`, body: parts.join(' · '), link: '/', dedupeKey: `check:${inst.id}:${seq}` });
       await evaluateBadges(db, kid, today, fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [kid]))!.weekly_goal_points);
     } else {
       await notify(db, {
-        userId: kid, event: 'screen_changed', title: `«${inst.title}» no cumplida`,
-        body: penaltyApplied > 0 ? `−${penaltyApplied} min de pantalla` : 'Sin cambios en tu pantalla.',
+        userId: kid, event: 'screen_changed', emoji: '😕', title: `«${inst.title}» no cumplida`,
+        body: penaltyApplied > 0 ? `−${penaltyApplied} min de pantalla. ¡La próxima la bordas! 💪` : 'Sin cambios en tu pantalla. ¡La próxima la bordas! 💪',
         link: '/', dedupeKey: `check:${inst.id}:${seq}`,
       });
     }

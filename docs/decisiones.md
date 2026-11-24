@@ -274,3 +274,7 @@ Por petición del dueño, en la interfaz y los avisos no se habla de castigos ni
 Las tareas «cuando haga falta» (descargar el lavavajillas, doblar la ropa) salen en su propio bloque arriba de Tareas, con su estado («Activa», «Activa hasta el jueves 26», «En pausa»). **Pausar** es un toque; **Activar** pide cuánto tiempo: solo hoy, 3 días, 1 semana o sin fin. No hay columna nueva: se reutilizan las fechas de inicio y fin (pausar = terminó ayer; activar = desde hoy hasta hoy + días − 1). Lo ya hecho hoy no se borra al pausar. API: `POST /api/tasks/:id/availability` con `{pause:true}` o `{days: n | null}`, solo adultos.
 
 Al pasar de pausa a activa, cada hijo asignado recibe el aviso «¡Toca «…»!» con «El primero que la haga se lleva +N puntos para su paga. ¡A por ella!» (evento `task_available`, WhatsApp por defecto, una vez al día por tarea). Cambiar el plazo de una que ya está activa no avisa.
+
+## D74 · Avisos más alegres, con emoticono (24/11)
+
+Cada tipo de aviso tiene su emoticono en el catálogo (`events.ts`: 🎉 aprobada, 🏃 toca tarea, ⏳ pantalla, 💸 pago, 🏅 insignia…) y `notify` lo pone delante del título si no empieza ya por uno; un aviso concreto puede elegir otro (`emoji`, p. ej. 📉 al restar puntos o 😕 si una comprobación no se cumplió). Los textos para los hijos animan en lugar de solo informar («¡Casi está! Dale otra vuelta 💪», «¡Todavía estás a tiempo, tú puedes!»). Las pruebas comprueban el texto con `toContain`, no el título exacto.

@@ -130,7 +130,7 @@ export async function evaluateBadges(db: Db, userId: string, today: string, tz: 
   const fresh = r.rows.map((x) => x.badge as string);
   const cur = fresh.length ? (await one<{ currency: string }>(db, 'SELECT f.currency FROM families f JOIN users u ON u.family_id = f.id WHERE u.id = $1', [userId]))?.currency ?? 'EUR' : 'EUR';
   for (const b of fresh) {
-    await notify(db, { userId, event: 'badge', title: `Nueva insignia: ${BADGES[b].title}`, body: badgeText(BADGES[b].description, cur), link: '/progreso', dedupeKey: `badge:${userId}:${b}` });
+    await notify(db, { userId, event: 'badge', title: `¡Nueva insignia: ${BADGES[b].title}!`, body: badgeText(BADGES[b].description, cur), link: '/progreso', dedupeKey: `badge:${userId}:${b}` });
   }
   return fresh;
 }

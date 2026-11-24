@@ -52,14 +52,14 @@ describe('I4 pagos desde el Panel', () => {
       expect(r.status).toBe(200);
       left -= 2000;
       const n = (await notes(L(), 'payment')).at(-1)!;
-      expect(n.title).toBe(`Mamá te ha pagado 20,00 € ${phrase}.`);
+      expect(n.title).toContain(`Mamá te ha pagado 20,00 € ${phrase}.`);
       expect(n.body).toBe(`Te quedan ${(left / 100).toFixed(2).replace('.', ',')} €.`);
     }
     // «Otro»: sin forma de pago; la nota del adulto se añade al cuerpo.
     const r = await F.papaC.post('/api/payments', { userId: L(), amountCents: 1000, method: 'other', note: 'Para el cine' });
     expect(r.status).toBe(200);
     const n = (await notes(L(), 'payment')).at(-1)!;
-    expect(n.title).toBe('Papá te ha pagado 10,00 €.');
+    expect(n.title).toContain('Papá te ha pagado 10,00 €.');
     expect(n.body).toBe('Te quedan 0,00 €. Para el cine');
     expect(await cents(L())).toBe(0);
   });
@@ -83,7 +83,7 @@ describe('I4 pagos desde el Panel', () => {
     const r = await F.mama.post('/api/screen/spend', { userId: L(), minutes: 30, category: 'videojuegos' });
     expect(r.body).toMatchObject({ applied: 30, balance: 15 });
     const n = (await notes(L(), 'screen_changed')).at(-1)!;
-    expect(n.title).toBe('Mamá te ha dado 30 min de videojuegos.');
+    expect(n.title).toContain('Mamá te ha dado 30 min de videojuegos.');
     expect(n.body).toBe('Te quedan 15 min.');
     // Sin categoría: «otro». Los movimientos antiguos y los bonos llevan NULL.
     await F.mama.post('/api/screen/spend', { userId: L(), minutes: 5 });
@@ -136,7 +136,7 @@ describe('I4 peticiones del hijo', () => {
     expect(r.body.request.payment_id).toBe(pay!.id);
     const n = await notes(L(), 'payout_decided');
     expect(n).toHaveLength(1);
-    expect(n[0].title).toBe('Papá te ha pagado 10,00 € por Bizum.');
+    expect(n[0].title).toContain('Papá te ha pagado 10,00 € por Bizum.');
     expect(n[0].body).toBe('Te quedan 5,00 €. Con cariño');
     expect(await notes(L(), 'payment')).toHaveLength(0); // un solo aviso, el de la petición
     // Idempotente: aprobar otra vez no paga otra vez.
@@ -177,7 +177,7 @@ describe('I4 peticiones del hijo', () => {
     const e = (await F.luciaC.get(`/api/screen/${L()}`)).body.entries.find((x: any) => x.delta === -30);
     expect(e).toMatchObject({ kind: 'spend', category: 'videojuegos' });
     const n = (await notes(L(), 'payout_decided'))[0];
-    expect(n.title).toBe('Mamá te ha dado 30 min de videojuegos.');
+    expect(n.title).toContain('Mamá te ha dado 30 min de videojuegos.');
     expect(n.body).toBe('Te quedan 20 min.');
     expect((await F.mama.post(`/api/payout-requests/${req.id}/approve`, {})).body.duplicate).toBe(true);
     expect(await screen(L())).toBe(20);
@@ -209,7 +209,7 @@ describe('I4 peticiones del hijo', () => {
     expect(rej.body.request).toMatchObject({ status: 'rejected', decision_note: 'Mejor el sábado' });
     expect(await cents(L())).toBe(1000);
     const n = (await notes(L(), 'payout_decided'))[0];
-    expect(n.title).toBe('Mamá no ha aceptado tu petición de 5,00 €');
+    expect(n.title).toContain('Mamá no ha aceptado tu petición de 5,00 €');
     expect(n.body).toBe('Mejor el sábado');
     // Cancelar la propia; idempotente; ya no se puede aprobar.
     expect((await F.luciaC.post(`/api/payout-requests/${s.id}/cancel`, {})).body.request.status).toBe('cancelled');
@@ -271,7 +271,7 @@ describe('I5 el hijo anota su pantalla', () => {
     const c1 = await F.mama.post(`/api/screen-logs/${a.id}/confirm`, {});
     expect(c1.body).toMatchObject({ duplicate: false, honesty: true });
     expect(await pts(L())).toBe(HONESTY_POINTS);
-    expect((await notes(L(), 'points_adjusted')).at(-1)!.title).toBe('+5 puntos por ser honesto');
+    expect((await notes(L(), 'points_adjusted')).at(-1)!.title).toContain('+5 puntos por ser honesto');
     // Confirmar la segunda del mismo día no suma más; repetir la confirmación tampoco.
     await F.papaC.post(`/api/screen-logs/${b.id}/confirm`, {});
     expect((await F.mama.post(`/api/screen-logs/${a.id}/confirm`, {})).body.duplicate).toBe(true);
@@ -351,7 +351,7 @@ describe('I5 el hijo anota su pantalla', () => {
     expect(await pts(L())).toBe(0);
     const k = await many(pool(), `SELECT kind, delta FROM points_ledger WHERE user_id = $1 ORDER BY created_at, id`, [L()]);
     expect(k.map((x: any) => `${x.kind}:${x.delta}`)).toEqual(['bonus:5', 'adjustment:-5']);
-    expect((await notes(L(), 'points_adjusted')).map((n: any) => n.title)).toContain('−5 puntos');
+    expect((await notes(L(), 'points_adjusted')).some((n: any) => n.title.includes('−5 puntos'))).toBe(true);
     // Una anotación pendiente anulada no toca puntos.
     const p = (await log(F.luciaC, 10)).body.log;
     await F.mama.post(`/api/screen-logs/${p.id}/void`, {});

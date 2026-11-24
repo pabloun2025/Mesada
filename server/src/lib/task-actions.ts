@@ -211,7 +211,7 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
       if (points !== inst.points) {
         await audit(db, adult.familyId, adult.id, 'task.points_changed', 'task_instance', inst.id, { from: inst.points, to: points });
       }
-      await notify(db, { userId: beneficiary, event: 'task_approved', title: `«${inst.title}» aprobada`, body: `+${points} puntos${grant ? (grant.surprise ? ' · 🎁 ¡y una sorpresa!' : ` · ${grant.label}`) : ''}`, link: '/progreso', dedupeKey: `approved:${inst.id}` });
+      await notify(db, { userId: beneficiary, event: 'task_approved', title: `¡«${inst.title}» aprobada! Así se hace`, body: `+${points} puntos 💪${grant ? (grant.surprise ? ' · 🎁 ¡y una sorpresa!' : ` · ${grant.label}`) : ''}`, link: '/progreso', dedupeKey: `approved:${inst.id}` });
       await evaluateBadges(db, beneficiary, familyToday(fam), fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [beneficiary]))!.weekly_goal_points, inst.id);
       await audit(db, adult.familyId, adult.id, 'task.approve', 'task_instance', inst.id, { points, note: note ?? null });
       return { id: inst.id, status: 'approved' };
@@ -232,7 +232,7 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
       if (inst.repeatable) await spawnRepeats(db, adult.familyId, inst.due_date, inst.task_id);
       if (inst.is_extra) await applyRecovery(db, inst, beneficiary, familyToday(fam), adult.id);
       // Sin bono: ni el visible ni la sorpresa (que no se revela ni se gasta) se conceden con un premio parcial.
-      await notify(db, { userId: beneficiary, event: 'task_approved', title: `«${inst.title}»: premio parcial`, body: `+${points} de ${inst.points} puntos · ${note}`, link: '/', dedupeKey: `approved:${inst.id}` });
+      await notify(db, { userId: beneficiary, event: 'task_approved', emoji: '👍', title: `«${inst.title}»: premio parcial`, body: `+${points} de ${inst.points} puntos · ${note}`, link: '/', dedupeKey: `approved:${inst.id}` });
       await evaluateBadges(db, beneficiary, familyToday(fam), fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [beneficiary]))!.weekly_goal_points, inst.id);
       await audit(db, adult.familyId, adult.id, 'task.partial', 'task_instance', inst.id, { points, of: inst.points, note: note ?? null });
       return { id: inst.id, status: 'approved', outcome: 'partial', points };
@@ -240,7 +240,7 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
 
     if (action === 'return') {
       await db.query(`UPDATE task_instances SET status = 'rejected', review_outcome = 'returned', reviewed_by = $2, reviewed_at = now(), review_note = $3, returned_at = now(), returned_note = $3 WHERE id = $1`, [inst.id, adult.id, note ?? null]);
-      await notify(db, { userId: beneficiary, event: 'task_rejected', title: `«${inst.title}» necesita un repaso`, body: note ?? '', link: '/' });
+      await notify(db, { userId: beneficiary, event: 'task_rejected', title: `«${inst.title}» necesita un repaso`, body: note ? `${note} · ¡Casi está! 💪` : '¡Casi está! Dale otra vuelta 💪', link: '/' });
       await audit(db, adult.familyId, adult.id, 'task.return', 'task_instance', inst.id, { note: note ?? null });
       return { id: inst.id, status: 'rejected' };
     }
@@ -269,7 +269,7 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
       [inst.id, action === 'reject_penalty' ? 'penalized' : 'declined', penaltyPoints, penaltyApplied, adult.id, note],
     );
     const lost = [penaltyPoints ? `−${penaltyPoints} puntos` : '', penaltyApplied ? `−${penaltyApplied} min de pantalla` : ''].filter(Boolean).join(' y ');
-    await notify(db, { userId: beneficiary, event: 'task_rejected', title: `«${inst.title}» rechazada`, body: `${note}${lost ? ` · ${lost}` : ''}`, link: '/' });
+    await notify(db, { userId: beneficiary, event: 'task_rejected', emoji: '🙈', title: `«${inst.title}» rechazada`, body: `${note}${lost ? ` · ${lost}` : ''}`, link: '/' });
     await audit(db, adult.familyId, adult.id, action === 'reject' ? 'task.reject' : 'task.reject_penalty', 'task_instance', inst.id, { note, penaltyPoints, penaltyMinutes: penaltyApplied });
     return { id: inst.id, status: 'declined', penaltyPoints, penaltyMinutes: penaltyApplied };
   });
