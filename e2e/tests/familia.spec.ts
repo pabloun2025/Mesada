@@ -997,6 +997,9 @@ test.describe.serial('Familia completa', () => {
     await adult.screenshot({ path: `${SHOTS}/126-tarea-activar-cuanto-tiempo.png`, fullPage: true });
     await basura.getByRole('button', { name: '3 días' }).click();
     await expect(basura).toContainText('Activa hasta el');
+    // Al activarla, los hijos reciben un aviso que anima a ser el primero
+    const avisos = (await api(kid, 'get', '/notifications')).body.notifications;
+    expect(avisos.find((n: any) => n.kind === 'task_available')?.body).toContain('El primero que la haga se lleva');
 
     await kid.goto('/');
     const sec = kid.getByRole('heading', { name: 'Cuando haga falta' });

@@ -149,6 +149,22 @@ async function notifyAssigned(db: any, taskId: string, title: string, points: nu
   }
 }
 
+/** Aviso de «cuando haga falta» activada: anima a ser el primero (se la lleva quien la haga antes). */
+async function notifyAvailable(db: any, taskId: string, title: string, points: number, today: string) {
+  const kids = await many<{ id: string }>(
+    db,
+    `SELECT u.id FROM task_assignees a JOIN users u ON u.id = a.user_id WHERE a.task_id = $1 AND u.role = 'child' AND u.active`,
+    [taskId],
+  );
+  const prize = points > 0 ? `+${points} puntos para su paga` : 'el mérito';
+  const body = kids.length > 1
+    ? `El primero que la haga se lleva ${prize}. ¡A por ella!`
+    : points > 0 ? `Hazla y suma +${points} puntos para tu paga.` : '¡A por ella!';
+  for (const k of kids) {
+    await notify(db, { userId: k.id, event: 'task_available', title: `¡Toca «${title}»!`, body, link: '/', dedupeKey: `available:${taskId}:${today}:${k.id}` });
+  }
+}
+
 /** ¿Puede este hijo desmarcar la ocurrencia? Enviada y sin validar; si no pedía validación, hasta el final del día en que la marcó. */
 export function canUnmark(u: { id: string; role: string }, r: { completed_by: string | null; status: string; check_mode?: boolean; adult_reviewed?: boolean; completed_at: string | Date | null }, tz: string, today: string) {
   if (u.role !== 'child' || r.completed_by !== u.id || r.check_mode) return false;
@@ -222,10 +238,11 @@ export default async function taskRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const b = z.union([z.object({ pause: z.literal(true) }), z.object({ days: z.number().int().min(1).max(365).nullable() })]).parse(req.body);
     await tx(async (db) => {
-      const t = await one<{ recurrence: string; title: string }>(db, 'SELECT recurrence, title FROM tasks WHERE id = $1 AND family_id = $2 AND active AND NOT is_extra FOR UPDATE', [id, u.familyId]);
+      const t = await one<{ recurrence: string; title: string; points: number; start_date: string; end_date: string | null }>(db, 'SELECT recurrence, title, points, start_date, end_date FROM tasks WHERE id = $1 AND family_id = $2 AND active AND NOT is_extra FOR UPDATE', [id, u.familyId]);
       if (!t) throw notFound('Tarea no encontrada');
       if (t.recurrence !== 'as_needed') throw badRequest('Solo las tareas «cuando haga falta» se activan y pausan así', 'not_as_needed');
       const today = familyToday(await getFamily(db, u.familyId));
+      const wasActive = t.start_date <= today && (!t.end_date || t.end_date >= today);
       if ('pause' in b) {
         const y = addDays(today, -1);
         await db.query('UPDATE tasks SET end_date = $3, start_date = LEAST(start_date, $3::date), updated_at = now() WHERE id = $1 AND family_id = $2', [id, u.familyId, y]);
@@ -234,6 +251,8 @@ export default async function taskRoutes(app: FastifyInstance) {
       }
       await audit(db, u.familyId, u.id, 'pause' in b ? 'task.pause' : 'task.activate', 'task', id, 'pause' in b ? {} : { days: b.days });
       await regenerateTask(db, u.familyId, id);
+      // Al pasar de pausa a activa se avisa a los hijos: quien llegue primero se lleva los puntos.
+      if (!('pause' in b) && !wasActive) await notifyAvailable(db, id, t.title, t.points, today);
     });
     return { task: await one(getPool(), `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id, rw.id`, [id]) };
   });
