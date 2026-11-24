@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { CalendarDays, ChevronLeft, ChevronRight, ListChecks, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, ListChecks, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import { api, del, post, put } from '../lib/api';
 import { addDays, fmtDate, WEEKDAYS, WEEKDAYS_LONG } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
@@ -330,6 +330,85 @@ function WeekView({ today }: { today: string }) {
   );
 }
 
+function TaskCard({ t, onEdit, onArchive, children }: { t: Task; onEdit: () => void; onArchive: () => void; children?: ReactNode }) {
+  return (
+    <li className="card p-3.5">
+      <div className="flex items-center gap-3">
+        <span aria-hidden className="flex size-12 shrink-0 items-center justify-center rounded-[var(--radius-tile)] bg-[var(--chip)] text-2xl">{t.icon}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-bold">{t.title}</p>
+          <p className="truncate text-sm muted">{describeRecurrence(t)} · {t.assignees.length > 1 ? MODE_LABEL[t.assignment_mode] : t.assignees[0]?.display_name}</p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {t.check_mode ? <Badge tone="sky">La marca un adulto{t.penalty_minutes ? ` · −${minutesLabel(t.penalty_minutes)}` : ''}</Badge> : null}
+            {t.due_time || t.due_time_weekend ? <Badge>⏰ {t.due_time?.slice(0, 5) ?? '—'}{t.due_time_weekend ? ` / ${t.due_time_weekend.slice(0, 5)}` : ''}{t.late_percent < 100 ? ` · ${t.late_percent} %` : ''}</Badge> : null}
+            <BonusChip bonus={t.bonus} />
+          </div>
+          <div className="mt-1.5 flex -space-x-1.5">
+            {t.assignees.map((a) => <Avatar key={a.id} name={a.display_name} avatar={a.avatar} colorKey={a.color} size={22} ring />)}
+          </div>
+        </div>
+        <PointsPill points={t.points} />
+        <div className="flex flex-col">
+          <IconButton label={`Editar «${t.title}»`} onClick={onEdit}><Pencil size={17} /></IconButton>
+          <IconButton label={`Archivar «${t.title}»`} onClick={onArchive}><Trash2 size={17} /></IconButton>
+        </div>
+      </div>
+      {children}
+    </li>
+  );
+}
+
+const DURATIONS: { days: number | null; label: string }[] = [
+  { days: 1, label: 'Solo hoy' }, { days: 3, label: '3 días' }, { days: 7, label: '1 semana' }, { days: null, label: 'Sin fin' },
+];
+
+/** Estado de una tarea «cuando haga falta» y su interruptor: pausar en un toque, activar eligiendo cuánto tiempo. */
+function Availability({ t, today }: { t: Task; today: string }) {
+  const toast = useToast();
+  const invalidate = useInvalidateAll();
+  const [choosing, setChoosing] = useState(false);
+  const set = useMutation({
+    mutationFn: (b: { pause: true } | { days: number | null }) => post<{ task: Task }>(`/tasks/${t.id}/availability`, b),
+    onSuccess: (r, b) => {
+      setChoosing(false);
+      toast('pause' in b ? `«${t.title}» en pausa` : r.task.end_date ? `«${t.title}» activa hasta el ${fmtDate(r.task.end_date, { weekday: 'long', day: 'numeric' })}` : `«${t.title}» activa`);
+      invalidate();
+    },
+    onError: (e: Error) => toast(e.message, 'error'),
+  });
+  const ended = !!t.end_date && t.end_date < today;
+  const active = !ended && t.start_date <= today;
+  const status = ended ? 'En pausa' : !active ? `Desde el ${fmtDate(t.start_date, { weekday: 'long', day: 'numeric' })}`
+    : t.end_date ? (t.end_date === today ? 'Activa solo hoy' : `Activa hasta el ${fmtDate(t.end_date, { weekday: 'long', day: 'numeric' })}`) : 'Activa';
+  return (
+    <div className="mt-3 border-t border-[var(--line)] pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={active ? 'leaf' : 'muted'}>{status}</Badge>
+        <div className="ml-auto flex gap-2">
+          {active ? (
+            <>
+              <Button size="sm" variant="secondary" disabled={set.isPending} onClick={() => setChoosing((v) => !v)} aria-expanded={choosing} aria-label={`Cambiar cuánto tiempo está activa «${t.title}»`}>Cambiar</Button>
+              <Button size="sm" variant="secondary" loading={set.isPending && !choosing} onClick={() => set.mutate({ pause: true })} aria-label={`Pausar «${t.title}»`}><Pause size={16} aria-hidden /> Pausar</Button>
+            </>
+          ) : (
+            <Button size="sm" variant="success" disabled={set.isPending} onClick={() => setChoosing((v) => !v)} aria-expanded={choosing} aria-label={`Activar «${t.title}»`}><Play size={16} aria-hidden /> Activar</Button>
+          )}
+        </div>
+      </div>
+      {choosing ? (
+        <div className="mt-3" role="group" aria-label={`¿Cuánto tiempo activa «${t.title}»?`}>
+          <p className="mb-2 text-sm font-bold">¿Cuánto tiempo?</p>
+          <div className="flex flex-wrap gap-2">
+            {DURATIONS.map((d) => (
+              <Button key={d.label} size="sm" variant="secondary" className="whitespace-nowrap" disabled={set.isPending} onClick={() => set.mutate({ days: d.days })}>{d.label}</Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function Tasks() {
   const [view, setView] = useState<'list' | 'week'>('list');
   const [editing, setEditing] = useState<{ draft: Draft; key: number } | null>(null);
@@ -342,6 +421,9 @@ export default function Tasks() {
   const todayStr = today.data?.today ?? new Date().toISOString().slice(0, 10);
 
   const open = (t: Task | null) => setEditing({ draft: toDraft(t, todayStr), key: Date.now() });
+  const all = tasks.data?.tasks ?? [];
+  const asNeeded = all.filter((t) => t.recurrence === 'as_needed');
+  const others = all.filter((t) => t.recurrence !== 'as_needed');
 
   return (
     <div>
@@ -353,31 +435,30 @@ export default function Tasks() {
         <WeekView today={todayStr} />
       ) : tasks.isLoading ? (
         <Loading />
-      ) : tasks.data?.tasks.length ? (
-        <ul className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-          {tasks.data.tasks.map((t) => (
-            <li key={t.id} className="card flex items-center gap-3 p-3.5">
-              <span aria-hidden className="flex size-12 shrink-0 items-center justify-center rounded-[var(--radius-tile)] bg-[var(--chip)] text-2xl">{t.icon}</span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-bold">{t.title}</p>
-                <p className="truncate text-sm muted">{describeRecurrence(t)} · {t.assignees.length > 1 ? MODE_LABEL[t.assignment_mode] : t.assignees[0]?.display_name}</p>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {t.check_mode ? <Badge tone="sky">La marca un adulto{t.penalty_minutes ? ` · −${minutesLabel(t.penalty_minutes)}` : ''}</Badge> : null}
-                  {t.due_time || t.due_time_weekend ? <Badge>⏰ {t.due_time?.slice(0, 5) ?? '—'}{t.due_time_weekend ? ` / ${t.due_time_weekend.slice(0, 5)}` : ''}{t.late_percent < 100 ? ` · ${t.late_percent} %` : ''}</Badge> : null}
-                  <BonusChip bonus={t.bonus} />
-                </div>
-                <div className="mt-1.5 flex -space-x-1.5">
-                  {t.assignees.map((a) => <Avatar key={a.id} name={a.display_name} avatar={a.avatar} colorKey={a.color} size={22} ring />)}
-                </div>
-              </div>
-              <PointsPill points={t.points} />
-              <div className="flex flex-col">
-                <IconButton label={`Editar «${t.title}»`} onClick={() => open(t)}><Pencil size={17} /></IconButton>
-                <IconButton label={`Archivar «${t.title}»`} onClick={() => confirm(`¿Archivar «${t.title}»? Se quitarán sus próximas apariciones.`) && remove.mutate(t.id)}><Trash2 size={17} /></IconButton>
-              </div>
-            </li>
-          ))}
-        </ul>
+      ) : all.length ? (
+        <>
+          {asNeeded.length ? (
+            <section className="mb-6" aria-label="Cuando haga falta">
+              <h2 className="mb-1 text-lg font-bold">Cuando haga falta</h2>
+              <p className="mb-3 text-sm muted">Actívalas solo cuando toque, por unos días o hasta que las pauses.</p>
+              <ul className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                {asNeeded.map((t) => (
+                  <TaskCard key={t.id} t={t} onEdit={() => open(t)} onArchive={() => confirm(`¿Archivar «${t.title}»? Se quitarán sus próximas apariciones.`) && remove.mutate(t.id)}>
+                    <Availability t={t} today={todayStr} />
+                  </TaskCard>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {others.length && asNeeded.length ? <h2 className="mb-3 text-lg font-bold">Con fecha o repetición</h2> : null}
+          {others.length ? (
+            <ul className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+              {others.map((t) => (
+                <TaskCard key={t.id} t={t} onEdit={() => open(t)} onArchive={() => confirm(`¿Archivar «${t.title}»? Se quitarán sus próximas apariciones.`) && remove.mutate(t.id)} />
+              ))}
+            </ul>
+          ) : null}
+        </>
       ) : (
         <div className="card">
           <Empty icon={<ListChecks />} title="Aún no hay tareas">Empieza por algo diario y sencillo, como hacer la cama.</Empty>

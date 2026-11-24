@@ -983,7 +983,20 @@ test.describe.serial('Familia completa', () => {
     await expect(d.getByText('si nadie la hace, no pasa nada')).toBeVisible();
     await adult.screenshot({ path: `${SHOTS}/28-tarea-cuando-haga-falta.png` });
     await d.getByRole('button', { name: 'Crear tarea' }).click();
-    await expect(adult.getByRole('listitem').filter({ hasText: 'Sacar la basura' })).toContainText('Cuando haga falta');
+    const basura = adult.getByRole('listitem').filter({ hasText: 'Sacar la basura' });
+    await expect(basura).toContainText('Cuando haga falta');
+    await expect(basura).toContainText('Activa');
+
+    // Pausar en un toque: el hijo deja de verla. Activar por 3 días: vuelve y se ve hasta cuándo.
+    await basura.getByRole('button', { name: 'Pausar «Sacar la basura»' }).click();
+    await expect(adult.getByText('«Sacar la basura» en pausa')).toBeVisible();
+    await expect(basura).toContainText('En pausa');
+    await kid.goto('/');
+    await expect(kid.getByRole('button', { name: 'Marcar «Sacar la basura» como hecha' })).toHaveCount(0);
+    await basura.getByRole('button', { name: 'Activar «Sacar la basura»' }).click();
+    await adult.screenshot({ path: `${SHOTS}/126-tarea-activar-cuanto-tiempo.png`, fullPage: true });
+    await basura.getByRole('button', { name: '3 días' }).click();
+    await expect(basura).toContainText('Activa hasta el');
 
     await kid.goto('/');
     const sec = kid.getByRole('heading', { name: 'Cuando haga falta' });
