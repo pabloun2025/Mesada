@@ -13,6 +13,7 @@ export interface EventDef {
 
 export const EVENTS = {
   task_assigned: { label: 'Nueva tarea asignada', audience: 'child', defaults: [] },
+  task_available: { label: 'Tarea «cuando haga falta» activada', audience: 'child', defaults: ['whatsapp'] },
   task_reminder: { label: 'Recordatorio de tareas del día', audience: 'child', defaults: ['whatsapp'] },
   task_due_soon: { label: 'Tarea a punto de vencer', audience: 'child', defaults: ['whatsapp'] },
   task_submitted: { label: 'Tarea enviada para validar', audience: 'adult', defaults: ['whatsapp'] },

@@ -42,6 +42,21 @@ describe('Activar y pausar «cuando haga falta»', () => {
     expect(s.body.task.end_date).toBeNull();
   });
 
+  it('al activarla se avisa a los hijos animando a ser el primero; pausar o cambiar el plazo no avisa', async () => {
+    const t = await mk({ points: 20 });
+    await F.mama.post(`/api/tasks/${t.id}/availability`, { pause: true });
+    const notes = async () => ((await F.luciaC.get('/api/notifications')).body.notifications as any[]).filter((n) => n.kind === 'task_available');
+    expect(await notes()).toHaveLength(0);
+    await F.mama.post(`/api/tasks/${t.id}/availability`, { days: 3 });
+    const [n] = await notes();
+    expect(n.title).toBe('¡Toca «Descargar el lavavajillas»!');
+    expect(n.body).toBe('El primero que la haga se lleva +20 puntos para su paga. ¡A por ella!');
+    expect(((await F.hugoC.get('/api/notifications')).body.notifications as any[]).some((x) => x.kind === 'task_available')).toBe(true);
+    // Ya activa: cambiar el plazo no vuelve a avisar
+    await F.mama.post(`/api/tasks/${t.id}/availability`, { days: 7 });
+    expect(await notes()).toHaveLength(1);
+  });
+
   it('si ya la hicieron hoy, pausar no borra lo hecho', async () => {
     const t = await mk();
     const [i] = await openToday(t.id);
