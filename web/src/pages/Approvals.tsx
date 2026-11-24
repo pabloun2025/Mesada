@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, CircleCheckBig, Gift, X } from 'lucide-react';
+import { Check, ChevronDown, CircleCheckBig, Gift, RotateCcw, X } from 'lucide-react';
 import { api, post } from '../lib/api';
 import { addDays, fmtDate, relative } from '../lib/format';
 import { useDecideRedemption, useInvalidateAll } from '../lib/hooks';
@@ -16,7 +16,7 @@ function CheckTasks({ today }: { today: string }) {
   const invalidate = useInvalidateAll();
   const list = useQuery({
     queryKey: ['instances', 'checks', today],
-    queryFn: () => api<{ instances: Instance[] }>(`/instances?from=${addDays(today, -6)}&to=${today}`),
+    queryFn: () => api<{ instances: Instance[] }>(`/instances?from=${addDays(today, -7)}&to=${today}`),
   });
   const mark = useMutation({
     mutationFn: (v: { id: string; met: boolean }) => post(`/instances/${v.id}/check`, { met: v.met }),
@@ -26,12 +26,14 @@ function CheckTasks({ today }: { today: string }) {
     },
     onError: (e: Error) => toast(e.message, 'error'),
   });
-  // Hoy se muestran todas (para poder corregir); de días anteriores, solo las que quedaron sin marcar.
-  const items = (list.data?.instances ?? []).filter((i) => i.check_mode && (i.due_date === today || i.check_met === null));
-  if (!items.length) return null;
+  const checks = (list.data?.instances ?? []).filter((i) => i.check_mode && i.assignee_id);
+  // Por comprobar solo queda lo que falta decidir; lo ya marcado pasa al historial, donde se puede cambiar.
+  const items = checks.filter((i) => i.check_met === null).sort((a, b) => b.due_date.localeCompare(a.due_date));
+  const done = checks.filter((i) => i.check_met !== null).sort((a, b) => b.due_date.localeCompare(a.due_date));
+  if (!items.length && !done.length) return null;
   return (
     <section className="mb-8">
-      <SectionTitle>Para comprobar</SectionTitle>
+      {items.length ? <SectionTitle>Para comprobar</SectionTitle> : null}
       <ul className="space-y-3">
         {items.map((i) => (
           <li key={i.id} className="card p-3.5">
@@ -42,12 +44,11 @@ function CheckTasks({ today }: { today: string }) {
                 <p className="flex flex-wrap items-center gap-1.5 text-sm muted">
                   {i.assignee_name && <Avatar name={i.assignee_name} avatar={i.assignee_avatar} colorKey={i.assignee_color} size={18} />}
                   {i.assignee_name}{i.due_date !== today ? ` · ${fmtDate(i.due_date, { weekday: 'long', day: 'numeric' })}` : ''}
-                  {i.check_met === true ? <Badge tone="leaf">Cumplida</Badge> : i.check_met === false ? <Badge tone="berry">No cumplida</Badge> : null}
                 </p>
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant={i.check_met === false ? 'danger' : 'secondary'} className="flex-1" size="sm" disabled={mark.isPending} onClick={() => mark.mutate({ id: i.id, met: false })}
+              <Button variant="secondary" className="flex-1" size="sm" disabled={mark.isPending} onClick={() => mark.mutate({ id: i.id, met: false })}
                 aria-label={`No cumplida: «${i.title}» de ${i.assignee_name}`}>
                 <X size={16} /> No cumplida{i.penalty_minutes ? ` (−${i.penalty_minutes} min)` : ''}
               </Button>
@@ -56,12 +57,38 @@ function CheckTasks({ today }: { today: string }) {
                 <Check size={16} /> Cumplida
               </Button>
             </div>
-            {i.check_met === null && (i.points > 0 || i.success_minutes > 0) ? (
+            {i.points > 0 || i.success_minutes > 0 ? (
               <p className="mt-2 text-sm muted">Si se cumple: {[i.points > 0 ? `+${i.points} puntos` : '', i.success_minutes ? `+${i.success_minutes} min de pantalla` : ''].filter(Boolean).join(' · ')}</p>
             ) : null}
           </li>
         ))}
       </ul>
+      {done.length ? (
+        <details className="card group mt-3 p-0">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-bold [&::-webkit-details-marker]:hidden">
+            <span>Ya comprobadas · últimos 7 días ({done.length})</span>
+            <ChevronDown size={18} aria-hidden className="shrink-0 transition-transform group-open:rotate-180" />
+          </summary>
+          <ul className="divide-y divide-[var(--line)] border-t border-[var(--line)]">
+            {done.map((i) => (
+              <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+                <span aria-hidden className="text-xl">{i.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold">{i.title}</p>
+                  <p className="flex flex-wrap items-center gap-1.5 text-sm muted">
+                    {i.assignee_name} · {i.due_date === today ? 'hoy' : fmtDate(i.due_date, { weekday: 'long', day: 'numeric' })}
+                    {i.check_met ? <Badge tone="leaf">Cumplida</Badge> : <Badge tone="berry">No cumplida</Badge>}
+                  </p>
+                </div>
+                <Button variant="secondary" size="sm" disabled={mark.isPending} onClick={() => mark.mutate({ id: i.id, met: !i.check_met })}
+                  aria-label={`Cambiar a ${i.check_met ? 'no cumplida' : 'cumplida'}: «${i.title}» de ${i.assignee_name}`}>
+                  <RotateCcw size={16} aria-hidden /> {i.check_met ? 'Cambiar a no cumplida' : 'Cambiar a cumplida'}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </section>
   );
 }

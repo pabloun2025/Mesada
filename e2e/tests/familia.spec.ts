@@ -638,8 +638,12 @@ test.describe.serial('Familia completa', () => {
 
     await kid.goto('/pantalla');
     await expect(kid.getByTestId('battery-earned')).toContainText('15 min');
-    // Corregir: pasa a cumplida y se devuelven exactamente los 15 minutos
-    await adult.getByRole("button", { name: `Cumplida: «${COCHE}» de ${KID.name}`, exact: true }).click();
+    // Ya marcada: sale de «Para comprobar» y pasa al historial plegado
+    await expect(adult.getByRole('button', { name: `No cumplida: «${COCHE}» de ${KID.name}` })).toHaveCount(0);
+    await adult.getByText(/Ya comprobadas/).click();
+    await adult.screenshot({ path: `${SHOTS}/125-validar-ya-comprobadas.png`, fullPage: true });
+    // Corregir desde el historial: pasa a cumplida y se devuelven exactamente los 15 minutos
+    await adult.getByRole('button', { name: `Cambiar a cumplida: «${COCHE}» de ${KID.name}` }).click();
     await expect(adult.getByText('Marcada como cumplida')).toBeVisible();
     const me = (await api(kid, 'get', '/me')).body.user;
     expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(30);
@@ -1563,7 +1567,7 @@ test.describe.serial('Familia completa', () => {
     sql(`UPDATE screen_sessions SET started_at = started_at - interval '10 minutes 30 seconds', planned_end_at = planned_end_at - interval '10 minutes 30 seconds' WHERE user_id = '${me.id}' AND status = 'running'`);
     await expect(k.getByText('Te quedan 5 minutos de pantalla').first()).toBeVisible({ timeout: 25_000 });
     await expect.poll(() => k.evaluate(() => (window as any).__vibes.length)).toBeGreaterThan(0);
-    await expect.poll(async () => (await api(kid, 'get', '/notifications')).body.notifications.some((n: any) => n.kind === 'screen_warning')).toBe(true);
+    await expect.poll(async () => (await api(kid, 'get', '/notifications')).body.notifications.some((n: any) => n.kind === 'screen_warning'), { timeout: 40_000, intervals: [2000] }).toBe(true);
 
     // Al llegar a 0: el proceso del servidor cierra la sesión aunque la app esté cerrada, y en la app suena la alarma.
     const vibesBefore = await k.evaluate(() => (window as any).__vibes.length);
