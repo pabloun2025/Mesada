@@ -114,7 +114,7 @@ export async function grantBonus(db: Db, c: GrantCtx) {
   await applyGrantEffects(db, grant, c);
   if (t.bonus_surprise) {
     // Sin contenido: el aviso no puede desvelar la sorpresa (también sale por WhatsApp).
-    await notify(db, { userId: c.userId, event: 'bonus_won', title: '🎁 ¡Has ganado una sorpresa!', body: 'Ábrela en DiploP.', link: '/', dedupeKey: `bonus:${grant.id}` });
+    await notify(db, { userId: c.userId, event: 'bonus_won', title: '🎁 ¡Has ganado una sorpresa!', body: '¡Ábrela en DiploP y descubre qué es! 🤩', link: '/', dedupeKey: `bonus:${grant.id}` });
   }
   return grant;
 }

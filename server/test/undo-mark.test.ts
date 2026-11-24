@@ -249,7 +249,7 @@ describe('Desmarcar retira las insignias que ya no se cumplen (D55)', () => {
     const t = await mkTask({ requiresApproval: false });
     await F.luciaC.post(`/api/instances/${t.id}/complete`);
     expect(await badges(F.ids.lucia)).toContain('first_task');
-    const notes = async () => (await many(pool(), `SELECT title FROM notifications WHERE user_id = $1 AND title LIKE 'Nueva insignia%'`, [F.ids.lucia])).length;
+    const notes = async () => (await many(pool(), `SELECT title FROM notifications WHERE user_id = $1 AND title LIKE '%Nueva insignia%'`, [F.ids.lucia])).length;
     expect(await notes()).toBe(1);
     const r = await unmark(F.luciaC, t.id);
     expect(r.body.badgesRevoked).toContain('first_task');

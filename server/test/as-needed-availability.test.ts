@@ -49,7 +49,7 @@ describe('Activar y pausar «cuando haga falta»', () => {
     expect(await notes()).toHaveLength(0);
     await F.mama.post(`/api/tasks/${t.id}/availability`, { days: 3 });
     const [n] = await notes();
-    expect(n.title).toBe('¡Toca «Descargar el lavavajillas»!');
+    expect(n.title).toContain('¡Toca «Descargar el lavavajillas»!');
     expect(n.body).toBe('El primero que la haga se lleva +20 puntos para su paga. ¡A por ella!');
     expect(((await F.hugoC.get('/api/notifications')).body.notifications as any[]).some((x) => x.kind === 'task_available')).toBe(true);
     // Ya activa: cambiar el plazo no vuelve a avisar

@@ -698,7 +698,7 @@ test.describe.serial('Familia completa', () => {
 
     // El aviso del hijo (campana) dice quién, cuánto, cómo y cuánto le queda
     const n = (await api(kid, 'get', '/notifications')).body.notifications.find((x: any) => x.kind === 'payment');
-    expect(n.title).toBe(`${ADULT.name} te ha pagado 5,00 € por transferencia.`);
+    expect(n.title).toContain(`${ADULT.name} te ha pagado 5,00 € por transferencia.`);
     expect(n.body).toBe(`Te quedan ${((before - 500) / 100).toFixed(2).replace('.', ',')} €.`);
     await adult.screenshot({ path: `${SHOTS}/16-panel-pagar.png`, fullPage: true });
   });
@@ -760,7 +760,7 @@ test.describe.serial('Familia completa', () => {
     await expect(adult.getByText('Confirmada: +5 puntos por ser honesto')).toBeVisible();
     expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available).toBe(pts + 5);
     const notes = (await api(kid, 'get', '/notifications')).body.notifications;
-    expect(notes.some((x: any) => x.title === '+5 puntos por ser honesto')).toBe(true);
+    expect(notes.some((x: any) => x.title.includes('+5 puntos por ser honesto'))).toBe(true);
   });
 
   test('banco: el hijo canjea puntos por dinero al momento y los adultos lo ven', async () => {
@@ -795,7 +795,7 @@ test.describe.serial('Familia completa', () => {
     await kid.screenshot({ path: `${SHOTS}/20-hijo-banco-375.png`, fullPage: true });
 
     const n = (await api(adult, 'get', '/notifications')).body.notifications.find((x: any) => x.kind === 'points_exchanged');
-    expect(n.title).toBe(`${KID.name} ha cambiado 50 puntos por 2,50 €`);
+    expect(n.title).toContain(`${KID.name} ha cambiado 50 puntos por 2,50 €`);
   });
 
   test('banco: el hijo retira dinero y el adulto lo paga', async () => {
@@ -832,7 +832,7 @@ test.describe.serial('Familia completa', () => {
     await pr.getByRole('button', { name: 'Cerrar', exact: true }).click();
     expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.cents_pending).toBe(before - 400);
     const n = (await api(kid, 'get', '/notifications')).body.notifications.find((x: any) => x.kind === 'payout_decided' && x.title.includes('4,00'));
-    expect(n.title).toBe(`${ADULT.name} te ha pagado 4,00 € en efectivo.`);
+    expect(n.title).toContain(`${ADULT.name} te ha pagado 4,00 € en efectivo.`);
   });
 
   test('banca familiar: el adulto aprueba un retiro desde «Por aprobar» eligiendo la forma de pago', async () => {
@@ -870,7 +870,7 @@ test.describe.serial('Familia completa', () => {
     await expect(adult.getByText('Nada por aprobar. Todo al día.')).toBeVisible();
     expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.cents_pending).toBe(before - 150);
     const n = (await api(kid, 'get', '/notifications')).body.notifications.find((x: any) => x.kind === 'payout_decided' && x.title.includes('1,50'));
-    expect(n.title).toBe(`${ADULT.name} te ha pagado 1,50 € por Bizum.`);
+    expect(n.title).toContain(`${ADULT.name} te ha pagado 1,50 € por Bizum.`);
     // El extracto del hijo lo muestra como retiro pagado
     await kid.goto('/mesada');
     await expect(kid.getByText('Retiro', { exact: true }).first()).toBeVisible();
@@ -1571,7 +1571,7 @@ test.describe.serial('Familia completa', () => {
 
     // El padre se entera y lo ve en su pantalla «Pantalla».
     const started = (await api(adult, 'get', '/notifications')).body.notifications.find((n: any) => n.kind === 'screen_started');
-    expect(started.title).toBe(`${KID.name} ha empezado su pantalla`);
+    expect(started.title).toContain(`${KID.name} ha empezado su pantalla`);
     const ap = await newAdultPhone(browser);
     await ap.goto('/pantalla');
     await expect(ap.getByRole('heading', { name: 'Pantalla', exact: true })).toBeVisible();
@@ -1597,7 +1597,7 @@ test.describe.serial('Familia completa', () => {
     expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(before - 15);
     expect((await api(kid, 'get', `/screen/${me.id}/state`)).body.session).toBeNull();
     const ends = async (page: Page) => (await api(page, 'get', '/notifications')).body.notifications.filter((n: any) => n.kind === 'screen_ended');
-    expect((await ends(kid))[0].title).toBe('Se acabó el tiempo de pantalla');
+    expect((await ends(kid))[0].title).toContain('Se acabó el tiempo de pantalla');
     expect((await ends(adult))[0].title).toContain(`A ${KID.name} se le acabó el tiempo de pantalla`);
 
     // «Me he pasado»: se anota de más y se descuenta de la semana siguiente (no ahora).
@@ -1635,7 +1635,7 @@ test.describe.serial('Familia completa', () => {
     await expect(ap.getByText(`Temporizador encendido para ${KID.name}`)).toBeVisible();
     await expect(ap.getByTestId('countdown')).toBeVisible();
     const kidNote = (await api(kid, 'get', '/notifications')).body.notifications.find((n: any) => n.kind === 'screen_parent_started' && /puesto en marcha/.test(n.title));
-    expect(kidNote.title).toBe(`${ADULT.name} ha puesto en marcha tu pantalla`);
+    expect(kidNote.title).toContain(`${ADULT.name} ha puesto en marcha tu pantalla`);
     // El hijo lo ve en su móvil.
     await kid.setViewportSize({ width: 375, height: 812 });
     await kid.goto('/pantalla');
@@ -1645,7 +1645,7 @@ test.describe.serial('Familia completa', () => {
     await ap.getByRole('button', { name: `Parar el temporizador de ${KID.name}` }).click();
     await expect(ap.getByText(/Parado\. Ha usado \d+ min/)).toBeVisible();
     const stopped = (await api(kid, 'get', '/notifications')).body.notifications.find((n: any) => n.kind === 'screen_stopped');
-    expect(stopped.title).toBe(`${ADULT.name} ha parado tu pantalla`);
+    expect(stopped.title).toContain(`${ADULT.name} ha parado tu pantalla`);
 
     // «Dar minutos» sin temporizador: el saldo queda corto y se cobra con puntos.
     const bal = (await api(kid, 'get', `/screen/${me.id}`)).body.balance;

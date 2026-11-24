@@ -10,6 +10,14 @@ export interface NotifyInput {
   link?: string | null;
   /** Clave de deduplicación: el mismo aviso nunca se envía dos veces por el mismo canal. */
   dedupeKey?: string | null;
+  /** Emoji propio para este aviso (si no, el del evento). */
+  emoji?: string;
+}
+
+const STARTS_WITH_EMOJI = /^\p{Extended_Pictographic}/u;
+/** Título con emoji delante, salvo que el texto ya empiece por uno. */
+export function cheerfulTitle(n: Pick<NotifyInput, 'event' | 'title' | 'emoji'>) {
+  return STARTS_WITH_EMOJI.test(n.title) ? n.title : `${n.emoji ?? EVENTS[n.event].emoji} ${n.title}`;
 }
 
 interface Recipient {
@@ -69,7 +77,8 @@ export async function effectiveChannels(db: Db, r: Recipient, event: EventKey): 
  * Notifica a una persona: aviso en la aplicación y, si procede, encola correo/WhatsApp.
  * Debe llamarse dentro de la transacción de la acción que lo origina (patrón outbox).
  */
-export async function notify(db: Db, n: NotifyInput) {
+export async function notify(db: Db, n0: NotifyInput) {
+  const n = { ...n0, title: cheerfulTitle(n0) };
   const r = await loadRecipient(db, n.userId);
   if (!r || !r.active) return;
   const inApp = await db.query(
