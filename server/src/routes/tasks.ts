@@ -213,6 +213,31 @@ export default async function taskRoutes(app: FastifyInstance) {
     return { task: await one(getPool(), `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id, rw.id`, [id]) };
   });
 
+  /**
+   * «Cuando haga falta»: activar por unos días (o sin fin) o pausar en un toque.
+   * Reutiliza las fechas de inicio y fin: pausar = terminó ayer; activar = desde hoy hasta hoy + días − 1.
+   */
+  app.post('/api/tasks/:id/availability', async (req) => {
+    const u = requireAdult(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const b = z.union([z.object({ pause: z.literal(true) }), z.object({ days: z.number().int().min(1).max(365).nullable() })]).parse(req.body);
+    await tx(async (db) => {
+      const t = await one<{ recurrence: string; title: string }>(db, 'SELECT recurrence, title FROM tasks WHERE id = $1 AND family_id = $2 AND active AND NOT is_extra FOR UPDATE', [id, u.familyId]);
+      if (!t) throw notFound('Tarea no encontrada');
+      if (t.recurrence !== 'as_needed') throw badRequest('Solo las tareas «cuando haga falta» se activan y pausan así', 'not_as_needed');
+      const today = familyToday(await getFamily(db, u.familyId));
+      if ('pause' in b) {
+        const y = addDays(today, -1);
+        await db.query('UPDATE tasks SET end_date = $3, start_date = LEAST(start_date, $3::date), updated_at = now() WHERE id = $1 AND family_id = $2', [id, u.familyId, y]);
+      } else {
+        await db.query('UPDATE tasks SET start_date = $3, end_date = $4, updated_at = now() WHERE id = $1 AND family_id = $2', [id, u.familyId, today, b.days ? addDays(today, b.days - 1) : null]);
+      }
+      await audit(db, u.familyId, u.id, 'pause' in b ? 'task.pause' : 'task.activate', 'task', id, 'pause' in b ? {} : { days: b.days });
+      await regenerateTask(db, u.familyId, id);
+    });
+    return { task: await one(getPool(), `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id, rw.id`, [id]) };
+  });
+
   app.delete('/api/tasks/:id', async (req) => {
     const u = requireAdult(req);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);

@@ -268,3 +268,7 @@ Formato: contexto → decisión → consecuencias. Las más recientes van al fin
 ## D72 · «Descansos de pantalla», no «castigos» (23/11)
 
 Por petición del dueño, en la interfaz y los avisos no se habla de castigos ni de bloqueos: se llaman **descansos de pantalla** («Programar descanso», «Terminar ya», «el descanso termina o se acorta»). El código interno conserva los nombres `blocks` y `screen_block`.
+
+## D73 · Activar y pausar «cuando haga falta» en un toque (24/11)
+
+Las tareas «cuando haga falta» (descargar el lavavajillas, doblar la ropa) salen en su propio bloque arriba de Tareas, con su estado («Activa», «Activa hasta el jueves 26», «En pausa»). **Pausar** es un toque; **Activar** pide cuánto tiempo: solo hoy, 3 días, 1 semana o sin fin. No hay columna nueva: se reutilizan las fechas de inicio y fin (pausar = terminó ayer; activar = desde hoy hasta hoy + días − 1). Lo ya hecho hoy no se borra al pausar. API: `POST /api/tasks/:id/availability` con `{pause:true}` o `{days: n | null}`, solo adultos.
