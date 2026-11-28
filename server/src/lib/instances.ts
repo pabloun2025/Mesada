@@ -57,7 +57,7 @@ export async function ensureInstances(db: Db, familyId: string, opts: { from?: s
     [familyId, opts.taskId ?? null],
   );
 
-  const rows: [string, string | null, string, number][] = []; // task_id, assignee, date, points
+  const rows: [string, string | null, string, number, boolean][] = []; // task_id, assignee, date, points, reconstructed_history
   for (const t of tasks) {
     if (t.assignees.length === 0) continue;
     // Las tareas puntuales vencidas también se materializan aunque queden fuera de la ventana.
@@ -66,18 +66,20 @@ export async function ensureInstances(db: Db, familyId: string, opts: { from?: s
     if (t.recurrence === 'once' && (t.start_date > to)) continue;
     if (t.recurrence === 'as_needed') {
       // Una sola ocurrencia compartida, la de hoy; las de días anteriores sin hacer se borran abajo (no son fallo).
-      if (occursOn(t, today)) rows.push([t.id, null, today, t.points]);
+      if (occursOn(t, today)) rows.push([t.id, null, today, t.points, false]);
       continue;
     }
     for (let d = start; d <= end; d = addDays(d, 1)) {
       if (!occursOn(t, d)) continue;
+      // Las puntuales llevan una fecha elegida explícitamente. Una recurrente añadida a un día pasado usa el reparto actual.
+      const reconstructed = d < today && t.recurrence !== 'once';
       if (t.assignment_mode === 'individual') {
-        for (const a of t.assignees) rows.push([t.id, a, d, t.points]);
+        for (const a of t.assignees) rows.push([t.id, a, d, t.points, reconstructed]);
       } else if (t.assignment_mode === 'shared') {
-        rows.push([t.id, null, d, t.points]);
+        rows.push([t.id, null, d, t.points, reconstructed]);
       } else {
         const idx = occurrenceIndex(t, d) % t.assignees.length;
-        rows.push([t.id, t.assignees[idx], d, t.points]);
+        rows.push([t.id, t.assignees[idx], d, t.points, reconstructed]);
       }
     }
   }
@@ -85,11 +87,11 @@ export async function ensureInstances(db: Db, familyId: string, opts: { from?: s
   if (rows.length) {
     // Inserción por lotes con unnest; el índice único evita duplicados.
     await db.query(
-      `INSERT INTO task_instances(task_id, family_id, assignee_id, due_date, points)
-       SELECT x.task_id, $1, x.assignee_id, x.due_date, x.points
-         FROM unnest($2::uuid[], $3::uuid[], $4::date[], $5::int[]) AS x(task_id, assignee_id, due_date, points)
+      `INSERT INTO task_instances(task_id, family_id, assignee_id, due_date, points, reconstructed_history)
+       SELECT x.task_id, $1, x.assignee_id, x.due_date, x.points, x.reconstructed_history
+         FROM unnest($2::uuid[], $3::uuid[], $4::date[], $5::int[], $6::boolean[]) AS x(task_id, assignee_id, due_date, points, reconstructed_history)
        ON CONFLICT DO NOTHING`,
-      [familyId, rows.map((r) => r[0]), rows.map((r) => r[1]), rows.map((r) => r[2]), rows.map((r) => r[3])],
+      [familyId, rows.map((r) => r[0]), rows.map((r) => r[1]), rows.map((r) => r[2]), rows.map((r) => r[3]), rows.map((r) => r[4])],
     );
   }
 
@@ -130,10 +132,12 @@ export function invalidateThrottle(familyId: string) {
 }
 
 /** Regenera las ocurrencias futuras pendientes de una tarea tras editarla. */
-export async function regenerateTask(db: Db, familyId: string, taskId: string) {
+export async function regenerateTask(db: Db, familyId: string, taskId: string, preservePromotion = false) {
   const fam = await getFamily(db, familyId);
   const today = familyToday(fam);
-  await db.query(`DELETE FROM task_instances WHERE task_id = $1 AND status = 'pending' AND due_date >= $2`, [taskId, today]);
+  await db.query(`DELETE FROM task_instances i WHERE task_id = $1 AND status = 'pending' AND due_date >= $2
+    AND NOT ($3::boolean AND EXISTS (SELECT 1 FROM task_promotions p WHERE p.instance_id = i.id AND p.day = $2 AND p.expires_at > clock_timestamp()))`,
+  [taskId, today, preservePromotion]);
   await ensureInstances(db, familyId, { taskId, from: today });
   invalidateThrottle(familyId);
 }

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { closePool, getPool, many, one } from '../src/lib/db.js';
@@ -110,6 +110,28 @@ describe('Desmarcar (I17)', () => {
     await F.luciaC.post(`/api/instances/${t.id}/complete`);
     expect(await pts(F.ids.lucia)).toBe(27);
     expect((await one(pool(), 'SELECT count(*)::int AS n FROM bonus_claims WHERE user_id = $1', [F.ids.lucia]))!.n).toBe(1);
+  });
+
+  it('una entrega confirmada mientras espera impide desmarcar la tarea', async () => {
+    const t = await mkTask({ requiresApproval: false, bonus: { kind: 'text', text: 'Elegir la merienda', surprise: true } });
+    expect((await F.luciaC.post(`/api/instances/${t.id}/complete`)).status).toBe(200);
+    const conn = await pool().connect();
+    let pending: ReturnType<typeof unmark>;
+    try {
+      await conn.query('BEGIN');
+      await conn.query('SELECT id FROM bonus_grants WHERE instance_id = $1 FOR UPDATE', [t.id]);
+      pending = unmark(F.luciaC, t.id);
+      await vi.waitFor(async () => {
+        expect(await one(pool(), `SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE 'SELECT%FROM bonus_grants WHERE instance_id%'`)).toBeDefined();
+      }, { timeout: 3000, interval: 25 });
+      await conn.query('UPDATE bonus_grants SET fulfilled_at = now(), fulfilled_by = $2 WHERE instance_id = $1', [t.id, F.ids.mama]);
+      await conn.query('COMMIT');
+    } finally {
+      await conn.query('ROLLBACK');
+      conn.release();
+    }
+    expect(await pending).toMatchObject({ status: 409, body: { error: 'bonus_fulfilled' } });
+    expect(await instRow(t.id)).toMatchObject({ status: 'approved' });
   });
 
   it('un adulto ya validó la tarea o pasó el día: no se puede', async () => {

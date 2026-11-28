@@ -4,6 +4,7 @@ import { api, newKey, post } from '../lib/api';
 import { euros } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useScreenState } from '../lib/screen-state';
+import { SCREEN_CATEGORIES } from '../lib/screen';
 import { minutesHM } from '../lib/deadline';
 import { unlockAudio } from '../lib/alarm';
 import type { ScreenCategory, ScreenState, User } from '../lib/types';
@@ -104,22 +105,28 @@ export function ExtraSheet({ state, onClose }: { state: ScreenState; onClose: ()
   );
 }
 
-/** «Dar minutos» (adulto): descuenta al instante del saldo del hijo, sin temporizador. Si no le llegan, cobra en puntos, dinero o deuda. */
-export function GiveMinutesSheet({ child, onClose }: { child: User; onClose: () => void }) {
+/** Registra tiempo de pantalla y lo descuenta al instante, sin iniciar un temporizador. */
+export function DeductMinutesSheet({ child, onClose }: { child: User; onClose: () => void }) {
   const q = useScreenStateFor(child.id);
+  const [kind, setKind] = useState<'plan' | 'extra'>('plan');
+  const [category, setCategory] = useState<ScreenCategory | ''>('');
   const [note, setNote] = useState('');
   const [payWith, setPayWith] = useState<PayWith>('debt');
   const [value, setValue] = useState(0);
   const [error, setError] = useState('');
+  const [key] = useState(newKey);
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const s = q.data;
   const balance = s?.balance ?? 0;
   const send = useMutation({
-    mutationFn: (minutes: number) => post('/screen/sessions', { userId: child.id, minutes, mode: 'charge', note: note || undefined, payWith: minutes > balance ? payWith : undefined }, undefined),
+    mutationFn: (minutes: number) => post('/screen/sessions', {
+      userId: child.id, minutes, mode: 'charge', extra: kind === 'extra', category: category || undefined,
+      note: note || undefined, payWith: minutes > balance ? payWith : undefined,
+    }, key),
     onSuccess: (r) => {
       const x = r.session;
-      toast(`Hecho: ${x.used_minutes} min${x.paid_points ? ` (${x.paid_points} puntos)` : x.paid_cents ? ` (${euros(x.paid_cents)})` : ''} para ${child.display_name}`);
+      toast(`${x.used_minutes} min descontados a ${child.display_name}${x.paid_points ? ` (${x.paid_points} puntos)` : x.paid_cents ? ` (${euros(x.paid_cents)})` : ''}`);
       invalidate();
       onClose();
     },
@@ -128,17 +135,27 @@ export function GiveMinutesSheet({ child, onClose }: { child: User; onClose: () 
   const short = Math.max(0, value - balance);
   return (
     <AmountSheet
-      title={`Dar minutos a ${child.display_name}`} subtitle={<>Le quedan <b className="num text-[var(--fg)]">{minutesHM(balance)}</b>. Se descuentan ya, sin temporizador.</>}
+      title={`Descontar minutos a ${child.display_name}`} subtitle={s ? <>Le quedan <b className="num text-[var(--fg)]">{minutesHM(balance)}</b>. El descuento se aplica al confirmar, sin temporizador.</> : undefined}
       unit="min" max={720} chips={[15, 30, 60]} variant="success"
-      after={(v) => { return v <= balance ? <>Le quedarán {minutesHM(balance - v)}</> : <>Le faltan {v - balance} min</>; }}
+      blocked={!s}
+      after={(v) => s ? (v <= balance ? <>Le quedarán {minutesHM(balance - v)}</> : <>Le faltan {v - balance} min</>) : null}
       extra={(
         <>
+          <Segmented label="Tipo de uso" value={kind} onChange={setKind} options={[
+            { value: 'plan', label: 'Uso del plan' }, { value: 'extra', label: 'Extra autorizado' },
+          ]} />
+          <Field label="Categoría (opcional)">{(id) => (
+            <select id={id} className="field" value={category} onChange={(event) => setCategory(event.target.value as ScreenCategory | '')}>
+              <option value="">Sin categoría</option>
+              {SCREEN_CATEGORIES.map((value) => <option key={value.value} value={value.value}>{value.label}</option>)}
+            </select>
+          )}</Field>
           <Note value={note} onChange={setNote} hint="Quedará en su historial." />
           {s ? <PayChoice value={payWith} onChange={setPayWith} short={short} rates={s.rates} wallet={s.wallet} allowDebt /> : null}
         </>
       )}
-      cta={(v) => { if (v !== value) queueMicrotask(() => setValue(v)); return v ? `Dar ${minutesHM(v)}` : 'Dar minutos'; }}
-      error={error} loading={send.isPending} onSubmit={(v) => { setError(''); send.mutate(v); }} onClose={onClose}
+      cta={(v) => { if (v !== value) queueMicrotask(() => setValue(v)); return v ? `Descontar ${minutesHM(v)}` : 'Descontar minutos'; }}
+      error={error || q.error?.message} loading={send.isPending} onSubmit={(v) => { setError(''); send.mutate(v); }} onClose={onClose}
     />
   );
 }

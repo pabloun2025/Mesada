@@ -50,6 +50,7 @@ interface Draft {
   bonusText: string;
   bonusRewardId: string;
   bonusSurprise: boolean;
+  bonusAllowSwap: boolean;
   bonusOnTimeOnly: boolean;
   assignmentMode: Task['assignment_mode'];
   assignees: string[];
@@ -66,7 +67,7 @@ function toDraft(t: Task | null, today: string): Draft {
     return {
       title: '', description: '', icon: '✅', difficulty: 'medium', points: 20, recurrence: 'daily', weekdays: [], monthDay: null,
       startDate: today, endDate: '', dueTime: '', dueTimeWeekend: '', latePercent: 100, checkMode: false, penaltyMinutes: 15, successMinutes: 0,
-      bonusKind: 'none', bonusPoints: 10, bonusMinutes: 30, bonusText: '', bonusRewardId: '', bonusSurprise: false, bonusOnTimeOnly: false, assignmentMode: 'individual', assignees: [], requiresApproval: true, requiresPhoto: false,
+      bonusKind: 'none', bonusPoints: 10, bonusMinutes: 30, bonusText: '', bonusRewardId: '', bonusSurprise: false, bonusAllowSwap: false, bonusOnTimeOnly: false, assignmentMode: 'individual', assignees: [], requiresApproval: true, requiresPhoto: false,
       repeatable: false, unlimited: false, maxPerDay: 2, cooldownDays: '',
     };
   }
@@ -75,7 +76,7 @@ function toDraft(t: Task | null, today: string): Draft {
     weekdays: t.weekdays, monthDay: t.month_day, startDate: t.start_date, endDate: t.end_date ?? '', dueTime: t.due_time?.slice(0, 5) ?? '',
     dueTimeWeekend: t.due_time_weekend?.slice(0, 5) ?? '', latePercent: t.late_percent, checkMode: t.check_mode, penaltyMinutes: t.penalty_minutes || 15, successMinutes: t.success_minutes,
     bonusKind: t.bonus_kind ?? 'none', bonusPoints: t.bonus_points ?? 10, bonusMinutes: t.bonus_minutes ?? 30, bonusText: t.bonus_text ?? '', bonusRewardId: t.bonus_reward_id ?? '',
-    bonusSurprise: t.bonus_surprise ?? false, bonusOnTimeOnly: t.bonus_on_time_only ?? false,
+    bonusSurprise: t.bonus_surprise ?? false, bonusAllowSwap: t.bonus_allow_swap ?? false, bonusOnTimeOnly: t.bonus_on_time_only ?? false,
     assignmentMode: t.assignment_mode, assignees: t.assignees.map((a) => a.id), requiresApproval: t.requires_approval, requiresPhoto: t.requires_photo,
     repeatable: !!t.repeatable, unlimited: !!t.repeatable && t.max_per_day == null, maxPerDay: t.max_per_day ?? 2, cooldownDays: t.cooldown_days ? String(t.cooldown_days) : '',
   };
@@ -95,6 +96,7 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
     mutationFn: () => {
       const bonus = d.bonusKind === 'none' ? null : {
         kind: d.bonusKind, surprise: d.bonusSurprise, onTimeOnly: d.bonusOnTimeOnly && !d.checkMode,
+        allowSwap: d.bonusSurprise && d.bonusKind === 'reward' && d.bonusAllowSwap,
         ...(d.bonusKind === 'points' ? { points: d.bonusPoints } : {}),
         ...(d.bonusKind === 'screen' ? { minutes: d.bonusMinutes } : {}),
         ...(d.bonusKind === 'text' ? { text: d.bonusText } : {}),
@@ -282,6 +284,7 @@ function TaskEditor({ open, onClose, initial, members }: { open: boolean; onClos
           {d.bonusKind !== 'none' ? (
             <div className="divide-y divide-[var(--line)] rounded-2xl bg-[var(--chip)]/50 px-4">
               <Toggle checked={d.bonusSurprise} onChange={(v) => set('bonusSurprise', v)} label="Sorpresa" description="Tu hijo ve «Sorpresa» sin saber qué es. La gana una sola vez, la primera que la haga." />
+              {d.bonusSurprise && d.bonusKind === 'reward' ? <Toggle checked={d.bonusAllowSwap} onChange={(v) => set('bonusAllowSwap', v)} label="Permitir un cambio" description="Podrá elegir otro premio habilitado del mismo valor antes de recibirlo." /> : null}
               {!d.checkMode ? <Toggle checked={d.bonusOnTimeOnly} onChange={(v) => set('bonusOnTimeOnly', v)} label="Solo si llega a tiempo" description="Si es tarde, no hay bono. Si no, se gana siempre." /> : null}
             </div>
           ) : null}

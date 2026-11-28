@@ -1,6 +1,5 @@
 import { one, tx, type Db } from './db.js';
 import type { AuthUser } from './auth.js';
-import { addDays } from './dates.js';
 import { badRequest, conflict, forbidden, notFound } from './errors.js';
 import { familyToday, getFamily } from './family.js';
 import { addPoints, lockUser } from './ledger.js';
@@ -13,10 +12,12 @@ import { dayEnd, deadlineAt, isHoliday, reducedPoints } from './deadline.js';
 import { grantBonus, voidBonus } from './bonus.js';
 import { applyRecovery, reverseRecovery } from './screen-adjust.js';
 import { todayIn } from './dates.js';
+import { hhmmToMinutes, localMinutes, zonedToUtc } from './notify/time.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { spawnRepeats } from './instances.js';
+import { grantPromotion, hasOpenPromotion, reservePromotion, undoPromotion } from './task-promotions.js';
 
 interface InstanceRow {
   id: string;
@@ -45,6 +46,8 @@ interface InstanceRow {
   unmark_count: number;
   completed_at: string | null;
   reviewed_by: string | null;
+  adult_logged: boolean;
+  reconstructed_history: boolean;
   returned_at: string | null;
   returned_note: string | null;
   photo_path: string | null;
@@ -62,8 +65,14 @@ async function loadInstance(db: Db, id: string, familyId: string, lock = false) 
   return row;
 }
 
+async function lockInstanceForCompletion(db: Db, id: string, familyId: string) {
+  // La edición toma primero la tarea y luego sus ocurrencias pendientes; respetar ese orden serializa también los topes.
+  await db.query(`SELECT t.id FROM tasks t JOIN task_instances i ON i.task_id = t.id WHERE i.id = $1 AND i.family_id = $2 FOR NO KEY UPDATE OF t`, [id, familyId]);
+  return loadInstance(db, id, familyId, true);
+}
+
 /** ¿Puede este usuario completar la ocurrencia? */
-async function canComplete(db: Db, inst: InstanceRow, user: AuthUser) {
+async function canComplete(db: Db, inst: InstanceRow, user: Pick<AuthUser, 'id'>) {
   if (inst.is_extra) return inst.assignee_id === user.id; // un trabajo extra solo lo hace quien lo reservó
   if (inst.assignee_id) return inst.assignee_id === user.id;
   const r = await one(db, 'SELECT 1 FROM task_assignees WHERE task_id = $1 AND user_id = $2', [inst.task_id, user.id]);
@@ -86,6 +95,25 @@ async function award(db: Db, inst: InstanceRow, userId: string, points: number, 
   });
 }
 
+async function checkCompletionLimits(db: Db, inst: InstanceRow, timezone: string, today: string, registeredDay?: string) {
+  if (!inst.cooldown_days && (!inst.repeatable || inst.max_per_day === null)) return;
+  if (inst.cooldown_days) {
+    const blocked = await one(db,
+      `SELECT 1 FROM task_instances
+        WHERE task_id = $1 AND id <> $2 AND status IN ('submitted','approved')
+          AND CASE WHEN $6 THEN abs($4::date - CASE WHEN adult_logged THEN due_date ELSE (completed_at AT TIME ZONE $3)::date END) < $5
+                   ELSE $4::date - CASE WHEN adult_logged THEN due_date ELSE (completed_at AT TIME ZONE $3)::date END < $5 END
+        LIMIT 1`,
+      [inst.task_id, inst.id, timezone, registeredDay ?? today, inst.cooldown_days, !!registeredDay],
+    );
+    if (blocked) throw conflict('Esta tarea todavía no vuelve', 'cooldown');
+  }
+  if (inst.repeatable && inst.max_per_day !== null) {
+    const n = await one<{ n: number }>(db, `SELECT count(*)::int AS n FROM task_instances WHERE task_id = $1 AND due_date = $2 AND id <> $3 AND status IN ('submitted','approved') AND assignee_id IS NOT DISTINCT FROM $4::uuid`, [inst.task_id, inst.due_date, inst.id, inst.assignee_id]);
+    if (n!.n >= inst.max_per_day) throw conflict('Ya se ha hecho el máximo de veces de hoy', 'max_per_day');
+  }
+}
+
 export async function completeInstance(
   user: AuthUser,
   instanceId: string,
@@ -96,7 +124,7 @@ export async function completeInstance(
   const result = await tx(async (db) => {
     const fam = await getFamily(db, user.familyId);
     const today = familyToday(fam, now);
-    const inst = await loadInstance(db, instanceId, user.familyId, true);
+    const inst = await lockInstanceForCompletion(db, instanceId, user.familyId);
     // Si sustituye una foto anterior (tarea devuelta y reenviada), el archivo viejo se borra al confirmar.
     if (opts.photoPath && inst.photo_path && inst.photo_path !== opts.photoPath) replaced = inst.photo_path;
     if (!(await canComplete(db, inst, user))) {
@@ -113,17 +141,7 @@ export async function completeInstance(
       // Las vencidas solo puede marcarlas un adulto (vía revisión).
       throw conflict('El plazo de esta tarea ha terminado. Pide a un adulto que la revise.', 'expired');
     }
-    if (inst.cooldown_days) {
-      // Cuenta la pulsación de «Hecha», no la validación; una rechazada ya no cuenta.
-      const last = await one<{ d: string | null }>(db, `SELECT max((completed_at AT TIME ZONE $3)::date)::text AS d FROM task_instances WHERE task_id = $1 AND id <> $2 AND status IN ('submitted','approved')`, [inst.task_id, inst.id, fam.timezone]);
-      if (last?.d && addDays(last.d, inst.cooldown_days) > today) throw conflict('Esta tarea todavía no vuelve', 'cooldown');
-    }
-    if (inst.repeatable && inst.max_per_day !== null) {
-      // Tope diario: compartida = entre todos; si no, por hijo. Las rechazadas no cuentan.
-      await db.query('SELECT 1 FROM tasks WHERE id = $1 FOR UPDATE', [inst.task_id]); // serializa a los hijos de una tarea compartida
-      const n = await one<{ n: number }>(db, `SELECT count(*)::int AS n FROM task_instances WHERE task_id = $1 AND due_date = $2 AND id <> $3 AND status IN ('submitted','approved') AND assignee_id IS NOT DISTINCT FROM $4::uuid`, [inst.task_id, inst.due_date, inst.id, inst.assignee_id]);
-      if (n!.n >= inst.max_per_day) throw conflict('Ya se ha hecho el máximo de veces de hoy', 'max_per_day');
-    }
+    await checkCompletionLimits(db, inst, fam.timezone, today);
     if (inst.requires_photo && !opts.photoPath) throw badRequest('Esta tarea necesita una foto como prueba', 'photo_required');
 
     // Hora límite: cuenta el momento de pulsar «Hecha». Hasta las 23:59 se puede hacer con el % de tarde.
@@ -143,6 +161,7 @@ export async function completeInstance(
 
     const autoApprove = !inst.requires_approval;
     const status = autoApprove ? 'approved' : 'submitted';
+    const promotion = await reservePromotion(db, inst.id, user.id, now);
     await db.query(
       `UPDATE task_instances
           SET status = $2, completed_by = $3, completed_at = $6, first_submitted_at = COALESCE(first_submitted_at, $6), child_note = $4,
@@ -154,6 +173,7 @@ export async function completeInstance(
     );
     if (autoApprove) {
       await award(db, inst, user.id, points, null);
+      await grantPromotion(db, inst, user.id, null);
       await grantBonus(db, { instanceId: inst.id, userId: user.id, familyId: user.familyId, actorId: null, onTime, seq: inst.unmark_count + 1 });
       if (inst.is_extra) await applyRecovery(db, inst, user.id, today, null);
       await evaluateBadges(db, user.id, today, fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [user.id]))!.weekly_goal_points, inst.id);
@@ -162,10 +182,71 @@ export async function completeInstance(
     }
     if (inst.repeatable) await spawnRepeats(db, user.familyId, inst.due_date, inst.task_id);
     await audit(db, user.familyId, user.id, 'task.complete', 'task_instance', inst.id, { status });
-    return { id: inst.id, status, points: autoApprove ? points : 0, onTime, potentialPoints: points };
+    return { id: inst.id, status, points: autoApprove ? points + promotion : 0, onTime, potentialPoints: points + promotion };
   });
   removePhotoFile(replaced);
   return result;
+}
+
+async function approveInstance(db: Db, adult: AuthUser, inst: InstanceRow, p: {
+  childId: string; points: number; note?: string;
+  registration?: { completedAt: Date | null; deadline: Date | null; onTime: boolean | null };
+}, timezone: string, today: string) {
+  await db.query(
+    `UPDATE task_instances SET status = 'approved', review_outcome = 'approved', points = $2, reviewed_by = $3, reviewed_at = now(), review_note = $4,
+            completed_by = COALESCE(completed_by, $5), completed_at = COALESCE($7, completed_at, now()), adult_logged = $6,
+            deadline_at = CASE WHEN $6 THEN $8 ELSE deadline_at END, on_time = CASE WHEN $6 THEN $9 ELSE on_time END
+      WHERE id = $1`,
+    [inst.id, p.points, adult.id, p.note ?? null, p.childId, !!p.registration, p.registration?.completedAt ?? null, p.registration?.deadline ?? null, p.registration?.onTime ?? null],
+  );
+  await award(db, inst, p.childId, p.points, adult.id);
+  const promoted = await grantPromotion(db, inst, p.childId, adult.id);
+  if (inst.repeatable && (!p.registration || inst.due_date === today)) await spawnRepeats(db, adult.familyId, inst.due_date, inst.task_id);
+  const grant = await grantBonus(db, { instanceId: inst.id, userId: p.childId, familyId: adult.familyId, actorId: adult.id, onTime: p.registration ? p.registration.onTime : inst.on_time, seq: inst.unmark_count + 1 });
+  if (inst.is_extra) await applyRecovery(db, inst, p.childId, today, adult.id);
+  await notify(db, {
+    userId: p.childId, event: 'task_approved', title: p.registration ? `${adult.displayName} registró «${inst.title}» como hecha` : `¡«${inst.title}» aprobada! Así se hace`,
+    body: `+${p.points + promoted} puntos 💪${promoted ? ` · incluye ${promoted} de la promoción` : ''}${grant ? (grant.surprise ? ' · 🎁 ¡y una sorpresa!' : ` · ${grant.label}`) : ''}`, link: '/progreso', dedupeKey: `approved:${inst.id}`,
+  });
+  await evaluateBadges(db, p.childId, today, timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [p.childId]))!.weekly_goal_points, inst.id);
+}
+
+export async function registerInstance(adult: AuthUser, instanceId: string, { childId, note, completedTime }: { childId: string; note?: string; completedTime?: string }) {
+  return tx(async (db) => {
+    const now = new Date();
+    const fam = await getFamily(db, adult.familyId);
+    const today = familyToday(fam, now);
+    const inst = await lockInstanceForCompletion(db, instanceId, adult.familyId);
+    if (inst.status === 'approved' && inst.adult_logged) {
+      if (inst.completed_by === childId) return { id: inst.id, status: 'approved', duplicate: true };
+      const recorded = await one<{ display_name: string }>(db, 'SELECT display_name FROM users WHERE id = $1', [inst.completed_by]);
+      throw conflict(recorded ? `Esta tarea ya está registrada para ${recorded.display_name}` : 'Esta tarea ya está registrada', 'already_reviewed');
+    }
+    if (inst.is_extra) throw badRequest('Los trabajos extra se validan en su sección', 'extra_task');
+    if (inst.check_mode) throw badRequest('Las tareas de comprobación se marcan como cumplidas o no cumplidas', 'check_task');
+    if (inst.due_date > today) throw badRequest('Esta tarea todavía no toca', 'not_due');
+    if (inst.reconstructed_history) throw conflict('La asignación original de esta fecha no se guardó', 'historical_assignment_unknown');
+    if (inst.status === 'submitted' || inst.status === 'rejected') throw conflict('Revisa la tarea enviada por el hijo', 'review_required');
+    if (!['pending', 'expired'].includes(inst.status)) throw conflict('Esta tarea ya se ha revisado', 'already_reviewed');
+    const child = await one(db, `SELECT 1 FROM users WHERE id = $1 AND family_id = $2 AND role = 'child' AND active`, [childId, adult.familyId]);
+    if (!child || !(await canComplete(db, inst, { id: childId }))) throw forbidden('Esta tarea no está asignada a ese hijo');
+    if (inst.requires_photo && !note?.trim()) throw badRequest('Añade una nota sobre cómo has comprobado la tarea', 'verification_required');
+    const holiday = await isHoliday(db, adult.familyId, inst.due_date);
+    const deadline = deadlineAt(inst, inst.due_date, holiday, fam.timezone);
+    if (!completedTime && (deadline || await hasOpenPromotion(db, inst.id, now))) throw badRequest('Indica la hora a la que se hizo', 'completion_time_required');
+    const completedAt = completedTime ? zonedToUtc(inst.due_date, completedTime, fam.timezone) : null;
+    if (completedAt && completedTime?.length === 8) completedAt.setUTCSeconds(Number(completedTime.slice(6)));
+    if (completedAt && (completedAt > now || localMinutes(completedAt, fam.timezone) !== hhmmToMinutes(completedTime!))) {
+      throw badRequest('La hora de realización no es válida para ese día', 'invalid_completion_time');
+    }
+    const onTime = deadline && completedAt ? completedAt <= deadline : null;
+    const points = onTime === false ? reducedPoints(inst.points, inst.late_percent) : inst.points;
+    await checkCompletionLimits(db, inst, fam.timezone, today, inst.due_date);
+    if (completedAt) await reservePromotion(db, inst.id, childId, completedAt, now);
+    await approveInstance(db, adult, inst, { childId, points, note, registration: { completedAt, deadline, onTime } }, fam.timezone, today);
+    await audit(db, adult.familyId, adult.id, 'task.register', 'task_instance', inst.id, { for: childId, title: inst.title, day: inst.due_date, completedTime: completedTime ?? null, points, note: note ?? null });
+    return { id: inst.id, status: 'approved', duplicate: false };
+  });
 }
 
 export type ReviewAction = 'approve' | 'partial' | 'return' | 'reject' | 'reject_penalty';
@@ -198,21 +279,10 @@ export async function reviewInstance(adult: AuthUser, instanceId: string, decisi
       if (!beneficiary) throw badRequest('Nadie ha marcado esta tarea compartida todavía');
       const points = decision.points ?? inst.points;
       if (!Number.isInteger(points) || points < 0 || points > 10000) throw badRequest('Puntos no válidos');
-      await db.query(
-        `UPDATE task_instances SET status = 'approved', review_outcome = 'approved', points = $2, reviewed_by = $3, reviewed_at = now(), review_note = $4,
-                completed_by = COALESCE(completed_by, $5), completed_at = COALESCE(completed_at, now())
-          WHERE id = $1`,
-        [inst.id, points, adult.id, note ?? null, beneficiary],
-      );
-      await award(db, inst, beneficiary, points, adult.id);
-      if (inst.repeatable) await spawnRepeats(db, adult.familyId, inst.due_date, inst.task_id);
-      const grant = await grantBonus(db, { instanceId: inst.id, userId: beneficiary, familyId: adult.familyId, actorId: adult.id, onTime: inst.on_time, seq: inst.unmark_count + 1 });
-      if (inst.is_extra) await applyRecovery(db, inst, beneficiary, familyToday(fam), adult.id);
+      await approveInstance(db, adult, inst, { childId: beneficiary, points, note }, fam.timezone, familyToday(fam));
       if (points !== inst.points) {
         await audit(db, adult.familyId, adult.id, 'task.points_changed', 'task_instance', inst.id, { from: inst.points, to: points });
       }
-      await notify(db, { userId: beneficiary, event: 'task_approved', title: `¡«${inst.title}» aprobada! Así se hace`, body: `+${points} puntos 💪${grant ? (grant.surprise ? ' · 🎁 ¡y una sorpresa!' : ` · ${grant.label}`) : ''}`, link: '/progreso', dedupeKey: `approved:${inst.id}` });
-      await evaluateBadges(db, beneficiary, familyToday(fam), fam.timezone, (await one(db, 'SELECT weekly_goal_points FROM users WHERE id=$1', [beneficiary]))!.weekly_goal_points, inst.id);
       await audit(db, adult.familyId, adult.id, 'task.approve', 'task_instance', inst.id, { points, note: note ?? null });
       return { id: inst.id, status: 'approved' };
     }
@@ -304,7 +374,7 @@ export async function unmarkInstance(user: AuthUser, instanceId: string, opts: {
       const open = await one(db, `SELECT 1 FROM task_instances WHERE task_id = $1 AND is_extra AND id <> $2 AND status IN ('pending','submitted','rejected')`, [inst.task_id, inst.id]);
       if (open) throw conflict('Este trabajo ya se ha vuelto a publicar', 'reactivated');
     }
-    const grant = await one(db, 'SELECT fulfilled_at FROM bonus_grants WHERE instance_id = $1 AND voided_at IS NULL', [inst.id]);
+    const grant = await one(db, 'SELECT fulfilled_at FROM bonus_grants WHERE instance_id = $1 AND user_id = $2 AND voided_at IS NULL FOR UPDATE', [inst.id, user.id]);
     if (grant?.fulfilled_at) throw conflict('Ya se te entregó el premio de esta tarea', 'bonus_fulfilled');
 
     await lockUser(db, user.id);
@@ -320,6 +390,8 @@ export async function unmarkInstance(user: AuthUser, instanceId: string, opts: {
       if (inst.is_extra) await reverseRecovery(db, { ...inst, unmark_count: inst.unmark_count }, user.id, today, user.id);
     }
 
+    pointsBack += await undoPromotion(db, inst, user.id);
+
     if (inst.returned_at) {
       // Devuelta por un adulto: vuelve a «devuelta» con su motivo y su primera hora de envío.
       await db.query(
@@ -330,8 +402,9 @@ export async function unmarkInstance(user: AuthUser, instanceId: string, opts: {
     } else {
       await db.query(
         `UPDATE task_instances SET status = 'pending', review_outcome = NULL, review_note = NULL, reviewed_by = NULL, reviewed_at = NULL, first_submitted_at = NULL,
-                points = $3, completed_by = NULL, completed_at = NULL, child_note = NULL, photo_path = NULL, deadline_at = NULL, on_time = NULL, unmark_count = $2 WHERE id = $1`,
-        [inst.id, n, inst.task_points],
+                points = COALESCE((SELECT base_points FROM task_promotions WHERE instance_id = $1 AND expires_at > $4), $3),
+                completed_by = NULL, completed_at = NULL, child_note = NULL, photo_path = NULL, deadline_at = NULL, on_time = NULL, unmark_count = $2 WHERE id = $1`,
+        [inst.id, n, inst.task_points, now],
       );
     }
     // Una repetición ya abierta detrás de esta sobra: la que queda abierta es esta.

@@ -70,6 +70,7 @@ export function TaskRow({
   const unmark = useUnmark();
   const { family } = useSession();
   const euroOf = (pts: number) => euros(Math.floor((pts * family.rate_cents) / family.rate_points));
+  const points = inst.points + (inst.promotion?.extra_points ?? 0);
   const mins = inst.status === 'declined' ? 0 : inst.minutes_reward ?? 0;
   const waiting = !!inst.blocked_until;
   const doable = canComplete && !inst.check_mode && !waiting && (inst.status === 'pending' || inst.status === 'rejected');
@@ -108,15 +109,19 @@ export function TaskRow({
             <Badge tone="leaf">{inst.max_per_day ? `Hecha ${inst.done_count} de ${inst.max_per_day} hoy` : `Hecha ${inst.done_count} ${inst.done_count === 1 ? 'vez' : 'veces'} hoy`}</Badge>
           ) : null}
           {inst.recurrence === 'as_needed' && !inst.completed_by_name ? <Badge tone="sky">Cuando haga falta</Badge> : null}
-          {inst.assignment_mode === 'shared' ? (
+          {inst.assignment_mode === 'shared' && !inst.adult_logged ? (
             <span className="inline-flex items-center gap-1 muted"><Users size={14} aria-hidden /> {inst.completed_by_name ? `Hecha por ${inst.completed_by_name}` : 'Compartida'}</span>
           ) : null}
           {inst.assignment_mode === 'rotation' ? <span className="inline-flex items-center gap-1 muted"><RotateCcw size={14} aria-hidden /> Por turnos</span> : null}
           {open && !check ? <Deadline inst={inst} /> : null}
           {check && open && inst.penalty_minutes ? <span className="muted">Si no se cumple: −{inst.penalty_minutes} min de pantalla</span> : null}
           {(open || inst.status === 'submitted') && !(inst.bonus && !inst.bonus.surprise && inst.bonus.kind === 'screen' && !inst.bonus.onTimeOnly) ? <BonusChip bonus={inst.bonus} /> : null}
-          {inst.requires_photo ? <span className="inline-flex items-center gap-1 muted"><Camera size={14} aria-hidden /> Con foto</span> : null}
+          {inst.requires_photo && !inst.adult_logged ? <span className="inline-flex items-center gap-1 muted"><Camera size={14} aria-hidden /> Con foto</span> : null}
         </div>
+        {inst.promotion ? <p className="mt-1.5 text-sm font-bold text-leaf-deep dark:text-[#7fe0b2]">{inst.points} + {inst.promotion.extra_points} = {inst.points + inst.promotion.extra_points} pts{inst.status === 'pending' ? ' · solo hoy · un uso' : ' · promoción'}</p> : null}
+        {inst.adult_logged ? (
+          <p className="mt-1.5 text-sm muted">{inst.completed_by_name ? `La hizo ${inst.completed_by_name} · ` : ''}Registrada por {inst.registered_by_name ?? 'un adulto'}{inst.review_note ? ` · «${inst.review_note}»` : ''}</p>
+        ) : null}
         {(inst.status === 'rejected' || inst.status === 'declined' || inst.review_outcome === 'partial') && inst.review_note ? (
           <p className={`mt-1.5 text-sm ${inst.review_outcome === 'partial' ? 'text-sun-ink dark:text-sun' : 'text-berry-deep'}`}>«{inst.review_note}»</p>
         ) : null}
@@ -148,8 +153,8 @@ export function TaskRow({
           </span>
         ) : check && inst.points === 0 ? (mins > 0 ? <MinutesPill minutes={mins} /> : null) : inst.status === 'declined' ? null : (
           <span className="flex flex-col items-end gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
-            <PointsPill points={inst.points} tone={inst.status === 'approved' ? 'leaf' : 'tangerine'} star />
-            {inst.points > 0 ? <Euro text={euroOf(inst.points)} /> : null}
+            <PointsPill points={points} tone={inst.status === 'approved' ? 'leaf' : 'tangerine'} star />
+            {points > 0 ? <Euro text={euroOf(points)} /> : null}
             {mins > 0 ? <MinutesPill minutes={mins} /> : null}
           </span>
         )}

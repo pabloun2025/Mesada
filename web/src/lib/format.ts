@@ -17,7 +17,7 @@ export const getCurrency = () => currency;
 export const currencySymbol = () => (currency === 'USD' ? '$' : '€');
 /** Separador decimal que se escribe y se lee: coma en euros, punto en dólares. */
 export const decimalSep = () => (currency === 'USD' ? '.' : ',');
-export const euros = (cents: number) => formatters[currency].format(cents / 100);
+export const euros = (cents: number, c = currency) => formatters[c].format(cents / 100);
 export const pts = (n: number) => `${int.format(n)} pts`;
 export const num = (n: number) => int.format(n);
 

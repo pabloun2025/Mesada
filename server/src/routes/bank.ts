@@ -6,15 +6,37 @@ import path from 'node:path';
 import { requireAdult, requireGrownUp, requireUser, type AuthUser } from '../lib/auth.js';
 import { badRequest, conflict, forbidden, HttpError, notFound } from '../lib/errors.js';
 import { config } from '../lib/config.js';
+import { previewExpense, recordExpense } from '../lib/expenses.js';
+import { archiveExpenseRule, listExpenseRules, saveExpenseRule } from '../lib/expense-rules.js';
+import { CURRENCIES } from '../lib/currency.js';
 import { enforceLimit } from '../lib/limits.js';
 import { looksLikeImage, processPhoto, removePhotoFile, storePhoto } from '../lib/photos.js';
-import { bankOverview, cancelLoan, familyBankSummary, decideLoan, exchangePoints, listLoans, requestLoan, statement, takeAdvance } from '../lib/bank.js';
+import { bankOverview, cancelLoan, familyBankSummary, decideLoan, exchangePoints, listLoans, previewLoanPurchase, requestLoan, statement, takeAdvance } from '../lib/bank.js';
 import {
   cancelGoalRequest, decideAutoSave, decideGoalProposal, decideGoalRequest, giveGoalGift, goalDeposit, goalWithdrawEarly, listGoalProposals,
   listGoalRequests, requestGoalAction, reverseContribution, setAutoSave, setGoalPhoto, setMatchRule,
 } from '../lib/savings.js';
 
 const uuid = z.string().uuid();
+const contribution = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('amount'), cents: z.number().int().min(0).max(10_000_000) }),
+  z.object({ type: z.literal('percent'), basisPoints: z.number().int().min(0).max(10_000) }),
+]);
+const title = z.string().trim().min(1).max(120);
+const totalCents = z.number().int().positive().max(10_000_000);
+const currency = z.enum(CURRENCIES);
+const quoteProof = z.object({ requestId: uuid, token: z.string().regex(/^[a-f0-9]{64}$/) });
+const expenseInput = z.object({
+  userId: uuid, title, totalCents, currency, contribution: contribution.optional(), ruleId: uuid.optional(), overrideReason: z.string().trim().max(300).optional(),
+}).refine((b) => b.ruleId || b.contribution, { message: 'Indica la aportación o la regla de gasto' });
+const expenseRule = z.object({ title, contribution });
+const loanPurchase = z.object({ type: z.literal('purchase'), title, totalCents, currency });
+const loanDestination = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('balance') }),
+  z.object({ type: z.literal('external'), method: z.enum(['cash', 'bizum', 'transfer']) }),
+  z.object({ type: z.literal('goal'), goalId: uuid }),
+  loanPurchase.extend(quoteProof.shape),
+]);
 
 async function assertCanView(u: AuthUser, userId: string) {
   if (u.role === 'child' && u.id !== userId) throw forbidden();
@@ -28,6 +50,37 @@ function idemKey(req: FastifyRequest): string | undefined {
 }
 
 export default async function bankRoutes(app: FastifyInstance) {
+  app.post('/api/expenses/preview', async (req) => {
+    const u = requireAdult(req);
+    return previewExpense(u, expenseInput.parse(req.body));
+  });
+
+  app.post('/api/expenses', async (req) => {
+    const u = requireAdult(req);
+    const { requestId, token } = quoteProof.parse(req.body);
+    return recordExpense(u, expenseInput.parse(req.body), requestId, token);
+  });
+
+  app.get('/api/expense-rules', async (req) => {
+    const u = requireUser(req);
+    if (u.isRelative) throw forbidden();
+    return { rules: await listExpenseRules(getPool(), u.familyId) };
+  });
+
+  app.post('/api/expense-rules', async (req) => saveExpenseRule(requireAdult(req), expenseRule.parse(req.body)));
+
+  app.put('/api/expense-rules/:id', async (req) => {
+    const u = requireAdult(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return saveExpenseRule(u, expenseRule.parse(req.body), id);
+  });
+
+  app.delete('/api/expense-rules/:id', async (req) => {
+    const u = requireAdult(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return archiveExpenseRule(u, id);
+  });
+
   // ---------- Cuentas ----------
   app.get('/api/bank/:userId', async (req) => {
     const u = requireUser(req);
@@ -87,11 +140,19 @@ export default async function bankRoutes(app: FastifyInstance) {
     return cancelLoan(u, id);
   });
 
+  app.post('/api/loans/:id/preview', async (req) => {
+    const u = requireAdult(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const { destination } = z.object({ destination: loanPurchase }).parse(req.body);
+    return previewLoanPurchase(u, id, destination);
+  });
+
   app.post('/api/loans/:id/:decision', async (req) => {
     const u = requireAdult(req);
     const { id, decision } = z.object({ id: uuid, decision: z.enum(['approve', 'reject']) }).parse(req.params);
-    const b = z.object({ note: z.string().trim().max(300).optional() }).parse(req.body ?? {});
-    return decideLoan(u, id, { approve: decision === 'approve', note: b.note });
+    const b = z.object({ note: z.string().trim().max(300).optional(), destination: loanDestination.optional() }).parse(req.body ?? {});
+    if (decision === 'reject' && b.destination) throw badRequest('El destino solo se elige al aprobar');
+    return decideLoan(u, id, { approve: decision === 'approve', ...b });
   });
 
   // ---------- Metas de ahorro programado ----------

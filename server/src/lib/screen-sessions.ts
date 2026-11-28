@@ -104,9 +104,12 @@ export async function listBlocks(db: Db, userId: string, tz: string, now = new D
 
 /* ---------- Acceso: ¿puede empezar ahora? ---------- */
 
-async function usedToday(db: Db, userId: string, today: string) {
-  const r = await one<{ n: number }>(db, `SELECT COALESCE(SUM(used_minutes),0)::int AS n FROM screen_sessions WHERE user_id = $1 AND day = $2 AND status = 'finished' AND kind = 'timer' AND NOT extra`, [userId, today]);
-  return r!.n;
+async function sessionMinutesToday(db: Db, userId: string, today: string) {
+  return (await one<{ plan: number; total: number }>(db,
+    `SELECT COALESCE(SUM(used_minutes) FILTER (WHERE NOT extra),0)::int AS plan,
+            COALESCE(SUM(used_minutes + overrun_minutes),0)::int AS total
+       FROM screen_sessions WHERE user_id = $1 AND day = $2 AND status = 'finished'`, [userId, today],
+  ))!;
 }
 
 async function openSession(db: Db, userId: string) {
@@ -114,7 +117,7 @@ async function openSession(db: Db, userId: string) {
 }
 
 export interface Access {
-  today: string; allowedDay: boolean; cap: number | null; usedToday: number; capLeft: number | null;
+  today: string; allowedDay: boolean; cap: number | null; usedToday: number; totalSessionMinutes: number; capLeft: number | null;
   blockNow: { label: string; reason: string } | null; untilBlockMin: number | null; pause: { label: string } | null; balance: number; open: boolean; rules: Rules;
 }
 
@@ -128,9 +131,10 @@ export async function accessFor(db: Db, fam: Pick<Family, 'timezone' | 'id'>, us
   const upcoming = blocks.filter((b) => b.until_window_min != null).map((b) => b.until_window_min!);
   const dow = isoWeekday(today);
   const cap = rules.dayMax[String(dow)] ?? null;
-  const used = await usedToday(db, userId, today);
+  const minutes = await sessionMinutesToday(db, userId, today);
   return {
-    today, rules, allowedDay: rules.allowedDays.includes(dow), cap, usedToday: used, capLeft: cap == null ? null : Math.max(0, cap - used),
+    today, rules, allowedDay: rules.allowedDays.includes(dow), cap, usedToday: minutes.plan, totalSessionMinutes: minutes.total,
+    capLeft: cap == null ? null : Math.max(0, cap - minutes.plan),
     blockNow: blocking ? { label: blocking.label, reason: blocking.reason } : null,
     untilBlockMin: upcoming.length ? Math.min(...upcoming) : null,
     pause: pause ? { label: `Pausa hasta ${dayWord(pause.pause_ends_on, today)}` } : null,
@@ -338,20 +342,22 @@ export async function startSession(actor: AuthUser, p: StartInput, opts: { now?:
     await expireLots(db, actor.familyId, userId, now);
     const access = await accessFor(db, fam, userId, now);
     // Un adulto (o el tiempo extra aprobado) puede ir más allá de los días y topes del plan, pero nunca de un bloqueo.
-    const extra = !isChild || !!p.extra;
+    const bypassPlan = !isChild || !!p.extra;
+    // Un descuento manual registra uso pasado. Los clientes anteriores lo registraban siempre como extra.
+    const extra = mode === 'charge' ? p.extra !== false : bypassPlan;
     // Dar minutos registra algo que ya pasó o se concede: un adulto no tiene más límite que el de no estar repetido.
     // El hijo que pide tiempo extra no puede hacerlo bloqueado o en pausa, pero sí fuera de sus días y topes.
     const pendingCharge = charge && isChild ? await one(db, `SELECT 1 FROM screen_sessions WHERE user_id = $1 AND kind = 'charge' AND status = 'pending'`, [userId]) : null;
     if (pendingCharge) throw conflict('Ya tienes una petición de tiempo extra esperando. Espera a que la resuelvan o cancélala.', 'already_pending');
-    const can = mode === 'charge' ? { ok: true, code: null, reason: '', maxMinutes: MAX_SESSION_MINUTES } : charge ? canStart({ ...access, open: false }, false) : canStart(access, !extra);
+    const can = mode === 'charge' ? { ok: true, code: null, reason: '', maxMinutes: MAX_SESSION_MINUTES } : charge ? canStart({ ...access, open: false }, false) : canStart(access, !bypassPlan);
     if (!can.ok) throw conflict(can.reason, can.code ?? 'blocked');
-    if (!extra && p.minutes > can.maxMinutes) {
+    if (!bypassPlan && p.minutes > can.maxMinutes) {
       throw conflict(access.capLeft != null && can.maxMinutes === access.capLeft ? `Hoy solo te quedan ${can.maxMinutes} min según tu plan.` : `Ahora puedes usar como mucho ${can.maxMinutes} min.`, 'too_long');
     }
-    if (extra && !charge && access.untilBlockMin != null && p.minutes > access.untilBlockMin) throw conflict(`Enseguida empieza un descanso: solo caben ${access.untilBlockMin} min.`, 'too_long');
+    if (bypassPlan && !charge && access.untilBlockMin != null && p.minutes > access.untilBlockMin) throw conflict(`Enseguida empieza un descanso: solo caben ${access.untilBlockMin} min.`, 'too_long');
 
     // Lo que las baterías no cubren y cómo se paga.
-    const short = extra ? Math.max(0, p.minutes - access.balance) : 0;
+    const short = bypassPlan ? Math.max(0, p.minutes - access.balance) : 0;
     let payWith = p.payWith ?? 'debt';
     if (short > 0) {
       if (isChild && payWith === 'debt') throw badRequest('Elige cómo pagas los minutos que te faltan: puntos o dinero', 'choose_payment');
@@ -449,14 +455,18 @@ export async function approveSession(adult: AuthUser, id: string, opts: { now?: 
     const fam = await getFamily(db, adult.familyId);
     await expireLots(db, adult.familyId, s.user_id, now);
     const a = await accessFor(db, fam, s.user_id, now);
-    // La propia petición es la sesión abierta: solo importan la pausa y los bloqueos.
-    const can = canStart({ ...a, open: false }, false);
-    if (!can.ok && can.code !== 'no_balance' && can.code !== 'day' && can.code !== 'cap') throw conflict(can.reason, can.code ?? 'blocked');
+    // La propia petición es la sesión abierta. El plan puede haber cambiado mientras esperaba.
+    const ordinary = s.kind === 'timer' && !s.extra;
+    const can = canStart({ ...a, open: false }, ordinary);
+    if (!can.ok) throw conflict(can.reason, can.code ?? 'blocked');
+    if (ordinary && s.requested_minutes > can.maxMinutes) {
+      throw conflict(a.capLeft === can.maxMinutes ? `Hoy solo te quedan ${can.maxMinutes} min según tu plan.` : `Ahora puedes usar como mucho ${can.maxMinutes} min.`, 'too_long');
+    }
     if (a.untilBlockMin != null && s.requested_minutes > a.untilBlockMin) throw conflict(`Enseguida empieza un descanso: solo caben ${a.untilBlockMin} min.`, 'too_long');
     if (s.kind === 'charge') {
       // Tiempo extra: se descuenta al aprobarlo, sin temporizador.
-      await db.query(`UPDATE screen_sessions SET started_at = $2, planned_end_at = $2, decided_by = $3, decided_at = $2 WHERE id = $1`, [id, now, adult.id]);
-      const r = await settle(db, { ...s, started_at: now, planned_end_at: now }, s.requested_minutes, now, { endReason: 'charge', actorId: adult.id });
+      await db.query(`UPDATE screen_sessions SET started_at = $2, planned_end_at = $2, decided_by = $3, decided_at = $2, day = $4 WHERE id = $1`, [id, now, adult.id, a.today]);
+      const r = await settle(db, { ...s, started_at: now, planned_end_at: now, day: a.today }, s.requested_minutes, now, { endReason: 'charge', actorId: adult.id });
       await audit(db, adult.familyId, adult.id, 'screen_session.approve', 'screen_session', id, { for: s.user_id, minutes: s.requested_minutes, extra: true });
       await notify(db, {
         userId: s.user_id, event: 'screen_decided', title: `${adult.displayName} te ha dado ${s.requested_minutes} min de pantalla${what(s)}`,
@@ -466,7 +476,7 @@ export async function approveSession(adult: AuthUser, id: string, opts: { now?: 
       return { session: await viewSession(db, id), duplicate: false };
     }
     const end = new Date(now.getTime() + s.requested_minutes * 60_000);
-    await db.query(`UPDATE screen_sessions SET status = 'running', started_at = $2, planned_end_at = $3, decided_by = $4, decided_at = $2 WHERE id = $1`, [id, now, end, adult.id]);
+    await db.query(`UPDATE screen_sessions SET status = 'running', started_at = $2, planned_end_at = $3, decided_by = $4, decided_at = $2, day = $5 WHERE id = $1`, [id, now, end, adult.id, a.today]);
     await audit(db, adult.familyId, adult.id, 'screen_session.approve', 'screen_session', id, { for: s.user_id, minutes: s.requested_minutes });
     await notify(db, { userId: s.user_id, event: 'screen_decided', title: `${adult.displayName} ha aprobado tu pantalla`, body: `${s.requested_minutes} min${what(s)} · termina a las ${clockAt(end, fam.timezone)}.`, link: '/pantalla', dedupeKey: `screen-approved:${id}` });
     return { session: await viewSession(db, id), duplicate: false };
@@ -705,6 +715,15 @@ export async function screenState(viewer: AuthUser, userId: string, opts: { now?
     await closeDueSessions(db, now, userId);
     await expireLots(db, viewer.familyId, userId, now);
     const access = await accessFor(db, fam, userId, now);
+    const legacyUsage = await one<{ confirmed: number; pending: number; direct: number }>(db,
+      `SELECT COALESCE(SUM(minutes) FILTER (WHERE status = 'confirmed'),0)::int AS confirmed,
+              COALESCE(SUM(minutes) FILTER (WHERE status = 'pending'),0)::int AS pending,
+              (SELECT COALESCE(SUM(-delta),0)::int FROM screen_ledger
+                WHERE user_id = $1 AND kind = 'spend' AND ref_id IS NULL AND delta < 0
+                  AND created_at >= ($2::date::timestamp AT TIME ZONE $3)
+                  AND created_at < (($2::date + 1)::timestamp AT TIME ZONE $3)) AS direct
+         FROM screen_usage_logs WHERE user_id = $1 AND day = $2`, [userId, access.today, fam.timezone],
+    );
     const own = viewer.role === 'child';
     const session = await one(db, `${SESSION_SELECT} WHERE s.user_id = $1 AND s.kind = 'timer' AND s.status IN ('pending','running')`, [userId]);
     const pendingExtra = await one(db, `${SESSION_SELECT} WHERE s.user_id = $1 AND s.kind = 'charge' AND s.status = 'pending'`, [userId]);
@@ -727,7 +746,10 @@ export async function screenState(viewer: AuthUser, userId: string, opts: { now?
       balance: access.balance,
       buckets: await screenBuckets(db, userId),
       plan: { enabled: plan?.enabled ?? false, minutes_per_week: plan?.minutes_per_week ?? 0, allowed_days: access.rules.allowedDays, day_max: access.rules.dayMax, require_approval: access.rules.requireApproval },
-      today: { date: access.today, allowed: access.allowedDay, cap: access.cap, used: access.usedToday, cap_left: access.capLeft },
+      today: {
+        date: access.today, allowed: access.allowedDay, cap: access.cap, used: access.usedToday, cap_left: access.capLeft,
+        total_used_minutes: access.totalSessionMinutes + legacyUsage!.confirmed + legacyUsage!.direct, pending_legacy_minutes: legacyUsage!.pending,
+      },
       can_start: own ? can.ok : adultCan.ok,
       reason: own ? can.reason : adultCan.reason,
       reason_code: own ? can.code : adultCan.code,

@@ -3,8 +3,8 @@ import { badRequest, conflict } from './errors.js';
 
 export type PointsKind = 'task' | 'adjustment' | 'bonus' | 'redemption' | 'refund' | 'conversion' | 'exchange' | 'advance' | 'loan_interest';
 export type MoneyKind =
-  | 'conversion' | 'payment' | 'adjustment' | 'transfer' | 'exchange' | 'advance' | 'loan' | 'loan_repayment'
-  | 'interest' | 'interest_forfeit' | 'goal_redeem' | 'goal_auto' | 'goal_match' | 'goal_gift' | 'goal_reversal';
+  | 'conversion' | 'payment' | 'adjustment' | 'transfer' | 'exchange' | 'advance' | 'loan' | 'loan_delivery' | 'loan_repayment'
+  | 'interest' | 'interest_forfeit' | 'goal_redeem' | 'goal_auto' | 'goal_match' | 'goal_gift' | 'goal_reversal' | 'expense';
 
 /** Bloquea la fila del usuario para serializar operaciones de saldo concurrentes (dentro de una transacción). */
 export async function lockUser(db: Db, userId: string) {

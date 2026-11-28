@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Banknote, CircleCheckBig, MessageCircle, MonitorSmartphone, Flame, Gift, Hourglass, PartyPopper, TriangleAlert } from 'lucide-react';
+import { Banknote, CircleCheckBig, MessageCircle, Flame, Gift, Hourglass, PartyPopper, TriangleAlert } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 import { euros, relative, weekdayLong } from '../lib/format';
@@ -13,11 +13,13 @@ import { Bar, WeekRing } from '../components/Ring';
 import { ApprovalCard } from '../components/ApprovalCard';
 import { TaskRow } from '../components/TaskRow';
 import { PaySheet } from '../components/MoneySheets';
-import { GiveMinutesSheet } from '../components/ScreenSheets';
+import { DeductMinutesSheet } from '../components/ScreenSheets';
+import { TaskRegistrationSheet } from '../components/TaskRegistrationSheet';
+import { ParentTaskSuggestions } from '../components/TaskSuggestions';
 
 export default function ParentDashboard() {
   const { user } = useSession();
-  const [sheet, setSheet] = useState<{ kind: 'pay' | 'screen'; child: User; wallet: Wallet } | null>(null);
+  const [sheet, setSheet] = useState<{ kind: 'pay' | 'screen'; child: User; wallet: Wallet } | { kind: 'task' } | null>(null);
   const { data, isLoading } = useQuery({ queryKey: ['dashboard'], queryFn: () => api('/dashboard') });
   const today = useQuery({
     queryKey: ['instances', 'today-all'],
@@ -26,7 +28,7 @@ export default function ParentDashboard() {
   if (isLoading || !data) return <Loading />;
 
   const pending = data.pendingApprovals.length;
-  const toDo = pending + data.pendingChecks + data.pendingGrants + data.pendingRequests + data.pendingUsage;
+  const toDo = pending + data.pendingChecks + data.pendingGrants + data.pendingRequests + data.pendingUsage + data.pendingProposals;
   return (
     <div>
       <PageHeader title="Panel familiar" subtitle={<span className="inline-block first-letter:uppercase">{weekdayLong(data.today)}</span>} />
@@ -103,9 +105,9 @@ export default function ParentDashboard() {
                     </div>
                   </dl>
                   <div className="flex gap-2 border-t border-[var(--line)] p-3">
-                    <Button variant="success" size="sm" className="flex-1" disabled={k.wallet.cents_pending <= 0} onClick={() => setSheet({ kind: 'pay', child: k, wallet: k.wallet })}><Banknote size={16} aria-hidden /> Pagar</Button>
-                    <Button variant="secondary" size="sm" className="flex-1 px-2" onClick={() => setSheet({ kind: 'screen', child: k, wallet: k.wallet })}><MonitorSmartphone size={16} aria-hidden /> Dar minutos</Button>
-                    <Link to={`/pantalla?hijo=${k.id}`} className={`${buttonClass('secondary', 'sm')} flex-1 px-2`} aria-label={`Pantalla de ${k.display_name}`}>Pantalla</Link>
+                    <Button variant="success" size="sm" className="flex-1 !px-2" disabled={k.wallet.cents_pending <= 0} onClick={() => setSheet({ kind: 'pay', child: k, wallet: k.wallet })}><Banknote size={16} aria-hidden /> Pagar</Button>
+                    <Button variant="secondary" size="sm" className="min-w-0 flex-[1.3] !px-2 text-center leading-tight !whitespace-normal" onClick={() => setSheet({ kind: 'screen', child: k, wallet: k.wallet })}>Descontar minutos</Button>
+                    <Link to={`/pantalla?hijo=${k.id}`} className={`${buttonClass('secondary', 'sm')} flex-1 !px-2`} aria-label={`Pantalla de ${k.display_name}`}>Pantalla</Link>
                   </div>
                 </article>
               );
@@ -126,7 +128,7 @@ export default function ParentDashboard() {
           ) : (
             <div className="card"><Empty mascot icon={<CircleCheckBig />} title="Todo validado">Cuando terminen una tarea, aparecerá aquí.</Empty></div>
           )}
-          {data.pendingChecks || data.pendingGrants || data.pendingRequests || data.pendingUsage ? (
+          {data.pendingChecks || data.pendingGrants || data.pendingRequests || data.pendingUsage || data.pendingProposals ? (
             <Link to="/validar" className="card mt-3 flex items-center gap-3 p-4 font-bold">
               <CircleCheckBig className="text-leaf" size={22} aria-hidden />
               {[
@@ -134,6 +136,7 @@ export default function ParentDashboard() {
                 data.pendingGrants ? `${data.pendingGrants} ${data.pendingGrants === 1 ? 'premio' : 'premios'} por cumplir` : '',
                 data.pendingRequests ? `${data.pendingRequests} ${data.pendingRequests === 1 ? 'petición' : 'peticiones'}` : '',
                 data.pendingUsage ? `${data.pendingUsage} de pantalla por confirmar` : '',
+                data.pendingProposals ? `${data.pendingProposals} ${data.pendingProposals === 1 ? 'propuesta' : 'propuestas'}` : '',
               ].filter(Boolean).join(' · ')}
             </Link>
           ) : null}
@@ -148,7 +151,7 @@ export default function ParentDashboard() {
           ) : null}
 
           <div className="mt-8">
-            <SectionTitle>Tareas de hoy</SectionTitle>
+            <SectionTitle action={data.kids.length ? <Button size="sm" variant="secondary" onClick={() => setSheet({ kind: 'task' })}>Registrar tarea hecha</Button> : undefined}>Tareas de hoy</SectionTitle>
             {today.data?.instances.length ? (
               <ul className="space-y-2">
                 {today.data.instances.map((i) => <TaskRow key={i.id} inst={i} showAssignee />)}
@@ -157,6 +160,7 @@ export default function ParentDashboard() {
               <div className="card"><Empty icon={<Hourglass />} title="Hoy no hay tareas">Crea tareas en la sección Tareas.</Empty></div>
             )}
           </div>
+          <ParentTaskSuggestions />
         </section>
 
         <section>
@@ -173,7 +177,8 @@ export default function ParentDashboard() {
         </section>
       </div>
       {sheet?.kind === 'pay' ? <PaySheet child={sheet.child} wallet={sheet.wallet} onClose={() => setSheet(null)} /> : null}
-      {sheet?.kind === 'screen' ? <GiveMinutesSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'screen' ? <DeductMinutesSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'task' ? <TaskRegistrationSheet today={data.today} children={data.kids} onClose={() => setSheet(null)} /> : null}
     </div>
   );
 }

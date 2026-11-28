@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Lock, PauseCircle, Plus, Sparkles, Timer, Unlock } from 'lucide-react';
+import { ArrowRight, Lock, Minus, PauseCircle, Plus, Sparkles, Timer, Unlock } from 'lucide-react';
 import { api, post } from '../lib/api';
 import { useInvalidateAll } from '../lib/hooks';
 import { useScreenState } from '../lib/screen-state';
@@ -9,7 +9,7 @@ import { minutesHM } from '../lib/deadline';
 import type { ScreenBlock, ScreenPlanRow, ScreenSession, User } from '../lib/types';
 import { Avatar, Badge, Button, Disclosure, Loading, PageHeader, SectionTitle, useToast } from '../components/ui';
 import { Countdown, PendingSessionCard, ScreenBatteries, SessionsHistory, StopButton, TodayLine } from '../components/ScreenParts';
-import { BlockSheet, GiveMinutesSheet, ManualMinutesSheet, TimerSheet } from '../components/ScreenSheets';
+import { BlockSheet, DeductMinutesSheet, ManualMinutesSheet, TimerSheet } from '../components/ScreenSheets';
 import { ScreenAdjustSheet } from '../components/ScreenAdjustSheet';
 import { PlanRow } from '../components/ScreenSettings';
 import { ScreenList } from '../components/Ledger';
@@ -41,7 +41,7 @@ function BlockRow({ b, child }: { b: ScreenBlock; child: User }) {
 function KidScreen({ child }: { child: User }) {
   const q = useScreenState(child.id);
   const plans = useQuery({ queryKey: ['screen-plans'], queryFn: () => api<{ plans: ScreenPlanRow[] }>('/screen/plans') });
-  const [sheet, setSheet] = useState<'give' | 'timer' | 'block' | 'adjust' | 'manual' | null>(null);
+  const [sheet, setSheet] = useState<'deduct' | 'timer' | 'block' | 'adjust' | 'manual' | null>(null);
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const act = useMutation({
@@ -83,9 +83,9 @@ function KidScreen({ child }: { child: User }) {
             <span className="flex items-center justify-center gap-1.5"><Timer size={19} className="shrink-0" aria-hidden /> Encender temporizador</span>
             <span className="text-xs font-semibold opacity-80">Cuenta atrás; cobra lo usado</span>
           </Button>
-          <Button size="lg" variant="secondary" className="h-auto min-h-14 min-w-0 flex-col gap-0.5 px-2 py-2 text-center leading-tight !whitespace-normal" onClick={() => setSheet('give')}>
-            <span className="flex items-center justify-center gap-1.5"><Sparkles size={19} className="shrink-0" aria-hidden /> Dar minutos</span>
-            <span className="text-xs font-semibold opacity-80">Se descuentan ya, sin temporizador</span>
+          <Button size="lg" variant="secondary" className="h-auto min-h-14 min-w-0 flex-col gap-0.5 px-2 py-2 text-center leading-tight !whitespace-normal" onClick={() => setSheet('deduct')}>
+            <span className="flex items-center justify-center gap-1.5"><Minus size={19} className="shrink-0" aria-hidden /> Descontar minutos</span>
+            <span className="text-xs font-semibold opacity-80">Al instante, sin temporizador</span>
           </Button>
         </div>
       )}
@@ -132,7 +132,7 @@ function KidScreen({ child }: { child: User }) {
       </section>
       <Disclosure title="Todos los movimientos de minutos"><ScreenList userId={child.id} /></Disclosure>
 
-      {sheet === 'give' ? <GiveMinutesSheet child={child} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'deduct' ? <DeductMinutesSheet child={child} onClose={() => setSheet(null)} /> : null}
       {sheet === 'timer' ? <TimerSheet child={child} onClose={() => setSheet(null)} /> : null}
       {sheet === 'block' ? <BlockSheet child={child} onClose={() => setSheet(null)} /> : null}
       {sheet === 'adjust' ? <ScreenAdjustSheet child={child} onClose={() => setSheet(null)} /> : null}

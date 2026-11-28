@@ -41,6 +41,93 @@ async function submitted(over: Record<string, unknown> = {}) {
 }
 const review = (id: string, body: Record<string, unknown>) => F.mama.post(`/api/instances/${id}/review`, body);
 
+describe('Registro de tareas por un adulto', () => {
+  it('registra una tarea compartida vencida para el hijo elegido, con rastro y un solo premio', async () => {
+    const day = addDays(today(), -1);
+    const task = await F.mama.post('/api/tasks', {
+      title: 'Recoger el cuarto', points: 20, recurrence: 'once', startDate: day,
+      assignmentMode: 'shared', assignees: [F.ids.lucia, F.ids.hugo], requiresPhoto: true,
+      bonus: { kind: 'points', points: 5 },
+    });
+    expect(task.status).toBe(200);
+    const { instances } = (await F.mama.get(`/api/instances?from=${day}`)).body;
+    const inst = instances.find((i: any) => i.task_id === task.body.task.id);
+    const url = `/api/instances/${inst.id}/register`;
+    expect((await F.luciaC.post(url, { childId: F.ids.lucia })).status).toBe(403);
+    expect((await F.mama.post(url, { childId: F.ids.papa, note: 'Lo he visto' })).status).toBe(403);
+    expect((await F.mama.post(url, { childId: F.ids.hugo })).body.error).toBe('verification_required');
+    const requests = await Promise.all([F.mama, F.papaC].map((adult) => adult.post(url, { childId: F.ids.hugo, note: 'He comprobado el cuarto' })));
+    expect(requests.map((r) => r.status)).toEqual([200, 200]);
+    expect(requests.map((r) => r.body.duplicate).sort()).toEqual([false, true]);
+    expect((await F.mama.post(url, { childId: F.ids.lucia, note: 'Otra persona' })).status).toBe(409);
+    expect(await bal(F.ids.hugo)).toBe(25);
+    expect(await bal(F.ids.lucia)).toBe(0);
+    expect(await one(pool(), `SELECT actor_id, data->>'for' AS child_id FROM audit_log WHERE entity_id = $1 AND action = 'task.register'`, [inst.id]))
+      .toEqual({ actor_id: requests[0].body.duplicate ? F.ids.papa : F.ids.mama, child_id: F.ids.hugo });
+    const mine = (await F.hugoC.get(`/api/instances?from=${day}`)).body.instances.find((i: any) => i.id === inst.id);
+    expect(mine).toMatchObject({ due_date: day, completed_by: F.ids.hugo, status: 'approved', review_note: 'He comprobado el cuarto', adult_logged: true, can_unmark: false });
+  });
+
+  it('respeta la asignación individual, el día de la tarea y las vías de revisión', async () => {
+    const task = await F.mama.post('/api/tasks', {
+      title: 'Preparar la mochila', points: 10, recurrence: 'daily', startDate: today(), assignees: [F.ids.lucia],
+    });
+    const tomorrow = addDays(today(), 1);
+    const { instances } = (await F.mama.get(`/api/instances?to=${tomorrow}`)).body;
+    const inst = (day: string) => instances.find((i: any) => i.task_id === task.body.task.id && i.due_date === day);
+    const register = (id: string, childId = F.ids.lucia) => F.mama.post(`/api/instances/${id}/register`, { childId });
+    expect((await register(inst(today()).id, F.ids.hugo)).status).toBe(403);
+    expect((await register(inst(tomorrow).id)).body.error).toBe('not_due');
+    await F.luciaC.post(`/api/instances/${inst(today()).id}/complete`);
+    expect((await register(inst(today()).id)).body.error).toBe('review_required');
+    const check = await F.mama.post('/api/tasks', {
+      title: 'Hora de acostarse', points: 10, recurrence: 'daily', startDate: today(), assignees: [F.ids.lucia], checkMode: true,
+    });
+    const i = (await F.mama.get('/api/instances')).body.instances.find((v: any) => v.task_id === check.body.task.id);
+    expect((await register(i.id)).body.error).toBe('check_task');
+    expect(await bal(F.ids.lucia)).toBe(0);
+  });
+
+  it('aplica la hora efectiva de la familia a los puntos y al bono de una jornada anterior', async () => {
+    const day = addDays(today(), -1);
+    const task = await F.mama.post('/api/tasks', {
+      title: 'Preparar la ropa', points: 20, recurrence: 'once', startDate: day,
+      dueTime: '10:00', dueTimeWeekend: '10:00', latePercent: 50, assignees: [F.ids.lucia, F.ids.hugo],
+      bonus: { kind: 'points', points: 5, onTimeOnly: true },
+    });
+    const { instances } = (await F.mama.get(`/api/instances?from=${day}`)).body;
+    const register = (childId: string, completedTime?: string) => {
+      const i = instances.find((v: any) => v.task_id === task.body.task.id && v.assignee_id === childId);
+      return F.mama.post(`/api/instances/${i.id}/register`, { childId, completedTime });
+    };
+    expect((await register(F.ids.lucia)).body.error).toBe('completion_time_required');
+    expect((await register(F.ids.lucia, '09:55')).status).toBe(200);
+    expect((await register(F.ids.hugo, '10:05')).status).toBe(200);
+    expect(await bal(F.ids.lucia)).toBe(25);
+    expect(await bal(F.ids.hugo)).toBe(10);
+    const mine = (await F.hugoC.get(`/api/instances?from=${day}`)).body.instances.find((i: any) => i.task_id === task.body.task.id);
+    expect(mine).toMatchObject({ completed_at: zonedToUtc(day, '10:05', TZ).toISOString(), on_time: false, registered_by_name: 'Mamá' });
+    expect(mine.reviewed_at).not.toBe(mine.completed_at);
+  });
+
+  it('consultar un día pasado para registrar no materializa ocurrencias con la asignación actual', async () => {
+    const day = addDays(today(), -2);
+    const definition = { title: 'Ordenar la mesa', points: 5, recurrence: 'daily', startDate: day, assignees: [F.ids.lucia] };
+    const { task } = (await F.mama.post('/api/tasks', definition)).body;
+    expect((await F.mama.put(`/api/tasks/${task.id}`, { ...definition, assignees: [F.ids.hugo] })).status).toBe(200);
+    const historical = () => one(pool(), 'SELECT id FROM task_instances WHERE task_id = $1 AND due_date = $2', [task.id, day]);
+    expect(await historical()).toBeUndefined();
+    const r = await F.mama.get(`/api/instances?from=${day}&registration=1`);
+    expect(r).toMatchObject({ status: 200, body: { instances: [] } });
+    expect(await historical()).toBeUndefined();
+    expect((await F.luciaC.get(`/api/instances?from=${day}&registration=1`)).status).toBe(403);
+    const ordinary = await F.mama.get(`/api/instances?from=${day}`);
+    const rebuilt = ordinary.body.instances.find((i: any) => i.task_id === task.id);
+    expect(rebuilt).toMatchObject({ assignee_id: F.ids.hugo, registration_children: [] });
+    expect((await F.mama.post(`/api/instances/${rebuilt.id}/register`, { childId: F.ids.hugo })).body.error).toBe('historical_assignment_unknown');
+  });
+});
+
 describe('Premio parcial (I15)', () => {
   it('da solo esos puntos, exige motivo, no concede bono y cuenta como hecha', async () => {
     const t = await submitted({ bonus: { kind: 'points', points: 5, surprise: false, onTimeOnly: false } });

@@ -12,6 +12,7 @@ import type { ZipEntry } from './zip.js';
 const OMIT: Record<string, string[]> = {
   users: ['password_hash', 'totp_secret', 'totp_pending', 'totp_last_counter'],
   invitations: ['token_hash'],
+  child_expenses: ['request_id', 'quote_token', 'input_digest'],
 };
 
 type Spec = { key: string; table: string; where: string };
@@ -22,11 +23,12 @@ const BY_USER = (table: string, key = table): Spec => ({ key, table, where: 't.u
 const FILES: { file: string; about: string; specs: Spec[] }[] = [
   { file: 'familia.json', about: 'Ajustes de la familia', specs: [{ key: 'familia', table: 'families', where: 't.id = $1' }, BY_FAMILY('family_holidays', 'festivos')] },
   { file: 'miembros.json', about: 'Adultos e hijos (sin contraseñas ni claves)', specs: [{ key: 'miembros', table: 'users', where: 't.family_id = $1' }, BY_USER('user_badges', 'insignias')] },
-  { file: 'tareas.json', about: 'Tareas y a quién se asignan', specs: [BY_FAMILY('tasks', 'tareas'), { key: 'asignaciones', table: 'task_assignees', where: 't.task_id IN (SELECT id FROM tasks WHERE family_id = $1)' }] },
+  { file: 'tareas.json', about: 'Tareas y a quién se asignan', specs: [BY_FAMILY('tasks', 'tareas'), { key: 'asignaciones', table: 'task_assignees', where: 't.task_id IN (SELECT id FROM tasks WHERE family_id = $1)' }, BY_FAMILY('task_promotions', 'promociones')] },
   { file: 'tareas-hechas.json', about: 'Cada vez que se hizo una tarea, con notas, estado y la foto de evidencia (carpeta fotos/)', specs: [BY_FAMILY('task_instances', 'tareas_hechas')] },
+  { file: 'propuestas.json', about: 'Ideas de tareas y premios de los hijos, con sus respuestas', specs: [BY_FAMILY('catalog_proposals', 'propuestas')] },
   { file: 'puntos.json', about: 'Libro de puntos', specs: [BY_FAMILY('points_ledger', 'movimientos_de_puntos')] },
-  { file: 'dinero.json', about: 'Libro de dinero, cierres semanales y pagos', specs: [BY_FAMILY('money_ledger', 'movimientos_de_dinero'), BY_FAMILY('settlements', 'cierres'), BY_FAMILY('payments', 'pagos'), BY_FAMILY('payout_requests', 'peticiones_de_pago')] },
-  { file: 'banco.json', about: 'Metas de ahorro (con su foto, en la carpeta fotos/), préstamos y topes', specs: [BY_FAMILY('savings_goals', 'metas'), BY_FAMILY('goal_requests', 'peticiones_de_meta'), BY_FAMILY('loans', 'prestamos'), BY_FAMILY('loan_charges', 'cuotas'), BY_FAMILY('cap_uses', 'usos_del_tope')] },
+  { file: 'dinero.json', about: 'Libro de dinero, gastos, cierres semanales y pagos', specs: [BY_FAMILY('money_ledger', 'movimientos_de_dinero'), BY_FAMILY('child_expenses', 'gastos'), BY_FAMILY('expense_rules', 'reglas_de_gasto'), BY_FAMILY('settlements', 'cierres'), BY_FAMILY('payments', 'pagos'), BY_FAMILY('payout_requests', 'peticiones_de_pago')] },
+  { file: 'banco.json', about: 'Metas de ahorro (con su foto, en la carpeta fotos/), préstamos y topes', specs: [BY_FAMILY('savings_goals', 'metas'), BY_FAMILY('goal_requests', 'peticiones_de_meta'), BY_FAMILY('loans', 'prestamos'), BY_FAMILY('loan_disbursements', 'desembolsos'), BY_FAMILY('loan_charges', 'cuotas'), BY_FAMILY('cap_uses', 'usos_del_tope')] },
   { file: 'recompensas.json', about: 'Recompensas, canjes y premios por bono', specs: [BY_FAMILY('rewards', 'recompensas'), BY_FAMILY('redemptions', 'canjes'), BY_FAMILY('bonus_grants', 'bonos'), BY_USER('bonus_claims', 'sorpresas_reclamadas')] },
   { file: 'pantalla.json', about: 'Minutos de pantalla, planes, ajustes y usos', specs: [BY_FAMILY('screen_ledger', 'movimientos'), BY_FAMILY('screen_lots', 'lotes'), BY_FAMILY('screen_plans', 'planes'), BY_FAMILY('screen_adjust_reasons', 'motivos_de_ajuste'), BY_FAMILY('screen_adjustments', 'ajustes'), BY_FAMILY('screen_usage_logs', 'usos'), BY_FAMILY('honesty_days', 'dias_de_honestidad'), BY_FAMILY('screen_sessions', 'sesiones'), BY_FAMILY('screen_debts', 'excesos'), BY_FAMILY('screen_blocks', 'bloqueos')] },
   { file: 'avisos.json', about: 'Avisos dentro de la app, envíos por correo o WhatsApp y preferencias', specs: [BY_USER('notifications', 'avisos'), BY_FAMILY('notification_outbox', 'envios'), BY_USER('notification_prefs', 'preferencias'), BY_FAMILY('cheers', 'felicitaciones')] },
@@ -135,7 +137,7 @@ export async function eraseChild(familyId: string, userId: string): Promise<{ ph
       `SELECT photo_path FROM task_instances WHERE family_id = $1 AND photo_path IS NOT NULL AND (completed_by = $2 OR assignee_id = $2)`,
       [familyId, userId],
     );
-    await db.query(`UPDATE task_instances SET photo_path = NULL, child_note = NULL WHERE family_id = $1 AND completed_by = $2`, [familyId, userId]);
+    await db.query(`UPDATE task_instances SET photo_path = NULL, child_note = NULL, review_note = CASE WHEN adult_logged THEN NULL ELSE review_note END WHERE family_id = $1 AND completed_by = $2`, [familyId, userId]);
     // Las fotos de sus metas de ahorro también (las filas de las metas se van con su cuenta).
     for (const g of await many<{ photo_path: string }>(db, 'SELECT photo_path FROM savings_goals WHERE user_id = $1 AND photo_path IS NOT NULL', [userId])) rows.push({ photo_path: g.photo_path });
     // Y las de los retos de pantalla.

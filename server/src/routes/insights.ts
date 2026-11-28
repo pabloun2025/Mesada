@@ -119,7 +119,7 @@ export default async function insightRoutes(app: FastifyInstance) {
         return { ...c, today: todayStats, weekPoints, weekCents: pointsToCents(fam, Math.max(0, weekPoints)), wallet, streak };
       }),
     );
-    const [pendingApprovals, pendingRedemptions, overdue, pendingChecks, pendingGrants, pendingRequests, pendingUsage, pendingBank, activity] = await Promise.all([
+    const [pendingApprovals, pendingRedemptions, overdue, pendingChecks, pendingGrants, pendingRequests, pendingUsage, pendingBank, pendingProposals, activity] = await Promise.all([
       many(
         db,
         `SELECT i.id, i.due_date, i.points, i.completed_at, i.child_note, (i.photo_path IS NOT NULL) AS has_photo, t.title, t.icon,
@@ -136,6 +136,7 @@ export default async function insightRoutes(app: FastifyInstance) {
       one(db, `SELECT ((SELECT count(*) FROM payout_requests WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM screen_sessions WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM screen_blocks WHERE family_id = $1 AND status = 'active' AND challenge_status = 'submitted'))::int AS n`, [u.familyId]),
       one(db, `SELECT count(*)::int AS n FROM screen_usage_logs WHERE family_id = $1 AND status = 'pending'`, [u.familyId]),
       one(db, `SELECT ((SELECT count(*) FROM loans WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM goal_requests WHERE family_id = $1 AND status = 'pending') + (SELECT count(*) FROM savings_goals WHERE family_id = $1 AND NOT archived AND (status = 'proposed' OR (status = 'active' AND auto_pending_percent IS NOT NULL))))::int AS n`, [u.familyId]),
+      one(db, `SELECT count(*)::int AS n FROM catalog_proposals WHERE family_id = $1 AND status = 'pending'`, [u.familyId]),
       many(
         db,
         `SELECT a.id, a.action, a.entity, a.data, a.created_at, u.display_name AS actor_name, u.avatar AS actor_avatar, u.color AS actor_color, fu.display_name AS for_name
@@ -156,6 +157,7 @@ export default async function insightRoutes(app: FastifyInstance) {
       pendingRequests: pendingRequests.n,
       pendingUsage: pendingUsage.n,
       pendingBank: pendingBank.n,
+      pendingProposals: pendingProposals.n,
       activity,
       totals: {
         weekCents: kids.reduce((s, k) => s + k.weekCents, 0),

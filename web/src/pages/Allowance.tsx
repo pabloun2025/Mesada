@@ -15,7 +15,9 @@ import { ScreenList } from '../components/Ledger';
 import { GoalProduct, LoanProduct, Statement } from '../components/Bank';
 import { minutesLabel } from '../lib/deadline';
 import { PaySheet } from '../components/MoneySheets';
-import { GiveMinutesSheet } from '../components/ScreenSheets';
+import { DeductMinutesSheet } from '../components/ScreenSheets';
+import { ExpenseSheet } from '../components/ExpenseSheet';
+import { ExpenseRules } from '../components/ExpenseRules';
 import type { ScreenView } from '../lib/types';
 
 function AdjustSheet({ child, onClose }: { child: User; onClose: () => void }) {
@@ -71,8 +73,10 @@ function BalanceTile({ tone, label, value, note }: { tone: 'money' | 'points'; l
   );
 }
 
+type SheetKind = 'pay' | 'adjust' | 'history' | 'screen' | 'screen-adjust' | 'screen-history' | 'expense';
+
 /** Panel de banca de un hijo: sus dos cuentas, retiros de la semana, préstamo, metas y acciones. */
-function KidPanel({ child: k, wallet: w, pending, onSheet }: { child: User; wallet?: Wallet; pending: number; onSheet: (kind: 'pay' | 'adjust' | 'history' | 'screen' | 'screen-adjust' | 'screen-history', w: Wallet, bank?: Bank) => void }) {
+function KidPanel({ child: k, wallet: w, pending, onSheet }: { child: User; wallet?: Wallet; pending: number; onSheet: (kind: SheetKind, w: Wallet, bank?: Bank) => void }) {
   const toast = useToast();
   const invalidate = useInvalidateAll();
   const screenQ = useQuery({ queryKey: ['screen', k.id], queryFn: () => api<ScreenView>(`/screen/${k.id}`) });
@@ -100,7 +104,7 @@ function KidPanel({ child: k, wallet: w, pending, onSheet }: { child: User; wall
       {w && bank ? (
         <>
           <div className="mt-4 grid gap-2.5 min-[420px]:grid-cols-[1.25fr_1fr]">
-            <BalanceTile tone="money" label="Dinero · por pagar" value={euros(w.cents_pending)} note={<span className="num tracking-[0.06em] whitespace-nowrap">{bank.accounts.money}</span>} />
+            <BalanceTile tone="money" label={w.cents_pending < 0 ? 'Dinero · saldo en negativo' : 'Dinero · por pagar'} value={euros(w.cents_pending)} note={<span className="num tracking-[0.06em] whitespace-nowrap">{bank.accounts.money}</span>} />
             <BalanceTile tone="points" label="Puntos" value={String(w.points_available)} note={<>≈ {euros(w.points_value_cents)} sin convertir{w.points_reserved ? ` · ${w.points_reserved} reservados` : ''}</>} />
           </div>
           <p className="mt-3.5 flex items-center gap-2.5 text-sm text-[var(--fg-2)]"><Pips used={bank.week.withdrawals_used} total={bank.week.withdrawals_max} /> Retiros esta semana: <b className="text-[var(--fg)]">{bank.week.withdrawals_used} de {bank.week.withdrawals_max}</b></p>
@@ -122,7 +126,8 @@ function KidPanel({ child: k, wallet: w, pending, onSheet }: { child: User; wall
           <p className="mt-1 text-xs text-[var(--fg-3)]">Convertido en total {euros(w.cents_converted_total)} · pagado {euros(w.cents_paid_total)}</p>
           <div className="mt-4 grid grid-cols-2 gap-2 min-[560px]:grid-cols-3 min-[1100px]:grid-cols-2 min-[1500px]:grid-cols-3">
             <Button variant="success" size="sm" className="h-11" disabled={w.cents_pending <= 0} onClick={() => onSheet('pay', w)}><Banknote size={17} aria-hidden /> Pagar</Button>
-            <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('screen', w)}><MonitorSmartphone size={17} aria-hidden /> Dar minutos</Button>
+            <Button variant="secondary" size="sm" className="h-11 min-w-0 !px-2 leading-tight !whitespace-normal" onClick={() => onSheet('expense', w)}>Registrar gasto</Button>
+            <Button variant="secondary" size="sm" className="h-11 min-w-0 !px-2 text-center leading-tight !whitespace-normal" onClick={() => onSheet('screen', w)}><MonitorSmartphone size={17} className="shrink-0" aria-hidden /> Descontar minutos</Button>
             <Link to={`/pantalla?hijo=${k.id}`} className={`${buttonClass('secondary', 'sm')} h-11`}>Pantalla</Link>
             <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('screen-adjust', w)}><Sparkles size={17} aria-hidden /> Ajuste de pantalla</Button>
             <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('adjust', w)}><SlidersHorizontal size={17} aria-hidden /> Ajustar</Button>
@@ -158,7 +163,7 @@ export default function Allowance() {
   const summary = useQuery({ queryKey: ['bank-summary'], queryFn: () => api<{ summary: BankSummary }>('/bank-summary') });
   const settlements = useQuery({ queryKey: ['settlements'], queryFn: () => api('/settlements') });
   const approvals = useBankApprovals();
-  const [sheet, setSheet] = useState<{ kind: 'pay' | 'adjust' | 'history' | 'screen' | 'screen-adjust' | 'screen-history'; child: User; wallet: Wallet; bank?: Bank } | null>(null);
+  const [sheet, setSheet] = useState<{ kind: SheetKind; child: User; wallet: Wallet; bank?: Bank } | null>(null);
   const [closing, setClosing] = useState(false);
   const toast = useToast();
   const invalidate = useInvalidateAll();
@@ -205,6 +210,8 @@ export default function Allowance() {
         </div>
       </section>
 
+      <ExpenseRules manage />
+
       <section className="mt-8">
         <SectionTitle>Cierres anteriores</SectionTitle>
         {settlements.data?.settlements?.length ? (
@@ -233,7 +240,8 @@ export default function Allowance() {
         <p className="muted">Los puntos disponibles de cada hijo se convertirán en euros ({family.rate_points} pts = {euros(family.rate_cents)}){family.cap_cents != null ? `, con un máximo de ${euros(family.cap_cents)} por ${periodName}. Lo que pase del límite se queda en puntos` : ''}. Cada {periodName} solo se puede cerrar una vez.</p>
       </Sheet>
       {sheet?.kind === 'pay' ? <PaySheet child={sheet.child} wallet={sheet.wallet} onClose={() => setSheet(null)} /> : null}
-      {sheet?.kind === 'screen' ? <GiveMinutesSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'expense' ? <ExpenseSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'screen' ? <DeductMinutesSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
       {sheet?.kind === 'screen-adjust' ? <ScreenAdjustSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
       {sheet?.kind === 'screen-history' ? (
         <Sheet open onClose={() => setSheet(null)} title={`Pantalla de ${sheet.child.display_name}`} subtitle={<>Saldo: <b className="num text-[var(--fg)]">{minutesLabel(sheet.wallet.screen_minutes)}</b></>}><ScreenList userId={sheet.child.id} /></Sheet>

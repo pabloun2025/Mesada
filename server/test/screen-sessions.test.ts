@@ -6,7 +6,7 @@ import { addDays, isoWeekday, startOfWeek, todayIn } from '../src/lib/dates.js';
 import { addScreen, screenBalance } from '../src/lib/screen.js';
 import { addMoney, addPoints, moneyBalance, pointsBalance } from '../src/lib/ledger.js';
 import { zonedToUtc } from '../src/lib/notify/time.js';
-import { closeDueSessions, createBlock, runScreenDebts, runScreenSessions, startSession, warnExpiringLots } from '../src/lib/screen-sessions.js';
+import { approveSession, closeDueSessions, createBlock, runScreenDebts, runScreenSessions, screenState, startSession, stopSession, warnExpiringLots } from '../src/lib/screen-sessions.js';
 import { resetLoginFailures } from '../src/routes/auth.js';
 import { setSetting } from '../src/lib/settings.js';
 import { createFamily, resetDb } from './helpers.js';
@@ -121,7 +121,7 @@ describe('Sesiones de pantalla (I21)', () => {
 });
 
 describe('Días de uso y topes (I21)', () => {
-  const rules = (allowedDays: number[], dayMax: Record<string, number> = {}) => F.mama.put(`/api/screen/rules/${L()}`, { allowedDays, dayMax, requireApproval: false });
+  const rules = (allowedDays: number[], dayMax: Record<string, number> = {}, requireApproval = false) => F.mama.put(`/api/screen/rules/${L()}`, { allowedDays, dayMax, requireApproval });
 
   it('fuera de los días permitidos el botón no arranca y dice por qué; un adulto sí puede', async () => {
     await give(60);
@@ -160,6 +160,62 @@ describe('Días de uso y topes (I21)', () => {
     expect(done.body.message).toMatch(/ya has usado tus 30 min/);
     // Un adulto sí puede dar tiempo aparte.
     expect((await F.mama.post('/api/screen/sessions', { userId: L(), minutes: 10 })).status).toBe(200);
+  });
+
+  it('distingue el uso total registrado del uso del plan sin contar dos veces el exceso', async () => {
+    await give(90);
+    const dow = isoWeekday(today());
+    await rules([1, 2, 3, 4, 5, 6, 7], { [dow]: 20 });
+    const timer = (await start(F.luciaC, { minutes: 10 })).body.session;
+    await age(timer.id, 10);
+    await F.luciaC.post(`/api/screen/sessions/${timer.id}/stop`);
+    await F.luciaC.post(`/api/screen/sessions/${timer.id}/overrun`, { minutes: 2 });
+    const charge = { userId: L(), mode: 'charge', category: 'tablet' };
+    const recorded = await start(F.mama, { ...charge, minutes: 12, extra: false });
+    expect(recorded.status).toBe(200);
+    expect(recorded.body.session).toMatchObject({ used_minutes: 12, charged_minutes: 12, extra: false, category: 'tablet' });
+    expect((await start(F.mama, { ...charge, minutes: 3 })).body.session.extra).toBe(true);
+    expect((await start(F.mama, { ...charge, minutes: 4, extra: true })).body.session.extra).toBe(true);
+    const log = (await F.luciaC.post('/api/screen-logs', { minutes: 5, category: 'tele' })).body.log;
+    await F.mama.post(`/api/screen-logs/${log.id}/confirm`);
+    await F.luciaC.post('/api/screen-logs', { minutes: 6, category: 'tele' });
+    const voided = (await F.luciaC.post('/api/screen-logs', { minutes: 8, category: 'movil' })).body.log;
+    await F.mama.post(`/api/screen-logs/${voided.id}/void`);
+    expect((await F.mama.post('/api/screen/spend', { userId: L(), minutes: 9, category: 'videojuegos' })).status).toBe(200);
+    const pendingExtra = await start(F.luciaC, { minutes: 7, extra: true });
+    expect(pendingExtra.body.session.status).toBe('pending');
+    const expected = { cap: 20, used: 22, cap_left: 0, total_used_minutes: 45, pending_legacy_minutes: 6 };
+    expect((await state()).today).toMatchObject(expected);
+    expect((await state(F.mama)).today).toMatchObject(expected);
+    expect((await state(F.mama, F.ids.hugo)).today).toMatchObject({ used: 0, total_used_minutes: 0 });
+    expect((await start(F.luciaC, { ...charge, minutes: 5, extra: false })).status).toBe(403);
+    expect((await start(F.luciaC, { minutes: 5 })).body.error).toBe('cap');
+  });
+
+  it('cuenta el temporizador aprobado después de medianoche en el día en que empezó', async () => {
+    await give(60);
+    await rules([1, 2, 3, 4, 5, 6, 7], {}, true);
+    const yesterday = addDays(today(), -1);
+    const submitted = await startSession(kidUser(), { minutes: 20 }, { now: zonedToUtc(yesterday, '23:58', TZ) });
+    expect(submitted.session).toMatchObject({ status: 'pending', day: yesterday });
+    const approved = await approveSession(adultUser(), submitted.session.id, { now: at('00:02') });
+    expect(approved.session).toMatchObject({ status: 'running', day: today() });
+    await stopSession(kidUser(), submitted.session.id, { now: at('00:07') });
+    expect((await screenState(kidUser(), L(), { now: at('00:08') })).today).toMatchObject({ used: 5, total_used_minutes: 5 });
+  });
+
+  it('volver a comprobar el tope al aprobar evita un temporizador fuera del plan', async () => {
+    await give(90);
+    const dow = isoWeekday(today());
+    await rules([1, 2, 3, 4, 5, 6, 7], { [dow]: 20 }, true);
+    const pending = (await start(F.luciaC, { minutes: 10 })).body.session;
+    expect(pending.status).toBe('pending');
+    expect((await start(F.mama, { userId: L(), mode: 'charge', minutes: 20, extra: false })).status).toBe(200);
+    const denied = await F.mama.post(`/api/screen/sessions/${pending.id}/approve`);
+    expect(denied).toMatchObject({ status: 409, body: { error: 'cap' } });
+    expect((await state()).session).toMatchObject({ id: pending.id, status: 'pending' });
+    const extra = (await start(F.luciaC, { minutes: 10, extra: true })).body.session;
+    expect((await F.mama.post(`/api/screen/sessions/${extra.id}/approve`)).status).toBe(200);
   });
 
   it('valida los días y los topes, y un hijo no cambia sus reglas', async () => {

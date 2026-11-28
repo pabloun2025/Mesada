@@ -83,17 +83,18 @@ export function Countdown({ state, session, children }: { state: ScreenState; se
   );
 }
 
-const END_TEXT: Record<string, string> = { stopped: 'Parada', expired: 'Se acabó el tiempo', charge: 'Minutos dados', blocked: 'Parada por un descanso' };
+const END_TEXT: Record<string, string> = { stopped: 'Parada', expired: 'Se acabó el tiempo', charge: 'Minutos descontados', blocked: 'Parada por un descanso' };
 
 function sessionTitle(s: ScreenSession) {
   const cat = s.category ? ` · ${categoryInfo(s.category)?.emoji ?? ''} ${categoryInfo(s.category)?.label ?? ''}` : '';
-  if (s.kind === 'charge') return `${s.extra && s.started_by === s.user_id ? 'Tiempo extra' : 'Minutos dados'}: ${s.requested_minutes} min${s.note ? ` (${s.note})` : ''}`;
+  if (s.kind === 'charge') return `${s.extra && s.started_by === s.user_id ? 'Tiempo extra' : 'Minutos descontados'}: ${s.requested_minutes} min${s.note ? ` (${s.note})` : ''}`;
   return `${s.status === 'finished' ? s.used_minutes : s.requested_minutes} min de pantalla${s.note ? ` (${s.note})` : ''}${cat}`;
 }
 
 function sessionDetail(s: ScreenSession, tz: string) {
-  const who = s.kind === 'charge' ? (s.started_by === s.user_id ? `Pedido por ${s.display_name ?? 'el hijo'}, aprobado por ${s.stopped_by_name ?? 'un adulto'}` : `Lo dio ${s.started_by_name ?? 'un adulto'}`) : `Lo encendió ${s.started_by_name ?? '—'}`;
+  const who = s.kind === 'charge' ? (s.started_by === s.user_id ? `Pedido por ${s.display_name ?? 'el hijo'}, aprobado por ${s.stopped_by_name ?? 'un adulto'}` : `Lo registró ${s.started_by_name ?? 'un adulto'}`) : `Lo encendió ${s.started_by_name ?? '—'}`;
   const parts = [fmtDateTime(s.started_at ?? s.created_at), who];
+  if (s.kind === 'charge') parts.push(categoryInfo(s.category)?.label ?? 'Sin categoría', s.extra ? 'Extra autorizado' : 'Uso del plan');
   if (s.kind === 'timer' && s.status === 'finished') {
     parts.push(`${END_TEXT[s.end_reason ?? 'stopped']}${s.end_reason === 'stopped' && s.stopped_by_name ? `: ${s.stopped_by_name}` : ''}`);
     if (s.ended_at) parts.push(`hasta las ${fmtTime(s.ended_at, tz)}`);
@@ -127,12 +128,17 @@ export function SessionsHistory({ userId, timezone }: { userId: string; timezone
   );
 }
 
-/** Cuánto se puede usar hoy según el plan: días permitidos y tope. */
+/** Uso registrado, minutos del plan y lo que queda de su tope diario. */
 export function TodayLine({ state }: { state: ScreenState }) {
   const t = state.today;
-  if (!t.allowed) return <p className="flex items-start gap-2 text-sm font-bold text-berry-deep dark:text-[#ff9dbf]"><Lock size={16} className="mt-0.5 shrink-0" aria-hidden /> Hoy no toca pantalla según el plan.</p>;
-  if (t.cap == null) return <p className="flex items-center gap-2 text-sm muted"><Clock size={16} aria-hidden /> Hoy no hay tope diario.</p>;
-  return <p className="flex items-center gap-2 text-sm muted"><Clock size={16} aria-hidden /> Hoy: tope de {minutesHM(t.cap)} · llevas {minutesHM(t.used)}{t.cap_left != null ? ` · te quedan ${minutesHM(t.cap_left)}` : ''}</p>;
+  return (
+    <div className="space-y-1.5 text-sm" aria-label="Uso de pantalla de hoy">
+      <p className="flex items-start gap-2 font-bold"><Clock size={16} className="mt-0.5 shrink-0" aria-hidden /> Uso registrado hoy · {minutesHM(t.total_used_minutes)}</p>
+      {t.pending_legacy_minutes > 0 ? <p className="ml-6 muted">{minutesHM(t.pending_legacy_minutes)} pendientes de confirmar</p> : null}
+      <p className="ml-6 muted">{minutesHM(t.used)} de uso del plan{t.cap !== null && t.cap_left !== null ? ` · tope diario de ${minutesHM(t.cap)} · quedan ${minutesHM(t.cap_left)}` : t.allowed ? ' · sin tope diario' : ''}</p>
+      {!t.allowed ? <p className="flex items-start gap-2 font-bold text-berry-deep dark:text-[#ff9dbf]"><Lock size={16} className="mt-0.5 shrink-0" aria-hidden /> Hoy no toca pantalla según el plan.</p> : null}
+    </div>
+  );
 }
 
 export function StopButton({ onClick, loading, label = 'Parar' }: { onClick: () => void; loading?: boolean; label?: string }) {

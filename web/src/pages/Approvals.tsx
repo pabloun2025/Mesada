@@ -9,6 +9,7 @@ import { screenPhrase } from '../lib/screen';
 import { Avatar, Badge, Button, Empty, Loading, PageHeader, PointsPill, SectionTitle, useToast } from '../components/ui';
 import { ApprovalCard } from '../components/ApprovalCard';
 import { BankApprovals } from '../components/BankApprovals';
+import { PendingCatalogProposals } from '../components/CatalogProposals';
 
 /** Tareas que marca un adulto: dos botones, y se puede corregir después. */
 function CheckTasks({ today }: { today: string }) {
@@ -99,9 +100,9 @@ function PendingGrants() {
   const invalidate = useInvalidateAll();
   const list = useQuery({ queryKey: ['bonus-grants', 'pending'], queryFn: () => api<{ grants: BonusGrant[] }>('/bonus-grants') });
   const fulfill = useMutation({
-    mutationFn: (id: string) => post(`/bonus-grants/${id}/fulfill`),
+    mutationFn: (g: BonusGrant) => post(`/bonus-grants/${g.id}/fulfill`, { expectedRewardId: g.reward_id ?? undefined }),
     onSuccess: () => { toast('Marcado como cumplido'); invalidate(); },
-    onError: (e: Error) => toast(e.message, 'error'),
+    onError: (e: Error) => { toast(e.message, 'error'); invalidate(); },
   });
   const grants = list.data?.grants ?? [];
   if (!grants.length) return null;
@@ -114,9 +115,9 @@ function PendingGrants() {
             <Avatar name={g.display_name} avatar={g.avatar} colorKey={g.color} size={40} />
             <div className="min-w-0 flex-1">
               <p className="font-bold">{g.surprise ? <Gift size={16} className="mr-1 inline align-[-2px] text-sun-ink dark:text-sun" aria-hidden /> : null}{g.label}</p>
-              <p className="text-sm muted">{g.display_name} · por «{g.task_title}» · pendiente de cumplir</p>
+              <p className="text-sm muted">{g.display_name} · por «{g.task_title}» · {g.swapped_at ? 'premio cambiado' : 'pendiente de cumplir'}</p>
             </div>
-            <Button size="sm" variant="success" disabled={fulfill.isPending} onClick={() => fulfill.mutate(g.id)}><Check size={16} /> Cumplido</Button>
+            <Button size="sm" variant="success" disabled={fulfill.isPending} onClick={() => fulfill.mutate(g)}><Check size={16} /> Cumplido</Button>
           </li>
         ))}
       </ul>
@@ -199,6 +200,7 @@ export default function Approvals() {
   return (
     <div className="max-w-3xl">
       <PageHeader title="Validar" subtitle="Revisa lo que han hecho. Puedes ajustar los puntos antes de aprobar." />
+      <PendingCatalogProposals />
       <PendingScreen />
       <CheckTasks today={data.today} />
       <BankApprovals heading={() => <SectionTitle>Dinero y pantalla</SectionTitle>} />

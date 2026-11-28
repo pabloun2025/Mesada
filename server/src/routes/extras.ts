@@ -27,7 +27,7 @@ const extraBody = z.object({
 
 const CATALOG_SELECT = `
   SELECT t.id, t.title, t.description, t.icon, t.points, t.requires_approval, t.requires_photo,
-         t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise, t.bonus_on_time_only,
+         t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise, t.bonus_on_time_only, t.bonus_allow_swap,
          rw.title AS bonus_reward_title,
          (SELECT i.id FROM task_instances i WHERE i.task_id = t.id AND i.is_extra AND i.status IN ('pending','submitted','rejected') LIMIT 1) AS open_instance_id
     FROM tasks t LEFT JOIN rewards rw ON rw.id = t.bonus_reward_id`;
@@ -36,7 +36,7 @@ const BOARD_SELECT = `
   SELECT i.id, i.task_id, i.status, i.points, i.due_date, i.extra_deadline, i.reserved_at, i.assignee_id, i.completed_by,
          (i.photo_path IS NOT NULL) AS has_photo, (i.photo_deleted_at IS NOT NULL) AS photo_deleted, i.review_note, i.completed_at, (i.reviewed_by IS NOT NULL) AS adult_reviewed,
          t.title, t.icon, t.description, t.requires_photo, t.requires_approval, t.points AS task_points,
-         t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise, t.bonus_on_time_only,
+         t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise, t.bonus_on_time_only, t.bonus_allow_swap,
          rw.title AS bonus_reward_title,
          COALESCE(au.display_name, cu.display_name) AS holder_name, COALESCE(au.avatar, cu.avatar) AS holder_avatar
     FROM task_instances i
@@ -58,7 +58,7 @@ function params(b: z.infer<typeof extraBody>) {
     b.title, b.description, b.icon, b.points, b.requiresApproval, b.requiresPhoto,
     b.bonus?.kind ?? null, b.bonus?.kind === 'points' ? b.bonus.points : null, b.bonus?.kind === 'screen' ? b.bonus.minutes : null,
     b.bonus?.kind === 'text' ? b.bonus.text : null, b.bonus?.kind === 'reward' ? b.bonus.rewardId : null,
-    b.bonus?.surprise ?? false, b.bonus?.onTimeOnly ?? false,
+    b.bonus?.surprise ?? false, b.bonus?.onTimeOnly ?? false, b.bonus?.allowSwap ?? false,
   ];
 }
 
@@ -89,8 +89,8 @@ export default async function extraRoutes(app: FastifyInstance) {
       const t = await one(
         db,
         `INSERT INTO tasks(family_id, is_extra, recurrence, start_date, assignment_mode, title, description, icon, points, requires_approval, requires_photo,
-                           bonus_kind, bonus_points, bonus_minutes, bonus_text, bonus_reward_id, bonus_surprise, bonus_on_time_only, created_by)
-         VALUES ($1, true, 'once', $2, 'individual', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $3) RETURNING id`,
+                           bonus_kind, bonus_points, bonus_minutes, bonus_text, bonus_reward_id, bonus_surprise, bonus_on_time_only, bonus_allow_swap, created_by)
+         VALUES ($1, true, 'once', $2, 'individual', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $3) RETURNING id`,
         [u.familyId, familyToday(fam), u.id, ...params(b)],
       );
       await audit(db, u.familyId, u.id, 'extra.create', 'task', t.id, { title: b.title, points: b.points });
@@ -107,7 +107,7 @@ export default async function extraRoutes(app: FastifyInstance) {
     await tx(async (db) => {
       const r = await db.query(
         `UPDATE tasks SET title=$3, description=$4, icon=$5, points=$6, requires_approval=$7, requires_photo=$8, bonus_kind=$9, bonus_points=$10, bonus_minutes=$11,
-                bonus_text=$12, bonus_reward_id=$13, bonus_surprise=$14, bonus_on_time_only=$15, updated_at=now()
+                bonus_text=$12, bonus_reward_id=$13, bonus_surprise=$14, bonus_on_time_only=$15, bonus_allow_swap=$16, updated_at=now()
           WHERE id=$1 AND family_id=$2 AND is_extra AND active`,
         [id, u.familyId, ...params(b)],
       );

@@ -70,6 +70,10 @@ export interface Instance {
   has_photo: boolean;
   photo_deleted?: boolean;
   review_note: string | null;
+  adult_logged?: boolean;
+  registered_by_name?: string | null;
+  registration_children?: string[];
+  promotion?: TaskPromotion | null;
   review_outcome: ReviewOutcome | null;
   penalty_points: number;
   penalty_screen: number;
@@ -128,6 +132,9 @@ export interface BonusGrant {
   surprise: boolean;
   revealed_at: string | null;
   fulfilled_at: string | null;
+  reward_id?: string | null;
+  can_swap?: boolean;
+  swapped_at?: string | null;
   created_at: string;
   display_name: string;
   avatar: string;
@@ -163,6 +170,7 @@ export interface Task {
   bonus_reward_id?: string | null;
   bonus_surprise?: boolean;
   bonus_on_time_only?: boolean;
+  bonus_allow_swap?: boolean;
   assignment_mode: 'individual' | 'shared' | 'rotation';
   requires_approval: boolean;
   requires_photo: boolean;
@@ -187,6 +195,40 @@ export interface Reward {
   description: string;
   icon: string;
   cost_points: number;
+  swap_eligible?: boolean;
+}
+
+export interface CatalogProposal {
+  id: string;
+  kind: 'task' | 'reward';
+  title: string;
+  description: string;
+  points: number | null;
+  status: 'pending' | 'approved' | 'rejected';
+  decision: 'approve' | 'edit' | 'reject' | null;
+  decision_note: string | null;
+  decided_by_name: string | null;
+  display_name: string;
+  result_title: string | null;
+  result_description: string | null;
+  result_points: number | null;
+}
+
+export interface TaskPromotion {
+  base_points: number;
+  extra_points: number;
+  percentage: 30 | 50;
+  day: string;
+}
+
+export interface TaskSuggestion {
+  task_id: string;
+  instance_id: string;
+  title: string;
+  icon: string;
+  base_points: number;
+  can_promote: boolean;
+  promotion: TaskPromotion | null;
 }
 
 export interface Redemption {
@@ -270,10 +312,22 @@ export interface Loan {
   remaining_cents: number;
   installment_cents: number;
   next_charge_week: string | null;
+  proposed_first_charge_week: string | null;
+  disbursement: LoanDisbursement | null;
   created_at: string;
   display_name: string;
   avatar: string;
   color: string;
+}
+
+export interface LoanDisbursement {
+  destination: 'balance' | 'external' | 'goal' | 'purchase';
+  currency: 'EUR' | 'USD';
+  method: 'cash' | 'bizum' | 'transfer' | null;
+  goal_title: string | null;
+  expense_title: string | null;
+  actor_name: string | null;
+  created_at: string;
 }
 
 export interface Bank {
@@ -362,6 +416,29 @@ export interface GoalRequest {
   color: string;
 }
 
+export type ExpenseContribution = { type: 'amount'; cents: number } | { type: 'percent'; basisPoints: number };
+export type ExpenseRule = { id: string; title: string } & (
+  | { type: 'amount'; cents: number; basis_points: null; currency: 'EUR' | 'USD' }
+  | { type: 'percent'; cents: null; basis_points: number; currency: null }
+);
+
+export interface ExpenseBreakdown {
+  total_cents: number;
+  parent_cents: number;
+  parent_basis_points: number | null;
+  child_cents: number;
+  cash_cents: number;
+  used_points: number;
+  points_cents: number;
+  debt_cents: number;
+  balance_after: number;
+  currency?: 'EUR' | 'USD' | null;
+  loan_cents?: number | null;
+  loan_applied_cents?: number | null;
+  prior_cash_cents?: number | null;
+  rule?: ExpenseRule & { proposed_cents: number; override_reason: string | null } | null;
+}
+
 export interface StatementEntry {
   id: string;
   account: 'money' | 'points';
@@ -375,6 +452,8 @@ export interface StatementEntry {
   balance_after: number;
   method: PayMethod | null;
   is_withdrawal: boolean;
+  expense: ExpenseBreakdown | null;
+  disbursement: LoanDisbursement | null;
 }
 
 /** Trabajo extra en el tablón (I11). `assignee_id` null = libre; si no, lo tiene `holder_name`. */
@@ -471,7 +550,7 @@ export interface ScreenState {
   now: string; timezone: string; balance: number;
   buckets: { plan: { minutes: number; amount: number; expires_at: string | null }; earned: { minutes: number; amount: number; first_expires_at: string | null; lots: { minutes: number; expires_at: string }[] } };
   plan: { enabled: boolean; minutes_per_week: number; allowed_days: number[]; day_max: Record<string, number>; require_approval: boolean };
-  today: { date: string; allowed: boolean; cap: number | null; used: number; cap_left: number | null };
+  today: { date: string; allowed: boolean; cap: number | null; used: number; cap_left: number | null; total_used_minutes: number; pending_legacy_minutes: number };
   can_start: boolean; reason: string; reason_code: string | null; max_minutes: number;
   session: ScreenSession | null; pending_extra: ScreenSession | null; last_session: ScreenSession | null;
   blocks: ScreenBlock[]; pause: { label: string } | null; debt_minutes: number; expiring: { minutes: number; expires_at: string } | null;

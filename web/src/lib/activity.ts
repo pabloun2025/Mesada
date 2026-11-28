@@ -5,6 +5,11 @@ export function describeAction(a: { action: string; data: any }): string {
   switch (a.action) {
     case 'task.complete': return d.status === 'approved' ? 'completó una tarea' : 'marcó una tarea como hecha';
     case 'task.approve': return `aprobó una tarea (${d.points} pts)`;
+    case 'task.register': return `registró «${d.title}» como hecha (${d.points} pts)`;
+    case 'task.promotion': return `activó un ${d.percentage} % extra para «${d.title}»`;
+    case 'bonus.swap': return `cambió su sorpresa por «${String(d.label ?? '').replace(/^Premio: /, '')}»`;
+    case 'proposal.submit': return `propuso ${d.kind === 'task' ? 'una tarea' : 'un premio'}`;
+    case 'proposal.decide': return `${d.decision === 'reject' ? 'rechazó' : 'aprobó'} una propuesta de ${d.kind === 'task' ? 'tarea' : 'premio'}`;
     case 'task.points_changed': return `cambió los puntos de ${d.from} a ${d.to}`;
     case 'task.create': return `creó la tarea «${d.title}»`;
     case 'task.update': return `editó la tarea «${d.title}»`;
@@ -27,6 +32,9 @@ export function describeAction(a: { action: string; data: any }): string {
     case 'bank.advance': return `adelantó ${eur(d.cents)} de la semana que viene`;
     case 'loan.request': return `pidió un préstamo de ${eur(d.cents)} en ${d.weeks} semanas`;
     case 'loan.approve': return `aprobó un préstamo de ${eur(d.cents)}`;
+    case 'expense_rule.create': return `creó la regla de gasto «${d.title}»`;
+    case 'expense_rule.update': return `editó la regla de gasto «${d.title}»`;
+    case 'expense_rule.archive': return `archivó la regla de gasto «${d.title}»`;
     case 'loan.reject': return 'rechazó un préstamo';
     case 'loan.cancel': return 'canceló su petición de préstamo';
     case 'goal.request': return d.kind === 'redeem' ? `pidió canjear la meta «${d.title}»` : `pidió pasar a efectivo la meta «${d.title}»`;

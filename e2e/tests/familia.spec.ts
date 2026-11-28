@@ -904,6 +904,7 @@ test.describe.serial('Familia completa', () => {
     await expect(adult.getByText('Préstamo en 3 semanas')).toBeVisible();
     await adult.screenshot({ path: `${SHOTS}/21-validar-prestamo.png`, fullPage: true });
     await adult.getByRole('button', { name: `Aprobar el préstamo de ${KID.name}` }).click();
+    await adult.getByRole('dialog').getByRole('button', { name: 'Aprobar préstamo', exact: true }).click();
     await expect(adult.getByText('Préstamo aprobado: el dinero ya está en su cuenta')).toBeVisible();
     expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.cents_pending).toBe(before + 600);
 
@@ -1618,14 +1619,14 @@ test.describe.serial('Familia completa', () => {
     await ap.context().close();
   });
 
-  test('pantalla (I21): el padre enciende y para el temporizador, y «Dar minutos» descuenta ya y cobra con puntos lo que no llega', async ({ browser }) => {
+  test('pantalla (I21): el padre puede usar el temporizador o descontar minutos al instante', async ({ browser }) => {
     test.setTimeout(120_000);
     const me = (await api(kid, 'get', '/me')).body.user;
     const ap = await newAdultPhone(browser);
     await ap.goto(`/pantalla?hijo=${me.id}`);
-    // Encender temporizador (cuenta atrás), distinto de «Dar minutos».
+    // Encender temporizador (cuenta atrás), distinto de «Descontar minutos».
     await expect(ap.getByRole('button', { name: /Encender temporizador/ })).toBeVisible();
-    await expect(ap.getByRole('button', { name: /Dar minutos/ })).toBeVisible();
+    await expect(ap.getByRole('button', { name: /Descontar minutos/ })).toBeVisible();
     await shot(ap, '115-padre-dos-botones-375');
     await ap.getByRole('button', { name: /Encender temporizador/ }).click();
     const d = ap.getByRole('dialog');
@@ -1647,26 +1648,39 @@ test.describe.serial('Familia completa', () => {
     const stopped = (await api(kid, 'get', '/notifications')).body.notifications.find((n: any) => n.kind === 'screen_stopped');
     expect(stopped.title).toContain(`${ADULT.name} ha parado tu pantalla`);
 
-    // «Dar minutos» sin temporizador: el saldo queda corto y se cobra con puntos.
-    const bal = (await api(kid, 'get', `/screen/${me.id}`)).body.balance;
+    // Registrar 15 min concedidos en el iPad descuenta el saldo de inmediato.
+    const before = (await api(kid, 'get', `/screen/${me.id}`)).body.balance;
+    await ap.getByRole('button', { name: /Descontar minutos/ }).click();
+    const ipad = ap.getByRole('dialog');
+    await ipad.getByRole('button', { name: '15 min', exact: true }).click();
+    await ipad.getByLabel('Para qué (opcional)').fill('iPad');
+    await ipad.getByRole('button', { name: 'Descontar 15 min' }).click();
+    await expect(ipad).toBeHidden();
+    const state = (await api(kid, 'get', `/screen/${me.id}/state`)).body;
+    expect(state.balance).toBe(before - 15);
+    expect(state.session).toBeNull();
+    await expect(ap.getByRole('list', { name: 'Historial de sesiones de pantalla' })).toContainText('Minutos descontados: 15 min (iPad)');
+
+    // Si el saldo queda corto, se puede cobrar la diferencia con puntos.
+    const bal = state.balance;
     await api(adult, 'post', '/screen/adjust', { userId: me.id, delta: -(bal - 5), note: 'Dejar 5 min para probar' });
     const pts = (await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available;
-    await ap.getByRole('button', { name: /Dar minutos/ }).click();
+    await ap.getByRole('button', { name: /Descontar minutos/ }).click();
     const g = ap.getByRole('dialog');
     await keypad(g, '15');
     await g.getByLabel('Para qué (opcional)').fill('TikTok');
     await expect(g.getByText('No llegan los minutos: faltan 10 min')).toBeVisible();
     await g.getByRole('radio', { name: '7 puntos' }).click();
     await shot(ap, '116-padre-dar-minutos-cobro-375');
-    await g.getByRole('button', { name: 'Dar 15 min' }).click();
-    await expect(ap.getByText(`Hecho: 15 min (7 puntos) para ${KID.name}`)).toBeVisible();
+    await g.getByRole('button', { name: 'Descontar 15 min' }).click();
+    await expect(ap.getByText(`15 min descontados a ${KID.name} (7 puntos)`)).toBeVisible();
     expect((await api(kid, 'get', `/screen/${me.id}`)).body.balance).toBe(0);
     expect((await api(kid, 'get', `/wallet/${me.id}`)).body.wallet.points_available).toBe(pts - 7);
     expect((await api(kid, 'get', `/screen/${me.id}/state`)).body.session).toBeNull(); // sin temporizador
     const given = (await api(kid, 'get', '/notifications')).body.notifications.find((n: any) => /te ha dado 15 min de pantalla \(TikTok\)/.test(n.title));
     expect(given.body).toBe('Pagados con 7 puntos.');
     // Queda en el historial de sesiones y en el extracto del banco.
-    await expect(ap.getByRole('list', { name: 'Historial de sesiones de pantalla' })).toContainText('Minutos dados: 15 min (TikTok)');
+    await expect(ap.getByRole('list', { name: 'Historial de sesiones de pantalla' })).toContainText('Minutos descontados: 15 min (TikTok)');
     await kid.goto('/mesada');
     await expect(kid.getByText('Pantalla extra: 10 min (TikTok)')).toBeVisible();
     // Devuelve algo de saldo para los siguientes recorridos.
@@ -1705,7 +1719,7 @@ test.describe.serial('Familia completa', () => {
     await plan.getByRole('button', { name: `Guardar el plan de ${KID.name}` }).click();
     await expect(ap.getByText(`Plan de ${KID.name} guardado`).last()).toBeVisible();
     await kid.reload();
-    await expect(kid.getByText(/Hoy: tope de .* te quedan 10 min/)).toBeVisible();
+    await expect(kid.getByText(/tope diario de .* quedan 10 min/)).toBeVisible();
     await kid.getByRole('button', { name: 'Usar pantalla' }).click();
     const d = kid.getByRole('dialog');
     await keypad(d, '15');
@@ -2441,6 +2455,126 @@ test.describe.serial('Familia completa', () => {
     expect(await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     await p.screenshot({ path: `${SHOTS}/90-error-con-codigo-375.png` });
     await ctx.close();
+  });
+
+  test('gasto compartido: el hijo ve el reparto, los puntos convertidos y lo que queda pendiente', async ({ browser }) => {
+    expect((await api(adult, 'patch', '/family', { ratePoints: 100, rateCents: 500, capCents: 300, settlementPeriod: 'week', bankExchangeEnabled: true })).status).toBe(200);
+    const member = await api(adult, 'post', '/members', { role: 'child', displayName: 'Celia', username: 'celia.cine', password: '4321' });
+    expect(member.status).toBe(200);
+    const userId = member.body.member.id;
+    expect((await api(adult, 'post', '/adjustments/money', { userId, deltaCents: 200, note: 'Saldo de prueba' })).status).toBe(200);
+    expect((await api(adult, 'post', '/adjustments/points', { userId, delta: 100, note: 'Puntos de prueba' })).status).toBe(200);
+
+    const parentCtx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 375, height: 812 }, locale: 'es-ES' });
+    const ap = await parentCtx.newPage();
+    await login(ap, ADULT.user, ADULT.pass);
+    await expect(ap.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    await ap.goto('/mesada');
+    const register = ap.getByRole('article', { name: 'Cuenta de Celia' }).getByRole('button', { name: 'Registrar gasto' });
+    await register.click();
+    const dialog = ap.getByRole('dialog');
+    await dialog.getByLabel('Motivo').fill('Entrada de cine');
+    await dialog.getByLabel('Precio total (€)').fill('12,01');
+    await dialog.getByRole('button', { name: 'Ver desglose' }).click();
+    await expect(dialog.getByText('6,01 € (50 %)')).toBeVisible();
+    await expect(dialog.getByText('60 pts → 3,00 €')).toBeVisible();
+    // El servidor guarda el gasto, pero se pierde la respuesta antes de que la reciba el navegador.
+    await ap.route('**/api/expenses', async (route) => {
+      const response = await route.fetch();
+      if (response.ok()) await route.abort();
+      else await route.fulfill({ response });
+    }, { times: 1 });
+    await dialog.getByRole('button', { name: 'Confirmar gasto' }).click();
+    await expect(dialog.getByRole('alert')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cerrar' }).click();
+    await ap.reload();
+    await register.click();
+    await expect(dialog.getByText('Vuelve a confirmar para comprobar si el gasto quedó registrado.')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Confirmar gasto' }).click();
+    await expect(dialog).toBeHidden();
+    expect((await api(adult, 'get', `/wallet/${userId}`)).body.wallet).toMatchObject({ cents_pending: -100, points_available: 40 });
+    await ap.context().close();
+
+    const childCtx = await browser.newContext({ viewport: { width: 320, height: 812 }, locale: 'es-ES' });
+    try {
+      const p = await childCtx.newPage();
+      await login(p, 'celia.cine', '4321', true);
+      await p.getByRole('button', { name: /Avisos/ }).click();
+      const notice = p.getByRole('button', { name: /registró «Entrada de cine»/ });
+      await expect(notice).toContainText('60 puntos cubren 3,00 €');
+      await notice.click();
+      await expect(p.getByRole('heading', { name: 'Mi banco' })).toBeVisible();
+      const expense = p.getByRole('listitem').filter({ has: p.getByText('Entrada de cine', { exact: true }) });
+      await expect(expense).toContainText('Registrado por Ana');
+      await expect(expense).toContainText('6,01 € (50 %)');
+      await expect(expense).toContainText('-1,00 €');
+      expect(await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    } finally {
+      await childCtx.close();
+    }
+  });
+
+  test('el banco muestra la compra financiada y conserva la excepción a una regla de gasto', async ({ browser }) => {
+    expect((await api(adult, 'patch', '/family', { currency: 'EUR', ratePoints: 100, rateCents: 500, capCents: 1000, settlementPeriod: 'week', bankLoanEnabled: true, bankLoanMaxPercent: 100, bankExchangeEnabled: true })).status).toBe(200);
+    const member = await api(adult, 'post', '/members', { role: 'child', displayName: 'Nora', username: 'nora.compra', password: '4321' });
+    expect(member.status).toBe(200);
+    const userId = member.body.member.id;
+    expect((await api(adult, 'post', '/adjustments/money', { userId, deltaCents: 100, note: 'Saldo anterior' })).status).toBe(200);
+    expect((await api(adult, 'post', '/adjustments/points', { userId, delta: 24, note: 'Puntos para la compra' })).status).toBe(200);
+    const p = await newAdultPhone(browser);
+    const n = await newSmallPage(browser);
+    try {
+      await login(n, 'nora.compra', '4321', true);
+      await expect(n.getByRole('region', { name: 'Mi mesada' })).toBeVisible();
+      expect((await api(n, 'post', '/loans', { amountCents: 600, weeks: 3 })).status).toBe(200);
+      await p.goto('/mesada');
+      await p.getByRole('button', { name: 'Aprobar el préstamo de Nora' }).click();
+      const dialog = p.getByRole('dialog');
+      await dialog.getByLabel('Destino del préstamo').selectOption('purchase');
+      await dialog.getByLabel('Artículo').fill('Robux');
+      await dialog.getByLabel('Precio total (€)').fill('9');
+      await dialog.getByRole('button', { name: 'Ver desglose' }).click();
+      await expect(dialog.getByText('Robux · EUR')).toBeVisible();
+      await expect(dialog.getByText('24 pts → 1,20 €')).toBeVisible();
+      await dialog.getByRole('button', { name: 'Aprobar préstamo', exact: true }).click();
+      await expect(dialog).toBeHidden();
+      await n.goto('/mesada');
+      const financed = n.getByRole('listitem').filter({ has: n.getByText('Robux', { exact: true }) });
+      await expect(financed).toContainText('Del préstamo');
+      await expect(financed).toContainText('Del saldo previo');
+      await expect(financed).toContainText('-0,80 €');
+
+      const rules = p.getByRole('region', { name: 'Reglas de gastos' });
+      await rules.getByRole('button', { name: 'Nueva regla', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Usar 50 % para salidas' }).click();
+      await dialog.getByRole('button', { name: 'Guardar regla' }).click();
+      await expect(dialog).toBeHidden();
+      await expect(rules).toContainText('Salidas con amigos');
+      await p.getByRole('article', { name: 'Cuenta de Nora' }).getByRole('button', { name: 'Registrar gasto' }).click();
+      await dialog.getByLabel('Motivo', { exact: true }).fill('Salida');
+      await dialog.getByLabel('Precio total (€)').fill('5,01');
+      await dialog.getByLabel('Regla de gasto').selectOption({ label: 'Salidas con amigos · 50 %' });
+      await dialog.getByRole('checkbox', { name: 'Hacer una excepción' }).check();
+      await dialog.getByRole('radio', { name: 'Importe fijo' }).click();
+      await dialog.getByLabel('Aportación familiar (€)').fill('4');
+      await dialog.getByLabel('Motivo de la excepción').fill('La familia invitó esta vez');
+      await dialog.getByRole('button', { name: 'Ver desglose' }).click();
+      await expect(dialog).toContainText('Excepción a la aportación de 2,51 €');
+      await dialog.getByRole('button', { name: 'Confirmar gasto' }).click();
+      await expect(dialog).toBeHidden();
+      await rules.getByRole('button', { name: 'Editar Salidas con amigos' }).click();
+      await dialog.getByLabel('Porcentaje que aporta la familia').fill('70');
+      await dialog.getByRole('button', { name: 'Guardar regla' }).click();
+      await expect(rules).toContainText('70 %');
+      await n.reload();
+      await expect(n.getByRole('region', { name: 'Reglas de gastos' })).toContainText('70 %');
+      const receipt = n.getByRole('listitem').filter({ has: n.getByText('Salida', { exact: true }) });
+      await expect(receipt).toContainText('50 %');
+      await expect(receipt).toContainText('La familia invitó esta vez');
+    } finally {
+      await p.context().close();
+      await n.context().close();
+    }
   });
 
   test('la app es instalable (manifest y service worker)', async () => {

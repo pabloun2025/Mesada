@@ -8,7 +8,7 @@ import type { ScreenEntry, ScreenPauseRow, ScreenView } from '../lib/types';
 
 const KIND: Record<string, string> = {
   task: 'Tarea', adjustment: 'Ajuste', bonus: 'Extra', redemption: 'Recompensa', refund: 'Devolución', conversion: 'Cierre',
-  payment: 'Pago', transfer: 'Ahorro', exchange: 'Canje', advance: 'Adelanto', loan: 'Préstamo', loan_repayment: 'Cuota del préstamo',
+  payment: 'Pago', transfer: 'Ahorro', exchange: 'Canje', advance: 'Adelanto', loan: 'Préstamo', loan_delivery: 'Entrega del préstamo', loan_repayment: 'Cuota del préstamo',
   loan_interest: 'Interés del préstamo', interest: 'Interés', interest_forfeit: 'Interés perdido', goal_redeem: 'Meta', goal_auto: 'Ahorro automático', goal_match: 'Aporte de los padres', goal_gift: 'Aporte', goal_reversal: 'Aporte anulado',
 };
 
@@ -59,7 +59,7 @@ export function ScreenList({ userId }: { userId: string }) {
             <div className="min-w-0 flex-1">
               <p className="font-bold">{e.is_adjustment ? `Ajuste de pantalla · ${e.reason}` : e.note || SCREEN_KIND[e.kind]}</p>
               <p className="flex flex-wrap items-center gap-1.5 text-xs muted">
-                {SCREEN_KIND[e.kind]}{e.category ? ` · ${categoryInfo(e.category)?.emoji} ${categoryInfo(e.category)?.label}` : ''} · {fmtDateTime(e.created_at)}{e.created_by_name ? ` · ${e.created_by_name}` : ''}
+                {SCREEN_KIND[e.kind]}{e.category ? ` · ${categoryInfo(e.category)?.emoji} ${categoryInfo(e.category)?.label}` : e.kind === 'spend' ? ' · Sin categoría' : ''} · {fmtDateTime(e.created_at)}{e.created_by_name ? ` · ${e.created_by_name}` : ''}
                 {e.kind === 'usage' && e.log_status ? <Badge tone={LOG_STATUS[e.log_status].tone}>{LOG_STATUS[e.log_status].label}</Badge> : null}
                 {e.kind === 'usage' && (e.log_overflow ?? 0) > 0 ? <Badge tone="berry">Te pasaste {e.log_overflow} min</Badge> : null}
               </p>

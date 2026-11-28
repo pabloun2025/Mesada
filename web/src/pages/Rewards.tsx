@@ -6,14 +6,15 @@ import { relative } from '../lib/format';
 import { useDecideRedemption, useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
 import type { Redemption, Reward, Wallet } from '../lib/types';
-import { Avatar, Badge, Button, Empty, Field, IconButton, Loading, PageHeader, PointsPill, SectionTitle, Sheet, useToast } from '../components/ui';
+import { Avatar, Badge, Button, Empty, Field, IconButton, Loading, PageHeader, PointsPill, SectionTitle, Sheet, Toggle, useToast } from '../components/ui';
+import { MyCatalogProposals } from '../components/CatalogProposals';
 import { Bar } from '../components/Ring';
 
 const ICONS = ['🎁', '🎬', '🎮', '🌙', '🍕', '🍦', '🧗', '🎳', '📱', '🛹', '🎨', '🏊', '📚', '🎟️', '🧁', '⚽'];
 const STATUS = { requested: { label: 'Pedida', tone: 'sun' }, approved: { label: 'Aprobada', tone: 'leaf' }, rejected: { label: 'Rechazada', tone: 'berry' }, delivered: { label: 'Entregada', tone: 'muted' } } as const;
 
 function RewardEditor({ initial, onClose }: { initial: Partial<Reward>; onClose: () => void }) {
-  const [r, setR] = useState({ title: initial.title ?? '', description: initial.description ?? '', icon: initial.icon ?? '🎁', costPoints: initial.cost_points ?? 50 });
+  const [r, setR] = useState({ title: initial.title ?? '', description: initial.description ?? '', icon: initial.icon ?? '🎁', costPoints: initial.cost_points ?? 50, swapEligible: initial.swap_eligible ?? false });
   const [error, setError] = useState('');
   const invalidate = useInvalidateAll();
   const save = useMutation({
@@ -33,6 +34,7 @@ function RewardEditor({ initial, onClose }: { initial: Partial<Reward>; onClose:
         <Field label="Recompensa">{(id) => <input id={id} className="field" value={r.title} onChange={(e) => setR({ ...r, title: e.target.value })} placeholder="Elegir la peli del viernes…" maxLength={80} />}</Field>
         <Field label="Detalles (opcional)">{(id) => <input id={id} className="field" value={r.description} onChange={(e) => setR({ ...r, description: e.target.value })} maxLength={500} />}</Field>
         <Field label="Cuesta (puntos)">{(id) => <input id={id} className="field num w-32 font-bold" type="number" min={1} value={r.costPoints} onChange={(e) => setR({ ...r, costPoints: Number(e.target.value) })} />}</Field>
+        <Toggle checked={r.swapEligible} onChange={(value) => setR({ ...r, swapEligible: value })} label="Disponible como alternativa de una sorpresa" />
         {error ? <p role="alert" className="text-sm font-bold text-berry-deep">{error}</p> : null}
       </div>
     </Sheet>
@@ -102,8 +104,9 @@ export default function Rewards() {
           })}
         </ul>
       ) : (
-        <div className="card"><Empty icon={<Gift />} title="Sin recompensas todavía">{isAdult ? 'Elegidlas en familia: elegir la peli, acostarse más tarde, una cena especial…' : 'Pide a tus padres que añadan alguna.'}</Empty></div>
+        <div className="card"><Empty icon={<Gift />} title="Sin recompensas todavía">{isAdult ? 'Elegidlas en familia: elegir la peli, acostarse más tarde, una cena especial…' : 'Puedes proponer un premio.'}</Empty></div>
       )}
+      {!isAdult ? <MyCatalogProposals kind="reward" /> : null}
 
       {history.length ? (
         <section className="mt-8">

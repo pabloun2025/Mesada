@@ -45,6 +45,94 @@ async function instOf(taskId: string, date = today()) {
 const ptsBalance = async (u: string) => (await one(pool(), 'SELECT COALESCE(SUM(delta),0)::int AS b FROM points_ledger WHERE user_id=$1', [u]))!.b as number;
 const screen = async (u: string) => (await F.mama.get(`/api/screen/${u}`)).body.balance as number;
 
+describe('cambio de una sorpresa del catálogo', () => {
+  async function reward(title: string, costPoints: number, swapEligible = true) {
+    const r = await F.mama.post('/api/rewards', { title, costPoints, swapEligible });
+    expect(r.status).toBe(200);
+    return r.body.reward;
+  }
+
+  async function win(rewardId: string) {
+    const task = await mk({ requiresApproval: false, bonus: { kind: 'reward', rewardId, surprise: true, allowSwap: true } });
+    const instances = (await F.luciaC.get('/api/instances')).body.instances;
+    expect(instances.find((i: any) => i.task_id === task.id).bonus).toEqual({ surprise: true, onTimeOnly: false });
+    expect((await F.luciaC.post(`/api/instances/${(await instOf(task.id)).id}/complete`)).status).toBe(200);
+    return (await F.luciaC.get('/api/bonus-grants/unrevealed')).body.grants[0];
+  }
+
+  it('mantiene el valor original después de editar y cambia una sola vez sin cobrar puntos', async () => {
+    const original = await reward('Elegir un juego', 40);
+    const matching = await reward('Elegir una película', 40);
+    const wrong = await reward('Doble premio', 60);
+    await reward('Sin permiso de cambio', 40, false);
+    const archived = await reward('Premio archivado', 40);
+    const g = await win(original.id);
+    const url = `/api/bonus-grants/${g.id}`;
+    expect((await F.luciaC.get(`${url}/alternatives`)).status).toBe(409);
+    expect((await F.luciaC.post(`${url}/reveal`)).status).toBe(200);
+    expect((await F.mama.put(`/api/rewards/${original.id}`, { title: 'Juego nuevo', costPoints: 60, swapEligible: true })).status).toBe(200);
+    expect((await F.mama.del(`/api/rewards/${archived.id}`)).status).toBe(200);
+    const available = await F.luciaC.get(`${url}/alternatives`);
+    expect(available).toMatchObject({ status: 200, body: { original_title: 'Elegir un juego', cost_points: 40, alternatives: [{ id: matching.id }] } });
+    expect((await F.hugoC.get(`${url}/alternatives`)).status).toBe(404);
+    expect((await F.hugoC.post(`${url}/swap`, { rewardId: matching.id })).status).toBe(404);
+    expect((await F.luciaC.post(`${url}/swap`, { rewardId: wrong.id })).status).toBe(409);
+    const points = await ptsBalance(F.ids.lucia);
+    expect((await F.luciaC.post(`${url}/swap`, { rewardId: matching.id })).status).toBe(200);
+    expect((await F.luciaC.post(`${url}/swap`, { rewardId: matching.id })).body.duplicate).toBe(true);
+    expect((await F.luciaC.post(`${url}/swap`, { rewardId: original.id })).status).toBe(409);
+    expect((await F.mama.post(`${url}/fulfill`, { expectedRewardId: original.id })).status).toBe(409);
+    expect((await F.mama.get('/api/bonus-grants')).body.grants[0]).toMatchObject({ label: 'Premio: Elegir una película', reward_id: matching.id });
+    expect((await F.mama.post(`${url}/fulfill`, { expectedRewardId: matching.id })).status).toBe(200);
+    expect(await ptsBalance(F.ids.lucia)).toBe(points);
+    expect((await F.luciaC.get('/api/redemptions')).body.redemptions).toEqual([]);
+  });
+
+  it('serializa la entrega y el cambio para que no se entregue un premio que ya cambió', async () => {
+    const original = await reward('Juego', 40);
+    const matching = await reward('Película', 40);
+    const g = await win(original.id);
+    const url = `/api/bonus-grants/${g.id}`;
+    await F.luciaC.post(`${url}/reveal`);
+    const [swap, fulfill] = await Promise.all([
+      F.luciaC.post(`${url}/swap`, { rewardId: matching.id }), F.mama.post(`${url}/fulfill`, { expectedRewardId: original.id }),
+    ]);
+    expect([swap.status, fulfill.status].sort()).toEqual([200, 409]);
+    const saved = await one(pool(), 'SELECT fulfilled_at, reward_id FROM bonus_grants WHERE id = $1', [g.id]);
+    if (swap.status === 200) expect(saved).toEqual({ fulfilled_at: null, reward_id: matching.id });
+    else expect(saved).toEqual({ fulfilled_at: expect.any(Date), reward_id: original.id });
+  });
+
+  it('da a otro hermano una concesión nueva aunque gane el mismo premio', async () => {
+    const original = await reward('Juego', 40);
+    const t = await mk({ requiresApproval: false, assignmentMode: 'shared', assignees: [F.ids.lucia, F.ids.hugo],
+      bonus: { kind: 'reward', rewardId: original.id, surprise: true, allowSwap: true } });
+    const i = (await instOf(t.id)).id;
+    expect((await F.luciaC.post(`/api/instances/${i}/complete`)).status).toBe(200);
+    const old = (await F.mama.get('/api/bonus-grants')).body.grants[0];
+    expect((await F.luciaC.post(`/api/instances/${i}/unmark`)).status).toBe(200);
+    expect((await F.hugoC.post(`/api/instances/${i}/complete`)).status).toBe(200);
+    const current = (await F.mama.get('/api/bonus-grants')).body.grants[0];
+    expect(current.id).not.toBe(old.id);
+    expect(current).toMatchObject({ user_id: F.ids.hugo, reward_id: original.id, fulfilled_at: null });
+    expect((await F.mama.post(`/api/bonus-grants/${old.id}/fulfill`, { expectedRewardId: original.id })).status).toBe(404);
+  });
+
+  it('aplica al nuevo ganador el tipo de bono vigente, sin reactivar el premio de su hermana', async () => {
+    const original = await reward('Juego', 40);
+    const options = { title: 'Recoger la cocina', points: 20, recurrence: 'daily', startDate: today(), requiresApproval: false,
+      assignmentMode: 'shared', assignees: [F.ids.lucia, F.ids.hugo] };
+    const t = await mk({ ...options, bonus: { kind: 'reward', rewardId: original.id, surprise: true, allowSwap: true } });
+    const i = (await instOf(t.id)).id;
+    expect((await F.luciaC.post(`/api/instances/${i}/complete`)).status).toBe(200);
+    expect((await F.mama.put(`/api/tasks/${t.id}`, { ...options, bonus: { kind: 'points', points: 7 } })).status).toBe(200);
+    expect((await F.luciaC.post(`/api/instances/${i}/unmark`)).status).toBe(200);
+    expect((await F.hugoC.post(`/api/instances/${i}/complete`)).status).toBe(200);
+    expect(await ptsBalance(F.ids.hugo)).toBe(27);
+    expect(await one(pool(), `SELECT kind, points, original_reward_id FROM bonus_grants WHERE instance_id = $1 AND user_id = $2`, [i, F.ids.hugo])).toEqual({ kind: 'points', points: 7, original_reward_id: null });
+  });
+});
+
 describe('hora límite', () => {
   it('L–V usa la hora normal, S–D y festivos la de fin de semana (con cambio de hora)', () => {
     const t = { due_time: '09:00:00', due_time_weekend: '12:00:00' };

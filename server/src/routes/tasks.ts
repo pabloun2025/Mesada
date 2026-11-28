@@ -4,8 +4,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { getPool, many, one, tx } from '../lib/db.js';
-import { requireAdult, requireUser } from '../lib/auth.js';
+import { getPool, many, one, tx, type Db } from '../lib/db.js';
+import { requireAdult, requireUser, type AuthUser } from '../lib/auth.js';
 import { badRequest, conflict, forbidden, HttpError, notFound } from '../lib/errors.js';
 import { enforceLimit } from '../lib/limits.js';
 import { looksLikeImage, processPhoto, removePhotoFile, storePhoto } from '../lib/photos.js';
@@ -13,12 +13,13 @@ import { audit } from '../lib/audit.js';
 import { config } from '../lib/config.js';
 import { familyToday, getFamily } from '../lib/family.js';
 import { ensureInstancesThrottled, regenerateTask } from '../lib/instances.js';
-import { completeInstance, reviewInstance, unmarkInstance } from '../lib/task-actions.js';
+import { completeInstance, registerInstance, reviewInstance, unmarkInstance } from '../lib/task-actions.js';
 import { checkInstance } from '../lib/check-tasks.js';
 import { bonusView, bonusLabel, BONUS_COLUMNS } from '../lib/bonus.js';
 import { deadlineAt, deadlineTime, holidaysBetween, reducedPoints } from '../lib/deadline.js';
 import { addDays, isValidDate, todayIn } from '../lib/dates.js';
 import { notify } from '../lib/notify/dispatch.js';
+import { activateTaskPromotion, taskSuggestions } from '../lib/task-promotions.js';
 
 export const dateStr = z.string().refine(isValidDate, 'fecha no válida');
 
@@ -33,13 +34,15 @@ export const bonusBody = z
     rewardId: z.string().uuid().optional(),
     surprise: z.boolean().default(false),
     onTimeOnly: z.boolean().default(false),
+    allowSwap: z.boolean().default(false),
   })
   .refine((b) => (b.kind === 'points' ? b.points : b.kind === 'screen' ? b.minutes : b.kind === 'text' ? b.text : b.rewardId) !== undefined, {
     message: 'completa el bono',
     path: ['kind'],
-  });
+  })
+  .refine((b) => !b.allowSwap || (b.kind === 'reward' && b.surprise), { message: 'Solo un premio sorpresa del catálogo admite cambios', path: ['allowSwap'] });
 
-const taskBody = z
+export const taskBody = z
   .object({
     title: z.string().trim().min(1).max(100),
     description: z.string().max(1000).default(''),
@@ -88,12 +91,13 @@ function taskParams(b0: z.infer<typeof taskBody>) {
     c ? false : b.repeatable, c || !b.repeatable ? null : b.maxPerDay,
     // Espera tras hacerla: solo «Cuando haga falta» y manda sobre las repeticiones del día.
     b.recurrence === 'as_needed' ? b.cooldownDays : null,
+    b.bonus?.allowSwap ?? false,
   ];
 }
 
-async function validateReward(familyId: string, b: z.infer<typeof taskBody>) {
+async function validateReward(familyId: string, b: z.infer<typeof taskBody>, db: Db = getPool()) {
   if (b.bonus?.kind !== 'reward') return;
-  const r = await one(getPool(), 'SELECT 1 FROM rewards WHERE id = $1 AND family_id = $2 AND active', [b.bonus.rewardId, familyId]);
+  const r = await one(db, 'SELECT 1 FROM rewards WHERE id = $1 AND family_id = $2 AND active', [b.bonus.rewardId, familyId]);
   if (!r) throw badRequest('La recompensa del bono no existe');
 }
 
@@ -102,8 +106,8 @@ export const TASK_SELECT = `
          FILTER (WHERE u.id IS NOT NULL), '[]') AS assignees
     FROM tasks t LEFT JOIN task_assignees a ON a.task_id = t.id LEFT JOIN users u ON u.id = a.user_id LEFT JOIN rewards rw ON rw.id = t.bonus_reward_id`;
 
-async function validateAssignees(familyId: string, ids: string[]) {
-  const rows = await many(getPool(), `SELECT id FROM users WHERE family_id = $1 AND id = ANY($2::uuid[]) AND active`, [familyId, ids]);
+async function validateAssignees(familyId: string, ids: string[], db: Db = getPool()) {
+  const rows = await many(db, `SELECT id FROM users WHERE family_id = $1 AND id = ANY($2::uuid[]) AND active`, [familyId, ids]);
   if (rows.length !== new Set(ids).size) throw badRequest('Alguna persona asignada no pertenece a la familia');
 }
 
@@ -115,13 +119,29 @@ export const INSTANCE_SELECT = `
          t.title, t.icon, t.description, t.difficulty, t.recurrence, t.assignment_mode, t.requires_approval, t.requires_photo, t.due_time,
          t.due_time_weekend, t.late_percent, t.points AS task_points, t.check_mode, t.penalty_minutes, t.success_minutes,
          (CASE WHEN t.check_mode THEN COALESCE(t.success_minutes, 0) ELSE 0 END + CASE WHEN t.bonus_kind = 'screen' AND NOT t.bonus_surprise THEN COALESCE(t.bonus_minutes, 0) ELSE 0 END)::int AS minutes_reward,
-         t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise, t.bonus_on_time_only, rw.title AS bonus_reward_title,
+         t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise, t.bonus_on_time_only, t.bonus_allow_swap, rw.title AS bonus_reward_title,
          au.display_name AS assignee_name, au.avatar AS assignee_avatar, au.color AS assignee_color,
-         cu.display_name AS completed_by_name
+         cu.display_name AS completed_by_name, i.adult_logged, ru.display_name AS registered_by_name,
+         CASE WHEN promo.id IS NOT NULL AND (
+           (i.status = 'pending' AND promo.reserved_by IS NULL AND promo.expires_at > now()) OR
+           (promo.reserved_by = i.completed_by AND ($10::uuid IS NULL OR promo.reserved_by = $10) AND
+            (i.status = 'submitted' OR (i.status = 'approved' AND promo.granted_at IS NOT NULL)))
+         ) THEN jsonb_build_object('base_points', promo.base_points, 'extra_points', promo.extra_points, 'percentage', promo.percentage, 'day', promo.day) END AS promotion,
+         CASE WHEN $6::boolean AND NOT t.check_mode AND NOT i.reconstructed_history AND i.status IN ('pending','expired') AND i.due_date <= $7::date
+           AND (t.cooldown_days IS NULL OR NOT EXISTS (
+             SELECT 1 FROM task_instances x WHERE x.task_id = i.task_id AND x.id <> i.id AND x.status IN ('submitted','approved')
+               AND abs(i.due_date - CASE WHEN x.adult_logged THEN x.due_date ELSE (x.completed_at AT TIME ZONE $8)::date END) < t.cooldown_days
+           )) THEN ARRAY(
+           SELECT c.id FROM users c WHERE c.family_id = i.family_id AND c.active AND c.role = 'child'
+             AND (c.id = i.assignee_id OR (i.assignee_id IS NULL AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = c.id)))
+           ORDER BY c.display_name
+         ) ELSE '{}'::uuid[] END AS registration_children
     FROM task_instances i
     JOIN tasks t ON t.id = i.task_id
     LEFT JOIN users au ON au.id = i.assignee_id
     LEFT JOIN users cu ON cu.id = i.completed_by
+    LEFT JOIN users ru ON i.adult_logged AND ru.id = i.reviewed_by
+    LEFT JOIN task_promotions promo ON promo.instance_id = i.id
     LEFT JOIN rewards rw ON rw.id = t.bonus_reward_id`;
 
 /** Sorpresas que este hijo ya ganó (tras ganarlas la tarea vuelve a ser normal). */
@@ -172,7 +192,37 @@ export function canUnmark(u: { id: string; role: string }, r: { completed_by: st
   return r.status === 'approved' && !r.adult_reviewed && !!r.completed_at && todayIn(tz, new Date(r.completed_at)) === today;
 }
 
+export async function createTask(db: Db, u: AuthUser, b: z.infer<typeof taskBody>, proposer?: string) {
+  await validateAssignees(u.familyId, b.assignees, db);
+  await validateReward(u.familyId, b, db);
+  const t = (await one<{ id: string }>(db,
+    `INSERT INTO tasks(family_id, title, description, icon, difficulty, points, recurrence, weekdays, month_day, start_date, end_date, due_time, due_time_weekend, late_percent, assignment_mode, requires_approval, requires_photo, check_mode, penalty_minutes, success_minutes, bonus_kind, bonus_points, bonus_minutes, bonus_text, bonus_reward_id, bonus_surprise, bonus_on_time_only, repeatable, max_per_day, cooldown_days, bonus_allow_swap, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32) RETURNING id`,
+    [u.familyId, ...taskParams(b), u.id],
+  ))!;
+  await db.query(`INSERT INTO task_assignees(task_id, user_id, position) SELECT $1, x, ord FROM unnest($2::uuid[]) WITH ORDINALITY AS y(x, ord)`, [t.id, b.assignees]);
+  await audit(db, u.familyId, u.id, 'task.create', 'task', t.id, { title: b.title, points: b.points, ...(proposer ? { for: proposer } : {}) });
+  if (proposer) {
+    // Una propuesta aprobada crea una única tarea puntual para quien la hizo, sin tocar las ocurrencias de otras tareas.
+    await db.query(`INSERT INTO task_instances (task_id, family_id, assignee_id, due_date, points) VALUES ($1,$2,$3,$4,$5)`,
+      [t.id, u.familyId, proposer, b.startDate, b.points]);
+  } else {
+    await regenerateTask(db, u.familyId, t.id);
+  }
+  await notifyAssigned(db, t.id, b.title, b.points, b.assignees);
+  return t.id;
+}
+
 export default async function taskRoutes(app: FastifyInstance) {
+  app.get('/api/task-suggestions', async (req) => taskSuggestions(requireUser(req)));
+
+  app.post('/api/tasks/:id/promotion', async (req) => {
+    const adult = requireAdult(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const { percentage } = z.object({ percentage: z.union([z.literal(30), z.literal(50)]) }).parse(req.body);
+    return activateTaskPromotion(adult, id, percentage);
+  });
+
   app.get('/api/tasks', async (req) => {
     const u = requireUser(req);
     const rows = await many(
@@ -189,21 +239,7 @@ export default async function taskRoutes(app: FastifyInstance) {
   app.post('/api/tasks', async (req) => {
     const u = requireAdult(req);
     const b = taskBody.parse(req.body);
-    await validateAssignees(u.familyId, b.assignees);
-    await validateReward(u.familyId, b);
-    const id = await tx(async (db) => {
-      const t = await one(
-        db,
-        `INSERT INTO tasks(family_id, title, description, icon, difficulty, points, recurrence, weekdays, month_day, start_date, end_date, due_time, due_time_weekend, late_percent, assignment_mode, requires_approval, requires_photo, check_mode, penalty_minutes, success_minutes, bonus_kind, bonus_points, bonus_minutes, bonus_text, bonus_reward_id, bonus_surprise, bonus_on_time_only, repeatable, max_per_day, cooldown_days, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31) RETURNING id`,
-        [u.familyId, ...taskParams(b), u.id],
-      );
-      await db.query(`INSERT INTO task_assignees(task_id, user_id, position) SELECT $1, x, ord FROM unnest($2::uuid[]) WITH ORDINALITY AS y(x, ord)`, [t.id, b.assignees]);
-      await audit(db, u.familyId, u.id, 'task.create', 'task', t.id, { title: b.title, points: b.points });
-      await regenerateTask(db, u.familyId, t.id);
-      await notifyAssigned(db, t.id, b.title, b.points, b.assignees);
-      return t.id as string;
-    });
+    const id = await tx((db) => createTask(db, u, b));
     return { task: await one(getPool(), `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id, rw.id`, [id]) };
   });
 
@@ -214,8 +250,19 @@ export default async function taskRoutes(app: FastifyInstance) {
     await validateAssignees(u.familyId, b.assignees);
     await validateReward(u.familyId, b);
     await tx(async (db) => {
+      const previous = await one<{
+        recurrence: string; start_date: string; end_date: string | null; cooldown_days: number | null;
+        repeatable: boolean; max_per_day: number | null; assignees: string[];
+      }>(db, `SELECT t.recurrence, t.start_date, t.end_date, t.cooldown_days, t.repeatable, t.max_per_day,
+        ARRAY(SELECT a.user_id FROM task_assignees a WHERE a.task_id = t.id) AS assignees
+        FROM tasks t WHERE t.id = $1 AND t.family_id = $2 AND t.active AND NOT t.is_extra FOR NO KEY UPDATE OF t`, [id, u.familyId]);
+      if (!previous) throw notFound('Tarea no encontrada');
+      const preservePromotion = previous.recurrence === 'as_needed' && b.recurrence === 'as_needed'
+        && previous.start_date === b.startDate && previous.end_date === b.endDate && previous.cooldown_days === b.cooldownDays
+        && previous.repeatable === b.repeatable && previous.max_per_day === (b.repeatable ? b.maxPerDay : null)
+        && previous.assignees.length === b.assignees.length && previous.assignees.every((member) => b.assignees.includes(member));
       const r = await db.query(
-        `UPDATE tasks SET title=$3, description=$4, icon=$5, difficulty=$6, points=$7, recurrence=$8, weekdays=$9, month_day=$10, start_date=$11, end_date=$12, due_time=$13, due_time_weekend=$14, late_percent=$15, assignment_mode=$16, requires_approval=$17, requires_photo=$18, check_mode=$19, penalty_minutes=$20, success_minutes=$21, bonus_kind=$22, bonus_points=$23, bonus_minutes=$24, bonus_text=$25, bonus_reward_id=$26, bonus_surprise=$27, bonus_on_time_only=$28, repeatable=$29, max_per_day=$30, cooldown_days=$31, updated_at=now()
+        `UPDATE tasks SET title=$3, description=$4, icon=$5, difficulty=$6, points=$7, recurrence=$8, weekdays=$9, month_day=$10, start_date=$11, end_date=$12, due_time=$13, due_time_weekend=$14, late_percent=$15, assignment_mode=$16, requires_approval=$17, requires_photo=$18, check_mode=$19, penalty_minutes=$20, success_minutes=$21, bonus_kind=$22, bonus_points=$23, bonus_minutes=$24, bonus_text=$25, bonus_reward_id=$26, bonus_surprise=$27, bonus_on_time_only=$28, repeatable=$29, max_per_day=$30, cooldown_days=$31, bonus_allow_swap=$32, updated_at=now()
           WHERE id=$1 AND family_id=$2 AND active AND NOT is_extra`,
         [id, u.familyId, ...taskParams(b)],
       );
@@ -223,7 +270,7 @@ export default async function taskRoutes(app: FastifyInstance) {
       await db.query('DELETE FROM task_assignees WHERE task_id = $1', [id]);
       await db.query(`INSERT INTO task_assignees(task_id, user_id, position) SELECT $1, x, ord FROM unnest($2::uuid[]) WITH ORDINALITY AS y(x, ord)`, [id, b.assignees]);
       await audit(db, u.familyId, u.id, 'task.update', 'task', id, { title: b.title, points: b.points });
-      await regenerateTask(db, u.familyId, id);
+      await regenerateTask(db, u.familyId, id, preservePromotion);
       await notifyAssigned(db, id, b.title, b.points, b.assignees);
     });
     return { task: await one(getPool(), `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id, rw.id`, [id]) };
@@ -278,12 +325,16 @@ export default async function taskRoutes(app: FastifyInstance) {
         to: dateStr.optional(),
         status: z.string().optional(),
         userId: z.string().uuid().optional(),
+        registration: z.literal('1').optional(),
       })
       .parse(req.query);
-    await ensureInstancesThrottled(getPool(), u.familyId);
+    if (q.registration) requireAdult(req);
     const fam = await getFamily(getPool(), u.familyId);
     const today = familyToday(fam);
-    const statuses = q.status ? q.status.split(',') : null;
+    const from = q.from ?? today;
+    const to = q.registration ? from : q.to ?? from;
+    if (!q.registration || from === today) await ensureInstancesThrottled(getPool(), u.familyId);
+    const statuses = q.registration ? ['pending', 'expired', 'submitted'] : q.status ? q.status.split(',') : null;
     // Un hijo solo ve lo suyo (y las compartidas en las que participa).
     const who = u.role === 'child' ? u.id : q.userId ?? null;
     const rows = await many(
@@ -291,14 +342,15 @@ export default async function taskRoutes(app: FastifyInstance) {
       `${INSTANCE_SELECT}
         WHERE i.family_id = $1 AND i.due_date BETWEEN $2 AND $3
           AND NOT i.is_extra
+          AND (NOT $9::boolean OR (NOT i.reconstructed_history AND NOT t.check_mode))
           AND ($4::text[] IS NULL OR i.status = ANY($4))
           AND ($5::uuid IS NULL OR i.assignee_id = $5 OR i.completed_by = $5
                OR (i.assignee_id IS NULL AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = i.task_id AND a.user_id = $5)))
         ORDER BY i.due_date, t.due_time NULLS LAST, t.title
         LIMIT 1000`,
-      [u.familyId, q.from ?? today, q.to ?? q.from ?? today, statuses, who],
+      [u.familyId, from, to, statuses, who, u.role === 'adult' && !u.isRelative, today, fam.timezone, !!q.registration, u.role === 'child' ? u.id : null],
     );
-    const holidays = rows.length ? await holidaysBetween(getPool(), u.familyId, q.from ?? today, q.to ?? q.from ?? today) : new Set<string>();
+    const holidays = rows.length ? await holidaysBetween(getPool(), u.familyId, from, to) : new Set<string>();
     const claims = u.role === 'child'
       ? new Set((await claimedTasks(u.id)).values())
       : new Set((await many(getPool(), 'SELECT task_id, user_id FROM bonus_claims bc WHERE EXISTS (SELECT 1 FROM tasks t WHERE t.id = bc.task_id AND t.family_id = $1)', [u.familyId])).map((c) => `${c.task_id}:${c.user_id}`));
@@ -306,7 +358,7 @@ export default async function taskRoutes(app: FastifyInstance) {
     const cdIds = [...new Set(rows.filter((r) => r.cooldown_days).map((r) => r.task_id))];
     const lastDone = new Map<string, string>();
     if (cdIds.length) {
-      for (const x of await many(getPool(), `SELECT task_id, max((completed_at AT TIME ZONE $2)::date)::text AS d FROM task_instances WHERE task_id = ANY($1::uuid[]) AND status IN ('submitted','approved') GROUP BY task_id`, [cdIds, fam.timezone])) lastDone.set(x.task_id, x.d);
+      for (const x of await many(getPool(), `SELECT task_id, max(CASE WHEN adult_logged THEN due_date ELSE (completed_at AT TIME ZONE $2)::date END)::text AS d FROM task_instances WHERE task_id = ANY($1::uuid[]) AND status IN ('submitted','approved') GROUP BY task_id`, [cdIds, fam.timezone])) lastDone.set(x.task_id, x.d);
     }
     const instances = rows.map((r) => {
       const ld = r.cooldown_days ? lastDone.get(r.task_id) : undefined;
@@ -334,6 +386,14 @@ export default async function taskRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const b = z.object({ met: z.boolean() }).parse(req.body);
     return checkInstance(u, id, b.met);
+  });
+
+  app.post('/api/instances/:id/register', async (req) => {
+    const u = requireAdult(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const completedTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/);
+    const b = z.object({ childId: z.string().uuid(), note: z.string().trim().max(500).optional(), completedTime: completedTime.optional() }).parse(req.body);
+    return registerInstance(u, id, b);
   });
 
   app.post('/api/instances/:id/complete', async (req) => {

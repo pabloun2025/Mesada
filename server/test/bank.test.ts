@@ -86,6 +86,226 @@ describe('funciones puras', () => {
   });
 });
 
+describe('gastos compartidos', () => {
+  const expense = () => ({ userId: L(), title: 'Entrada de cine', totalCents: 1201, contribution: { type: 'percent', basisPoints: 5000 }, currency: 'EUR' });
+  const preview = (input = expense()) => F.mama.post('/api/expenses/preview', input);
+  const register = (input: object, quote: { token: string; requestId: string }) =>
+    F.mama.post('/api/expenses', { ...input, token: quote.token, requestId: quote.requestId });
+
+  it('conserva en el recibo la regla de casa aplicada y su excepción', async () => {
+    const created = await F.mama.post('/api/expense-rules', { title: 'Salidas con amigos', contribution: { type: 'percent', basisPoints: 5000 } });
+    expect(created.status).toBe(200);
+    const ruleId = created.body.rule.id;
+    expect((await F.luciaC.get('/api/expense-rules')).body.rules).toMatchObject([{ id: ruleId, title: 'Salidas con amigos' }]);
+    expect((await F.luciaC.post('/api/expense-rules', { title: 'Otra', contribution: { type: 'percent', basisPoints: 0 } })).status).toBe(403);
+    const input = { userId: L(), title: 'Entrada', totalCents: 501, currency: 'EUR', ruleId };
+    const standard = await F.mama.post('/api/expenses/preview', input);
+    expect(standard.body.breakdown).toMatchObject({ parent_cents: 251, child_cents: 250 });
+    const override = { ...input, contribution: { type: 'amount', cents: 400 } };
+    expect((await F.mama.post('/api/expenses/preview', override)).body.error).toBe('expense_override_reason');
+    const adjusted = { ...override, overrideReason: 'La familia cubre una parte mayor este día' };
+    const quoted = await F.mama.post('/api/expenses/preview', adjusted);
+    expect(quoted.body.breakdown).toMatchObject({ parent_cents: 400, child_cents: 101, rule: { title: 'Salidas con amigos', proposed_cents: 251, override_reason: adjusted.overrideReason } });
+    const recorded = await register(adjusted, quoted.body);
+    expect(recorded.status).toBe(200);
+    expect((await F.mama.del(`/api/expense-rules/${ruleId}`)).status).toBe(200);
+    expect((await register(adjusted, quoted.body)).body).toMatchObject({ id: recorded.body.id, duplicate: true });
+    expect((await register({ ...adjusted, totalCents: 502 }, quoted.body)).body.error).toBe('expense_already_recorded');
+    expect((await F.mama.post('/api/expenses/preview', input)).body.error).toBe('expense_rule_unavailable');
+    const expense = (await F.luciaC.get(`/api/statement/${L()}`)).body.entries.find((e: any) => e.kind === 'expense').expense;
+    expect(expense).toMatchObject({ currency: 'EUR', rule: { title: 'Salidas con amigos', proposed_cents: 251, override_reason: adjusted.overrideReason } });
+  });
+
+  it('redondea el reparto a favor del hijo, usa su dinero primero y registra solo la deuda que falta', async () => {
+    await setCap(300);
+    await givePts(L(), 100);
+    await giveMoney(L(), 200);
+    const p = await preview();
+    expect(p.status).toBe(200);
+    expect(p.body.breakdown).toMatchObject({
+      total_cents: 1201, parent_cents: 601, parent_basis_points: 5000, child_cents: 600,
+      cash_cents: 200, used_points: 60, points_cents: 300, debt_cents: 100, balance_after: -100,
+    });
+    expect(await cents(L())).toBe(200);
+    const [first, retry] = await Promise.all([register(expense(), p.body), register(expense(), p.body)]);
+    expect([first.status, retry.status]).toEqual([200, 200]);
+    expect([first.body.duplicate, retry.body.duplicate].sort()).toEqual([false, true]);
+    expect(await cents(L())).toBe(-100);
+    expect(await pts(L())).toBe(40);
+    const cap = await capStatus(pool(), await getFamily(pool(), F.ids.family), L(), today());
+    expect(cap.remaining).toBe(0);
+    const entries = (await F.luciaC.get(`/api/statement/${L()}?account=money`)).body.entries;
+    const movement = entries.find((e: any) => e.kind === 'expense');
+    expect(movement).toMatchObject({ note: 'Entrada de cine', balance_after: -100, expense: p.body.breakdown });
+    expect((await F.hugoC.get(`/api/statement/${L()}?account=money`)).status).toBe(403);
+    expect((await notes(L(), 'expense_recorded'))).toHaveLength(1);
+    expect((await notes(L(), 'expense_recorded'))[0].body).toContain('60 puntos cubren 3,00 €');
+  });
+
+  it('abona hacia arriba el valor fraccionario de los puntos sin gastar puntos de más', async () => {
+    await setFamily({ ratePoints: 3, rateCents: 2, capCents: 1 });
+    await givePts(L(), 6);
+    const input = { ...expense(), totalCents: 301, contribution: { type: 'amount', cents: 300 } };
+    const p = await F.mama.post('/api/expenses/preview', input);
+    expect(p.status).toBe(200);
+    expect(p.body.breakdown).toMatchObject({ used_points: 1, points_cents: 1, debt_cents: 0 });
+    expect((await register(input, p.body)).status).toBe(200);
+    expect(await pts(L())).toBe(5);
+    expect(await cents(L())).toBe(0);
+  });
+
+  it('deja al hijo lo que sobra al canjear el último punto entero', async () => {
+    await setCap(5);
+    await givePts(L(), 10); // A 5 céntimos por punto, la parte del hijo es de 1 céntimo.
+    const input = { ...expense(), totalCents: 101, contribution: { type: 'amount', cents: 100 } };
+    const p = await F.mama.post('/api/expenses/preview', input);
+    expect(p.status).toBe(200);
+    expect(p.body.breakdown).toMatchObject({ used_points: 1, points_cents: 5, debt_cents: 0, balance_after: 4 });
+    expect((await register(input, p.body)).status).toBe(200);
+    expect(await pts(L())).toBe(9);
+    expect(await cents(L())).toBe(4);
+  });
+
+  it('conserva completamente financiados en el extracto sin cambiar los saldos', async () => {
+    const input = { ...expense(), totalCents: 1 };
+    const p = await preview(input);
+    expect(p.status).toBe(200);
+    expect(p.body.breakdown).toMatchObject({ parent_cents: 1, child_cents: 0, used_points: 0, debt_cents: 0 });
+    expect((await register(input, p.body)).status).toBe(200);
+    expect(await cents(L())).toBe(0);
+    const entries = (await F.luciaC.get(`/api/statement/${L()}?account=money`)).body.entries;
+    expect(entries[0]).toMatchObject({ kind: 'expense', amount: 0, expense: { parent_cents: 1 } });
+  });
+
+  it('conserva los puntos si el canje está desactivado y distingue lo pendiente del gasto del saldo anterior', async () => {
+    await setFamily({ bankExchangeEnabled: false });
+    await givePts(L(), 100);
+    await forceMoney(L(), -150);
+    const input = { ...expense(), totalCents: 500, contribution: { type: 'amount', cents: 200 } };
+    const p = await F.mama.post('/api/expenses/preview', input);
+    expect(p.status).toBe(200);
+    expect(p.body.breakdown).toMatchObject({ parent_basis_points: null, debt_cents: 300, used_points: 0, balance_after: -450 });
+    expect((await register(input, p.body)).status).toBe(200);
+    expect(await cents(L())).toBe(-450);
+    expect(await pts(L())).toBe(100);
+  });
+
+  it('rechaza cambios de saldo desde la vista previa y protege el registro parental', async () => {
+    expect((await F.luciaC.post('/api/expenses/preview', expense())).status).toBe(403);
+    const p = await preview();
+    expect(p.status).toBe(200);
+    await giveMoney(L(), 200);
+    expect((await register(expense(), p.body)).body.error).toBe('expense_quote_changed');
+    expect(await cents(L())).toBe(200);
+    expect((await notes(L(), 'expense_recorded'))).toHaveLength(0);
+  });
+
+  it('pide revisar la moneda si otro adulto la cambia', async () => {
+    const p = await preview();
+    expect(p.status).toBe(200);
+    await setFamily({ currency: 'USD' });
+    expect((await register(expense(), p.body)).body.error).toBe('expense_currency_changed');
+    expect((await preview()).body.error).toBe('expense_currency_changed');
+    expect(await cents(L())).toBe(0);
+  });
+
+  it('ordena los asientos por el momento del movimiento aunque otra transacción haya empezado antes', async () => {
+    const db = await pool().connect();
+    try {
+      await db.query('BEGIN');
+      const p = await preview();
+      expect(p.status).toBe(200);
+      expect((await register(expense(), p.body)).status).toBe(200);
+      await db.query(
+        "INSERT INTO money_ledger(family_id, user_id, delta_cents, kind, note) VALUES ($1,$2,200,'adjustment','Después del gasto')",
+        [F.ids.family, L()],
+      );
+      await db.query('COMMIT');
+    } finally {
+      await db.query('ROLLBACK');
+      db.release();
+    }
+    const { entries } = (await F.luciaC.get(`/api/statement/${L()}?account=money`)).body;
+    expect(entries).toMatchObject([
+      { kind: 'adjustment', balance_after: -400 },
+      { kind: 'expense', balance_after: -600, expense: { balance_after: -600 } },
+    ]);
+  });
+
+  it('imputa al tope mensual los canjes de la primera semana aunque empiece el mes anterior', async () => {
+    await setFamily({ capCents: 5200, settlementPeriod: 'month' });
+    await pool().query(
+      `INSERT INTO cap_uses(family_id, user_id, kind, cap_week, points, cents, created_at)
+       SELECT $1, $2, 'exchange', week::date, 1, cents, stamp::timestamptz FROM (VALUES
+         ('2026-10-26','2026-11-01T12:00:00Z',1100),
+         ('2026-11-02','2026-11-02T12:00:00Z',1100),
+         ('2026-11-09','2026-11-09T12:00:00Z',1100),
+         ('2026-11-16','2026-11-16T12:00:00Z',1100),
+         ('2026-11-23','2026-11-23T12:00:00Z',800)
+       ) AS entries(week, stamp, cents)`,
+      [F.ids.family, L()],
+    );
+    const status = await capStatus(pool(), await getFamily(pool(), F.ids.family), L(), '2026-11-25');
+    expect(status).toMatchObject({ usedWeek: 800, weeklyCap: 1200, remaining: 0 });
+  });
+});
+
+describe('destinos del préstamo', () => {
+  it('aplica principal y saldo a la compra, canjea dentro del tope y registra una sola deuda', async () => {
+    await setFamily({ capCents: 1000, bankLoanMaxPercent: 100 });
+    await giveMoney(L(), 100);
+    await givePts(L(), 100);
+    await pool().query(`INSERT INTO cap_uses(family_id,user_id,kind,cap_week,points,cents) VALUES ($1,$2,'exchange',$3,176,880)`, [F.ids.family, L(), startOfWeek(today())]);
+    const { loan } = (await F.luciaC.post('/api/loans', { amountCents: 600, weeks: 3 })).body;
+    const dest = { type: 'purchase', title: 'Robux', totalCents: 900, currency: 'EUR' };
+    const quote = await F.mama.post(`/api/loans/${loan.id}/preview`, { destination: dest });
+    expect(quote.status).toBe(200);
+    expect(quote.body.breakdown).toMatchObject({ loan_applied_cents: 600, prior_cash_cents: 100, points_cents: 120, debt_cents: 80, balance_after: -80 });
+    expect(await cents(L())).toBe(100);
+    const approval = { destination: { ...dest, token: quote.body.token, requestId: quote.body.requestId } };
+    const [a, b] = await Promise.all([F.mama, F.papaC].map((parent) => parent.post(`/api/loans/${loan.id}/approve`, approval)));
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect([a.body.duplicate, b.body.duplicate].sort()).toEqual([false, true]);
+    expect(a.body.loan).toMatchObject({ status: 'active', amount_cents: 600, disbursement: { destination: 'purchase', expense_title: 'Robux' } });
+    expect(await cents(L())).toBe(-80);
+    expect(await pts(L())).toBe(76);
+    expect(await many(pool(), `SELECT kind, delta_cents FROM money_ledger WHERE kind IN ('loan','expense') ORDER BY seq`)).toEqual([
+      { kind: 'loan', delta_cents: 600 }, { kind: 'expense', delta_cents: -900 },
+    ]);
+    expect((await F.mama.post(`/api/loans/${loan.id}/approve`, { destination: { type: 'external', method: 'cash' } })).status).toBe(409);
+    const entries = (await F.luciaC.get(`/api/statement/${L()}`)).body.entries;
+    expect(entries.find((e: any) => e.kind === 'expense').expense).toMatchObject({ loan_applied_cents: 600, prior_cash_cents: 100, currency: 'EUR' });
+  });
+
+  it('anota la entrega externa mediante dos asientos y conserva el saldo anterior', async () => {
+    await setCap(1000);
+    await giveMoney(L(), 100);
+    const { loan } = (await F.luciaC.post('/api/loans', { amountCents: 300, weeks: 3 })).body;
+    const approved = await F.mama.post(`/api/loans/${loan.id}/approve`, { destination: { type: 'external', method: 'bizum' } });
+    expect(approved.status).toBe(200);
+    expect(approved.body.loan.disbursement).toMatchObject({ destination: 'external', method: 'bizum', currency: 'EUR' });
+    expect(await cents(L())).toBe(100);
+    expect(await many(pool(), `SELECT kind, delta_cents FROM money_ledger WHERE ref_id = $1 ORDER BY seq`, [loan.id])).toEqual([
+      { kind: 'loan', delta_cents: 300 }, { kind: 'loan_delivery', delta_cents: -300 },
+    ]);
+  });
+
+  it('transfiere el préstamo a una meta del mismo hijo sin activar el empujón', async () => {
+    await setCap(1000);
+    const own = await goal();
+    const other = (await F.hugoC.post('/api/goals', { userId: F.ids.hugo, title: 'Meta de Hugo', targetCents: 1200 })).body.goal;
+    await F.mama.post(`/api/goals/${other.id}/proposal/approve`);
+    await F.mama.put(`/api/goals/${own.id}/match`, { perCents: 100, givesCents: 100, capCents: 500 });
+    const { loan } = (await F.luciaC.post('/api/loans', { amountCents: 300, weeks: 3 })).body;
+    const approve = (goalId: string) => F.mama.post(`/api/loans/${loan.id}/approve`, { destination: { type: 'goal', goalId } });
+    expect((await approve(other.id)).status).toBe(404);
+    expect((await approve(own.id)).body.loan.disbursement).toMatchObject({ destination: 'goal', goal_title: 'Vinilo' });
+    expect(await cents(L())).toBe(0);
+    expect(await saved(L())).toBe(300);
+    expect(await many(pool(), `SELECT id FROM money_ledger WHERE user_id = $1 AND kind = 'goal_match'`, [L()])).toHaveLength(0);
+  });
+});
+
 describe('I6 canje', () => {
   it('respeta mínimo y tope semanal, es idempotente y avisa a los adultos', async () => {
     await setCap(1000); // 10 € = 200 puntos

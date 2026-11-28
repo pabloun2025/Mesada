@@ -10,6 +10,7 @@ import type { Bank, Goal, PayoutRequest, Wallet } from '../lib/types';
 import { screenPhrase } from '../lib/screen';
 import { minutesHM } from '../lib/deadline';
 import { AccountRail, AdvanceSheet, AtmButtons, BalanceTrend, ExchangeSheet, GoalProduct, LoanProduct, LoanSheet, NewGoalSheet, SaveSheet, Statement, WithdrawSheet, type AtmKey } from '../components/Bank';
+import { ExpenseRules } from '../components/ExpenseRules';
 import { Badge, Button, Loading, PageHeader, SectionTitle, useToast } from '../components/ui';
 import type { ScreenView } from '../lib/types';
 
@@ -107,6 +108,8 @@ export default function ChildMoney() {
         <SectionTitle>Extracto</SectionTitle>
         <Statement userId={user.id} loan={bank.loan} />
       </section>
+
+      <ExpenseRules />
 
       <section className="mt-7">
         <Link to="/pantalla" className="card flex items-center gap-3 p-4 font-bold">

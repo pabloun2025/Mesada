@@ -86,8 +86,8 @@ function Notifications() {
                 >
                   <span className={`mt-2 size-2 shrink-0 rounded-full ${n.read_at ? 'bg-transparent' : 'bg-sun'}`} aria-hidden />
                   <span className="min-w-0 flex-1">
-                    <span className="block font-bold">{n.title}</span>
-                    {n.body ? <span className="block text-sm muted">{n.body}</span> : null}
+                    <span className="block wrap-anywhere font-bold">{n.title}</span>
+                    {n.body ? <span className="block wrap-anywhere text-sm muted">{n.body}</span> : null}
                   </span>
                   <span className="shrink-0 text-xs muted">{relative(n.created_at)}</span>
                 </button>
@@ -129,7 +129,7 @@ export function Layout() {
   const isAdult = user.role === 'adult' && !isRelativeUser;
 
   const { data: dash } = useQuery({ queryKey: ['dashboard'], queryFn: () => api('/dashboard'), enabled: isAdult, refetchInterval: 60_000 });
-  const pendingCount = (dash?.pendingApprovals?.length ?? 0) + (dash?.pendingRedemptions ?? 0) + (dash?.pendingChecks ?? 0) + (dash?.pendingGrants ?? 0) + (dash?.pendingRequests ?? 0) + (dash?.pendingUsage ?? 0) + (dash?.pendingBank ?? 0);
+  const pendingCount = (dash?.pendingApprovals?.length ?? 0) + (dash?.pendingRedemptions ?? 0) + (dash?.pendingChecks ?? 0) + (dash?.pendingGrants ?? 0) + (dash?.pendingRequests ?? 0) + (dash?.pendingUsage ?? 0) + (dash?.pendingBank ?? 0) + (dash?.pendingProposals ?? 0);
 
   const primary: NavItem[] = isRelativeUser
     ? [{ to: '/', label: 'Inicio', icon: <House size={22} />, end: true }, { to: '/perfil', label: 'Mi perfil', icon: <User size={22} /> }]

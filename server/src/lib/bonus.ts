@@ -12,8 +12,10 @@ export interface BonusTask {
   bonus_text: string | null;
   bonus_reward_id: string | null;
   bonus_reward_title?: string | null;
+  bonus_reward_cost?: number | null;
   bonus_surprise: boolean;
   bonus_on_time_only: boolean;
+  bonus_allow_swap?: boolean;
 }
 
 /** Texto legible del bono de una tarea (para la etiqueta y para el adulto). */
@@ -36,12 +38,12 @@ export function bonusView(t: BonusTask, viewer: 'adult' | 'child', claimed: bool
   if (t.bonus_surprise) {
     if (claimed && viewer === 'child') return null;
     if (viewer === 'child') return { surprise: true as const, onTimeOnly: t.bonus_on_time_only };
-    return { surprise: true as const, onTimeOnly: t.bonus_on_time_only, kind: t.bonus_kind, label: bonusLabel(t), claimed };
+    return { surprise: true as const, onTimeOnly: t.bonus_on_time_only, kind: t.bonus_kind, label: bonusLabel(t), claimed, allowSwap: !!t.bonus_allow_swap };
   }
   return { surprise: false as const, onTimeOnly: t.bonus_on_time_only, kind: t.bonus_kind, label: bonusLabel(t) };
 }
 
-export const BONUS_COLUMNS = ['bonus_kind', 'bonus_points', 'bonus_minutes', 'bonus_text', 'bonus_reward_id', 'bonus_surprise'] as const;
+export const BONUS_COLUMNS = ['bonus_kind', 'bonus_points', 'bonus_minutes', 'bonus_text', 'bonus_reward_id', 'bonus_surprise', 'bonus_allow_swap'] as const;
 
 const key = (base: string, seq: number) => (seq <= 1 ? base : `${base}:${seq}`);
 
@@ -75,16 +77,23 @@ export async function grantBonus(db: Db, c: GrantCtx) {
   const t = await one<BonusTask & { task_id: string }>(
     db,
     `SELECT t.id AS task_id, t.id, t.title, t.bonus_kind, t.bonus_points, t.bonus_minutes, t.bonus_text, t.bonus_reward_id, t.bonus_surprise,
-            t.bonus_on_time_only, r.title AS bonus_reward_title
+            t.bonus_on_time_only, t.bonus_allow_swap, r.title AS bonus_reward_title, r.cost_points AS bonus_reward_cost
        FROM task_instances i JOIN tasks t ON t.id = i.task_id LEFT JOIN rewards r ON r.id = t.bonus_reward_id
       WHERE i.id = $1`,
     [c.instanceId],
   );
   if (!t?.bonus_kind) return null;
   if (t.bonus_on_time_only && c.onTime === false) return null;
+  const catalogSurprise = t.bonus_kind === 'reward' && t.bonus_surprise;
+  const snapshot = [
+    catalogSurprise && !!t.bonus_allow_swap && !!t.bonus_reward_cost,
+    catalogSurprise ? t.bonus_reward_id : null,
+    catalogSurprise ? t.bonus_reward_title ?? null : null,
+    catalogSurprise ? t.bonus_reward_cost ?? null : null,
+  ];
 
   // ¿Ya se concedió a esta ocurrencia (corrección de una tarea de comprobación)? Se reactiva, no se duplica.
-  const existing = await one<any>(db, 'SELECT * FROM bonus_grants WHERE instance_id = $1 FOR UPDATE', [c.instanceId]);
+  const existing = await one<any>(db, 'SELECT * FROM bonus_grants WHERE instance_id = $1 AND user_id = $2 FOR UPDATE', [c.instanceId, c.userId]);
   if (existing) {
     if (!existing.voided_at) return existing;
     if (existing.surprise) {
@@ -92,9 +101,9 @@ export async function grantBonus(db: Db, c: GrantCtx) {
       const claim = await db.query('INSERT INTO bonus_claims(task_id, user_id, instance_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING task_id', [existing.task_id, c.userId, c.instanceId]);
       if (claim.rowCount === 0 && !(await one(db, 'SELECT 1 FROM bonus_claims WHERE task_id = $1 AND user_id = $2 AND instance_id = $3', [existing.task_id, c.userId, c.instanceId]))) return null;
     }
-    await db.query('UPDATE bonus_grants SET voided_at = NULL WHERE id = $1', [existing.id]);
-    await applyGrantEffects(db, existing, c);
-    return { ...existing, voided_at: null };
+    const grant = await one(db, 'UPDATE bonus_grants SET voided_at = NULL WHERE id = $1 RETURNING *', [existing.id]);
+    await applyGrantEffects(db, grant, c);
+    return grant;
   }
 
   if (t.bonus_surprise) {
@@ -107,9 +116,10 @@ export async function grantBonus(db: Db, c: GrantCtx) {
   const label = bonusLabel(t)!;
   const grant = await one<any>(
     db,
-    `INSERT INTO bonus_grants(family_id, user_id, task_id, instance_id, task_title, kind, points, minutes, label, reward_id, surprise)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-    [c.familyId, c.userId, t.task_id, c.instanceId, t.title, t.bonus_kind, t.bonus_kind === 'points' ? t.bonus_points : 0, t.bonus_kind === 'screen' ? t.bonus_minutes : 0, label, t.bonus_kind === 'reward' ? t.bonus_reward_id : null, t.bonus_surprise],
+    `INSERT INTO bonus_grants(family_id, user_id, task_id, instance_id, task_title, kind, points, minutes, label, reward_id, surprise,
+                             swap_allowed, original_reward_id, original_reward_title, original_reward_cost)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+    [c.familyId, c.userId, t.task_id, c.instanceId, t.title, t.bonus_kind, t.bonus_kind === 'points' ? t.bonus_points : 0, t.bonus_kind === 'screen' ? t.bonus_minutes : 0, label, t.bonus_kind === 'reward' ? t.bonus_reward_id : null, t.bonus_surprise, ...snapshot],
   );
   await applyGrantEffects(db, grant, c);
   if (t.bonus_surprise) {
@@ -121,7 +131,7 @@ export async function grantBonus(db: Db, c: GrantCtx) {
 
 /** Anula el bono de una ocurrencia (corrección «Cumplida» → «No cumplida»): compensa puntos y minutos y retira lo pendiente. */
 export async function voidBonus(db: Db, c: GrantCtx & { seq: number; releaseClaim?: boolean; reason?: string }) {
-  const g = await one<any>(db, 'SELECT * FROM bonus_grants WHERE instance_id = $1 AND voided_at IS NULL FOR UPDATE', [c.instanceId]);
+  const g = await one<any>(db, 'SELECT * FROM bonus_grants WHERE instance_id = $1 AND user_id = $2 AND voided_at IS NULL FOR UPDATE', [c.instanceId, c.userId]);
   if (!g) return;
   await db.query('UPDATE bonus_grants SET voided_at = now() WHERE id = $1', [g.id]);
   // Desmarcar una tarea con sorpresa: la sorpresa vuelve a estar disponible (se gana la próxima vez).

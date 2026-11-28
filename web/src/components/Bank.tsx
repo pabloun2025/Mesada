@@ -2,13 +2,14 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import {
   ArrowRightLeft, Banknote, CalendarClock, CalendarCheck2, Check, CheckCheck, FastForward, Gift, HandCoins, Handshake, History, Landmark, Lock, Nfc, Percent,
-  PiggyBank, Plus, ShoppingBag, SlidersHorizontal, Sparkles, TrendingDown, TrendingUp, Undo2, type LucideIcon,
+  PiggyBank, Plus, ReceiptText, ShoppingBag, SlidersHorizontal, Sparkles, TrendingDown, TrendingUp, Undo2, type LucideIcon,
 } from 'lucide-react';
 import { api, newKey, post } from '../lib/api';
 import { currencySymbol, dayKey, euros, fmtDate, fmtTime, fmtWeekdayShort, refCode } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
 import { useSession } from '../lib/session';
-import type { BalanceHistory, Bank, BankAction, Goal, Loan, StatementEntry, User, Wallet } from '../lib/types';
+import type { BalanceHistory, Bank, BankAction, Goal, Loan, LoanDisbursement, StatementEntry, User, Wallet } from '../lib/types';
+import { ExpenseDetails } from './ExpenseSheet';
 import { Badge, Button, Empty, Field, Loading, Sheet, useToast } from './ui';
 import { AutoSaveSheet, ManageGoalSheet } from './GoalSheets';
 import { GoalVisual, goalPct, weeksLeftText } from './Goal';
@@ -240,6 +241,13 @@ function Steps({ paid, total }: { paid: number; total: number }) {
 
 const instLabel = (n: number) => (n === 1 ? 'cuota' : 'cuotas');
 
+function disbursementLabel(receipt: LoanDisbursement) {
+  if (receipt.destination === 'external') return receipt.method ? `Entrega por ${METHOD[receipt.method]}` : 'Entrega externa';
+  if (receipt.destination === 'goal') return `Meta «${receipt.goal_title}»`;
+  if (receipt.destination === 'purchase') return `Compra «${receipt.expense_title}»`;
+  return 'Abono al saldo';
+}
+
 export function LoanProduct({ loan, mine, compact = false }: { loan: Loan; mine: boolean; compact?: boolean }) {
   const toast = useToast();
   const invalidate = useInvalidateAll();
@@ -250,6 +258,8 @@ export function LoanProduct({ loan, mine, compact = false }: { loan: Loan; mine:
   });
   const pending = loan.status === 'pending';
   const interest = loan.interest_points ? <> + {loan.interest_points} pts</> : null;
+  const money = (cents: number) => euros(cents, loan.disbursement?.currency);
+  const delivery = loan.disbursement ? <p className="mt-1.5 text-sm muted wrap-anywhere">{disbursementLabel(loan.disbursement)}{loan.disbursement.actor_name ? ` · ${loan.disbursement.actor_name}` : ''}</p> : null;
   if (compact) {
     return (
       <div className="rounded-[1.1rem] border border-[var(--line)] p-3">
@@ -257,17 +267,18 @@ export function LoanProduct({ loan, mine, compact = false }: { loan: Loan; mine:
           <span className="flex size-[34px] shrink-0 items-center justify-center rounded-[11px] bg-sky-soft text-[#2a5fc2] dark:bg-sky/20 dark:text-[#a9c7ff]"><HandCoins size={18} aria-hidden /></span>
           Préstamo
           {pending ? <Badge tone="sun">Esperando respuesta</Badge> : <Badge tone="tangerine">Activo</Badge>}
-          <span className="num ml-auto text-base">{euros(pending ? loan.amount_cents : loan.remaining_cents)}</span>
+          <span className="num ml-auto text-base">{money(pending ? loan.amount_cents : loan.remaining_cents)}</span>
         </div>
-        {pending ? <p className="mt-1.5 text-sm text-[var(--fg-2)]">Pide {euros(loan.amount_cents)} a {loan.weeks} {loan.weeks === 1 ? 'semana' : 'semanas'}.</p> : (
+        {pending ? <p className="mt-1.5 text-sm text-[var(--fg-2)]">Pide {money(loan.amount_cents)} a {loan.weeks} {loan.weeks === 1 ? 'semana' : 'semanas'}.</p> : (
           <>
             <div className="mt-2.5"><Steps paid={loan.installments_paid} total={loan.weeks} /></div>
             <p className="mt-1.5 text-sm text-[var(--fg-2)]">
-              Quedan <b className="text-[var(--fg)]">{loan.remaining_installments} {instLabel(loan.remaining_installments)}</b> de <b className="num text-[var(--fg)]">{euros(loan.installment_cents)}</b>{interest}
+              Quedan <b className="text-[var(--fg)]">{loan.remaining_installments} {instLabel(loan.remaining_installments)}</b> de <b className="num text-[var(--fg)]">{money(loan.installment_cents)}</b>{interest}
               {loan.next_charge_week ? <> · cobro <b className="text-[var(--fg)]">{fmtWeekdayShort(loan.next_charge_week)}</b></> : null}
             </p>
           </>
         )}
+        {delivery}
       </div>
     );
   }
@@ -279,7 +290,7 @@ export function LoanProduct({ loan, mine, compact = false }: { loan: Loan; mine:
         {pending ? <Badge tone="sun">Esperando respuesta</Badge> : <Badge tone="tangerine">Activo</Badge>}
       </div>
       <p className="num mt-3 flex items-baseline gap-2 text-[1.75rem] font-extrabold">
-        {euros(pending ? loan.amount_cents : loan.remaining_cents)}
+        {money(pending ? loan.amount_cents : loan.remaining_cents)}
         <small className="font-sans text-[0.8rem] font-normal tracking-normal text-[var(--fg-2)]">{pending ? 'pedidos' : 'por devolver'}</small>
       </p>
       {pending ? (
@@ -291,8 +302,9 @@ export function LoanProduct({ loan, mine, compact = false }: { loan: Loan; mine:
         <>
           <div className="my-3"><Steps paid={loan.installments_paid} total={loan.weeks} /></div>
           <p className="text-sm text-[var(--fg-2)]">
-            Quedan <b className="text-[var(--fg)]">{loan.remaining_installments} {instLabel(loan.remaining_installments)}</b> de <b className="num text-[var(--fg)]">{euros(loan.installment_cents)}</b>{interest}
+            Quedan <b className="text-[var(--fg)]">{loan.remaining_installments} {instLabel(loan.remaining_installments)}</b> de <b className="num text-[var(--fg)]">{money(loan.installment_cents)}</b>{interest}
           </p>
+          {delivery}
           {loan.next_charge_week ? (
             <div className="mt-3 flex items-center justify-between gap-2 border-t border-[var(--line)] pt-3 text-sm">
               <span className="text-[var(--fg-2)]">Próximo cobro</span>
@@ -472,11 +484,13 @@ function describe(e: StatementEntry): { icon: LucideIcon; tone: Tone; title: str
     case 'exchange': return { icon: ArrowRightLeft, tone: 'sun', title: note || 'Canje' };
     case 'advance': return { icon: FastForward, tone: 'sun', title: 'Adelanto' };
     case 'loan': return { icon: HandCoins, tone: 'sky', title: 'Préstamo aprobado' };
+    case 'loan_delivery': return { icon: Banknote, tone: 'sky', title: 'Entrega del préstamo' };
     case 'loan_repayment': return { icon: CalendarClock, tone: 'sky', title: note || 'Cuota del préstamo' };
     case 'loan_interest': return { icon: Percent, tone: 'sky', title: note || 'Interés del préstamo' };
     case 'interest': return { icon: TrendingUp, tone: 'leaf', title: note || 'Interés' };
     case 'interest_forfeit': return { icon: TrendingDown, tone: 'berry', title: note || 'Interés perdido' };
     case 'goal_redeem': return { icon: ShoppingBag, tone: 'sun', title: note || 'Compra de meta' };
+    case 'expense': return { icon: ReceiptText, tone: 'berry', title: note || 'Gasto compartido' };
     case 'goal_auto': return { icon: CalendarClock, tone: 'leaf', title: note || 'Ahorro automático' };
     case 'goal_match': return { icon: Handshake, tone: 'leaf', title: note || 'Aporte de tus padres' };
     case 'goal_gift': return { icon: Gift, tone: 'leaf', title: note || 'Aporte a tu meta' };
@@ -495,7 +509,8 @@ function subtitle(e: StatementEntry, tz: string, viewer: string) {
     case 'task': return `${t} · ${!by ? 'automática' : mine ? 'tú' : `validada por ${by}`}`;
     case 'payment': return e.is_withdrawal ? `${t} · pagado por ${by ?? 'un adulto'}` : `${e.method ? METHOD[e.method] : 'Pago'} · ${t}`;
     case 'interest': case 'interest_forfeit': case 'goal_match': case 'goal_gift': case 'goal_reversal': return `${t} · va a tu meta`;
-    case 'loan': return `${t} · ${by ?? 'un adulto'}`;
+    case 'loan': case 'loan_delivery': return `${e.disbursement ? `${disbursementLabel(e.disbursement)} · ` : ''}${t} · ${by ?? 'un adulto'}`;
+    case 'expense': return `${t} · Registrado por ${by ?? 'un adulto'}`;
     default: return `${t}${by ? ` · ${mine ? 'tú' : by}` : ''}`;
   }
 }
@@ -539,7 +554,7 @@ export function Statement({ userId, loan }: { userId: string; loan?: Loan | null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q.data, tz]);
   const planned = tab !== 'points' && loan?.status === 'active' && loan.next_charge_week && loan.remaining_installments > 0 ? loan : null;
-  const fmt = (e: StatementEntry, n: number) => (e.account === 'points' ? `${n} pts` : euros(n));
+  const fmt = (e: StatementEntry, n: number) => (e.account === 'points' ? `${n} pts` : euros(n, e.expense?.currency ?? e.disbursement?.currency));
 
   return (
     <div>
@@ -561,7 +576,7 @@ export function Statement({ userId, loan }: { userId: string; loan?: Loan | null
                   <li className="grid grid-cols-[40px_1fr_auto] items-center gap-3 py-2.5 opacity-90">
                     <span className="flex size-10 items-center justify-center rounded-full text-tangerine-deep ring-[1.5px] ring-[var(--line)] ring-inset"><CalendarClock size={20} aria-hidden /></span>
                     <div><b className="block leading-tight">Cuota {planned.installments_paid + 1} de {planned.weeks}</b><small className="text-[0.8rem] text-[var(--fg-3)]">Préstamo · programada</small></div>
-                    <div className="text-right"><b className="num block text-[#c0245d] dark:text-[#ff9dbf]">−{euros(planned.installment_cents)}</b>{planned.interest_points ? <small className="text-[0.8rem] text-[var(--fg-3)]">+ {planned.interest_points} pts de interés</small> : null}</div>
+                    <div className="text-right"><b className="num block text-[#c0245d] dark:text-[#ff9dbf]">−{euros(planned.installment_cents, planned.disbursement?.currency)}</b>{planned.interest_points ? <small className="text-[0.8rem] text-[var(--fg-3)]">+ {planned.interest_points} pts de interés</small> : null}</div>
                   </li>
                 </ul>
               </section>
@@ -577,13 +592,14 @@ export function Statement({ userId, loan }: { userId: string; loan?: Loan | null
                       <li key={`${e.account}-${e.id}`} className="grid grid-cols-[40px_1fr_auto] items-center gap-3 py-2.5">
                         <span className={`flex size-10 items-center justify-center rounded-full ${TONES[d.tone]}`}><Icon size={20} aria-hidden /></span>
                         <div className="min-w-0">
-                          <b className="block leading-tight">{d.title}</b>
+                          <b className="block leading-tight wrap-anywhere">{d.title}</b>
                           <small className="text-[0.8rem] text-[var(--fg-3)]">{subtitle(e, tz, user.display_name)}</small>
                         </div>
                         <div className="text-right">
-                          <b className={`num block ${e.amount > 0 ? 'text-leaf-deep dark:text-[#7fe0b2]' : 'text-[#c0245d] dark:text-[#ff9dbf]'}`}>{e.amount > 0 ? '+' : '−'}{fmt(e, Math.abs(e.amount))}</b>
-                          <small className="num text-[0.8rem] text-[var(--fg-3)]">{e.scope === 'goal' ? 'Meta' : 'Saldo'} {fmt(e, e.balance_after)}</small>
+                          <b className={`num block ${e.amount > 0 ? 'text-leaf-deep dark:text-[#7fe0b2]' : e.amount < 0 ? 'text-[#c0245d] dark:text-[#ff9dbf]' : ''}`}>{e.amount > 0 ? '+' : e.amount < 0 ? '−' : ''}{fmt(e, Math.abs(e.amount))}</b>
+                          {!e.expense ? <small className="num text-[0.8rem] text-[var(--fg-3)]">{e.scope === 'goal' ? 'Meta' : 'Saldo'} {fmt(e, e.balance_after)}</small> : null}
                         </div>
+                        {e.expense ? <div className="col-span-full"><ExpenseDetails expense={e.expense} mine={user.id === userId} /></div> : null}
                       </li>
                     );
                   })}

@@ -30,6 +30,7 @@ import bankRoutes from './routes/bank.js';
 import extraRoutes from './routes/extras.js';
 import privacyRoutes from './routes/privacy.js';
 import relativeRoutes from './routes/relatives.js';
+import catalogProposalRoutes from './routes/catalog-proposals.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -120,6 +121,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(extraRoutes);
   await app.register(privacyRoutes);
   await app.register(relativeRoutes);
+  await app.register(catalogProposalRoutes);
 
   // En producción el servidor puede servir también la PWA compilada.
   if (config.staticDir && fs.existsSync(config.staticDir)) {

@@ -10,6 +10,7 @@ import { Button, Field, Sheet, useToast } from './ui';
 import { AmountSheet } from './AmountSheet';
 import { MethodPicker } from './MoneySheets';
 import { useReceipt } from './Receipt';
+import { LoanApprovalSheet } from './LoanApprovalSheet';
 
 type Tone = 'berry' | 'sky' | 'sun' | 'leaf';
 const TONE: Record<Tone, string> = {
@@ -175,11 +176,12 @@ export function BankApprovals({ heading, empty }: { heading: (count: number) => 
   const [prop, setProp] = useState<{ p: GoalProposals['proposals'][number]; mode: 'approve' | 'reject' } | null>(null);
   const [open, setOpen] = useState<{ req: PayoutRequest; mode: 'approve' | 'reject' } | null>(null);
   const [buy, setBuy] = useState<GoalRequest | null>(null);
+  const [loan, setLoan] = useState<Loan | null>(null);
   const [price, setPrice] = useState('');
 
-  const loanDecide = useMutation({
-    mutationFn: (v: { id: string; decision: 'approve' | 'reject' }) => post(`/loans/${v.id}/${v.decision}`),
-    onSuccess: (_r, v) => { toast(v.decision === 'approve' ? 'Préstamo aprobado: el dinero ya está en su cuenta' : 'Préstamo rechazado'); invalidate(); },
+  const rejectLoan = useMutation({
+    mutationFn: (id: string) => post(`/loans/${id}/reject`),
+    onSuccess: () => { toast('Préstamo rechazado'); invalidate(); },
     onError: (e: Error) => toast(e.message, 'error'),
   });
   const goalDecide = useMutation({
@@ -225,8 +227,8 @@ export function BankApprovals({ heading, empty }: { heading: (count: number) => 
     ...loans.map<Item>((l) => ({
       key: `l${l.id}`, at: l.created_at, icon: HandCoins, tone: 'sky', title: `Préstamo en ${l.weeks} ${l.weeks === 1 ? 'semana' : 'semanas'}`,
       detail: `${l.display_name} · ${relative(l.created_at)} · cuotas de ${euros(l.installment_cents)}${l.interest_points ? ` + ${l.interest_points} pts` : ''}${l.note ? ` · «${l.note}»` : ''}`, amount: euros(l.amount_cents), who: l.display_name,
-      rejectLabel: `Rechazar el préstamo de ${l.display_name}`, approveLabel: `Aprobar el préstamo de ${l.display_name}`, busy: loanDecide.isPending,
-      onReject: () => loanDecide.mutate({ id: l.id, decision: 'reject' }), onApprove: () => loanDecide.mutate({ id: l.id, decision: 'approve' }),
+      rejectLabel: `Rechazar el préstamo de ${l.display_name}`, approveLabel: `Aprobar el préstamo de ${l.display_name}`, busy: rejectLoan.isPending,
+      onReject: () => rejectLoan.mutate(l.id), onApprove: () => setLoan(l),
     })),
     ...goals.map<Item>((g) => g.kind === 'redeem' ? {
       key: `g${g.id}`, at: g.created_at, icon: ShoppingBag, tone: 'sun', title: `Canjear meta «${g.goal_title}»`,
@@ -241,12 +243,13 @@ export function BankApprovals({ heading, empty }: { heading: (count: number) => 
     }),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
-  if (!items.length && !empty) return null;
+  if (!items.length && !empty && !loan) return null;
   const cents = parseEuros(price);
   const diff = buy && cents ? buy.balance_cents - cents : null;
 
   return (
     <section className="mb-8" aria-label="Por aprobar">
+      {loan ? <LoanApprovalSheet loan={loan} onClose={() => setLoan(null)} /> : null}
       {heading(count)}
       {items.length ? (
         <ul className="card overflow-hidden">

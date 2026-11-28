@@ -7,7 +7,7 @@ import { audit } from './audit.js';
 import { notify, notifyAdults } from './notify/dispatch.js';
 import { isValidDate, periodBounds } from './dates.js';
 import { evaluateBadges } from './gamification.js';
-import { capUsedBetween } from './cap.js';
+import { capUsedInPeriod } from './cap.js';
 import { fmtMoney } from './currency.js';
 import { applyAutoSave } from './savings.js';
 
@@ -43,7 +43,7 @@ export async function settlePeriod(adult: AuthUser, userId: string, anyDateInPer
     let converted = points;
     let capped = false;
     // El tope del periodo se reparte con los canjes y adelantos ya hechos: el cierre solo convierte lo que quede.
-    const room = fam.cap_cents === null ? null : Math.max(0, fam.cap_cents - (await capUsedBetween(db, userId, start, end)));
+    const room = fam.cap_cents === null ? null : Math.max(0, fam.cap_cents - (await capUsedInPeriod(db, fam, userId, start, end)));
     if (room !== null && cents > room) {
       cents = room;
       converted = Math.min(points, centsToPoints(fam, cents));

@@ -15,6 +15,9 @@ import { GoldCoins } from '../components/Coins';
 import { TaskRow } from '../components/TaskRow';
 import { AutoSaveSheet, NewGoalSheet } from '../components/GoalSheets';
 import { GoalBar, GoalVisual, weeksLeftText } from '../components/Goal';
+import { MyCatalogProposals } from '../components/CatalogProposals';
+import { useTaskSuggestions } from '../components/TaskSuggestions';
+import { SwapBonusSheet } from '../components/SwapBonusSheet';
 
 export default function ChildToday() {
   const { user, family } = useSession();
@@ -22,6 +25,7 @@ export default function ChildToday() {
   const undoToast = useUndoToast();
   const invalidate = useInvalidateAll();
   const list = useQuery({ queryKey: ['instances', 'mine', 'today'], queryFn: () => api<{ today: string; instances: Instance[] }>('/instances') });
+  const suggestions = useTaskSuggestions();
   const today = list.data?.today;
   const upcoming = useQuery({
     queryKey: ['instances', 'mine', 'upcoming', today],
@@ -37,6 +41,7 @@ export default function ChildToday() {
   const running = screenState.data?.session?.status === 'running' ? screenState.data.session : null;
   const runningMs = useRemainingMs(screenState.data, running);
   const [photoFor, setPhotoFor] = useState<Instance | null>(null);
+  const [changingReward, setChangingReward] = useState<BonusGrant | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -81,6 +86,9 @@ export default function ChildToday() {
   const all = raw.filter((i) => shown.get(`${i.task_id}|${i.assignee_id}|${i.due_date}`) === i);
   // «Cuando haga falta» va aparte: es opcional y no cuenta en lo que te queda.
   const optional = all.filter((i) => i.recurrence === 'as_needed');
+  const suggestedIds = new Set((suggestions.data?.suggestions ?? []).map((i) => i.instance_id));
+  const suggested = optional.filter((i) => suggestedIds.has(i.id));
+  const otherOptional = optional.filter((i) => !suggestedIds.has(i.id));
   const items = all.filter((i) => i.recurrence !== 'as_needed');
   const firsts = raw.filter((i) => i.repeat_no === 1 && i.recurrence !== 'as_needed'); // el día cuenta una vez, repita o no
   const boardCount = extras.data?.board.length ?? 0;
@@ -158,11 +166,22 @@ export default function ChildToday() {
         )}
       </section>}
 
-      {optional.length ? (
+      <MyCatalogProposals kind="task" />
+
+      {suggested.length ? (
+        <section className="mb-8" aria-label="Sugerencias para hoy">
+          <SectionTitle>Sugerencias para hoy</SectionTitle>
+          <ul className="space-y-2.5">
+            {suggested.map((i) => <TaskRow key={i.id} inst={i} canComplete onComplete={onComplete} busy={complete.isPending} celebrate={family.celebrations_enabled && !i.requires_approval} />)}
+          </ul>
+        </section>
+      ) : null}
+
+      {otherOptional.length ? (
         <section className="mb-8">
           <SectionTitle>Cuando haga falta</SectionTitle>
           <ul className="space-y-2.5">
-            {optional.map((i) => (
+            {otherOptional.map((i) => (
               <TaskRow key={i.id} inst={i} canComplete onComplete={onComplete} busy={complete.isPending} celebrate={family.celebrations_enabled && !i.requires_approval} />
             ))}
           </ul>
@@ -184,14 +203,17 @@ export default function ChildToday() {
           <SectionTitle>Premios por llegar</SectionTitle>
           <ul className="space-y-2">
             {pendingGrants.map((g) => (
-              <li key={g.id} className="card flex items-center gap-3 p-3.5">
+              <li key={g.id} className="card flex flex-wrap items-center gap-3 p-3.5">
                 <Hourglass size={18} className="shrink-0 text-sun-ink" aria-hidden />
                 <span className="min-w-0 flex-1"><span className="block font-bold">{g.label}</span><span className="block text-sm muted">Por «{g.task_title}». Un adulto te lo dará.</span></span>
+                {g.can_swap ? <Button size="sm" variant="secondary" onClick={() => setChangingReward(g)}>Cambiar premio</Button> : null}
               </li>
             ))}
           </ul>
         </section>
       ) : null}
+
+      {changingReward ? <SwapBonusSheet grant={changingReward} onClose={() => setChangingReward(null)} /> : null}
 
       {upcoming.data?.instances.length ? (
         <section>

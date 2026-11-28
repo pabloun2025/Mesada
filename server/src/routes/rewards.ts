@@ -1,37 +1,43 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { getPool, many, one } from '../lib/db.js';
-import { requireAdult, requireUser } from '../lib/auth.js';
+import { getPool, many, one, tx, type Db } from '../lib/db.js';
+import { requireAdult, requireUser, type AuthUser } from '../lib/auth.js';
 import { notFound } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { decideRedemption, requestRedemption } from '../lib/money.js';
 
-const rewardBody = z.object({
+export const rewardBody = z.object({
   title: z.string().trim().min(1).max(80),
   description: z.string().max(500).default(''),
   icon: z.string().max(16).default('🎁'),
   costPoints: z.number().int().min(1).max(1000000),
+  swapEligible: z.boolean().optional(),
 });
+
+export async function createReward(db: Db, u: AuthUser, b: z.infer<typeof rewardBody>, proposer?: string) {
+  const reward = (await one(db, 'INSERT INTO rewards(family_id, title, description, icon, cost_points, swap_eligible) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *', [u.familyId, b.title, b.description, b.icon, b.costPoints, b.swapEligible ?? false]))!;
+  await audit(db, u.familyId, u.id, 'reward.create', 'reward', reward.id, { ...b, ...(proposer ? { for: proposer } : {}) });
+  return reward;
+}
 
 export default async function rewardRoutes(app: FastifyInstance) {
   app.get('/api/rewards', async (req) => {
     const u = requireUser(req);
-    return { rewards: await many(getPool(), 'SELECT * FROM rewards WHERE family_id = $1 AND active ORDER BY cost_points', [u.familyId]) };
+    const rewards = await many(getPool(), 'SELECT * FROM rewards WHERE family_id = $1 AND active ORDER BY cost_points', [u.familyId]);
+    return { rewards: u.role === 'adult' ? rewards : rewards.map(({ swap_eligible, ...reward }) => reward) };
   });
 
   app.post('/api/rewards', async (req) => {
     const u = requireAdult(req);
     const b = rewardBody.parse(req.body);
-    const r = await one(getPool(), 'INSERT INTO rewards(family_id, title, description, icon, cost_points) VALUES ($1,$2,$3,$4,$5) RETURNING *', [u.familyId, b.title, b.description, b.icon, b.costPoints]);
-    await audit(getPool(), u.familyId, u.id, 'reward.create', 'reward', r.id, b);
-    return { reward: r };
+    return { reward: await tx((db) => createReward(db, u, b)) };
   });
 
   app.put('/api/rewards/:id', async (req) => {
     const u = requireAdult(req);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const b = rewardBody.parse(req.body);
-    const r = await one(getPool(), 'UPDATE rewards SET title=$3, description=$4, icon=$5, cost_points=$6 WHERE id=$1 AND family_id=$2 AND active RETURNING *', [id, u.familyId, b.title, b.description, b.icon, b.costPoints]);
+    const r = await one(getPool(), 'UPDATE rewards SET title=$3, description=$4, icon=$5, cost_points=$6, swap_eligible=COALESCE($7, swap_eligible) WHERE id=$1 AND family_id=$2 AND active RETURNING *', [id, u.familyId, b.title, b.description, b.icon, b.costPoints, b.swapEligible ?? null]);
     if (!r) throw notFound('Recompensa no encontrada');
     await audit(getPool(), u.familyId, u.id, 'reward.update', 'reward', id, b);
     return { reward: r };

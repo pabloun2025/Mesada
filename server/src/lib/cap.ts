@@ -12,9 +12,19 @@ export function weeklyCapCents(f: Pick<Family, 'cap_cents' | 'settlement_period'
   return f.settlement_period === 'week' ? f.cap_cents : Math.floor((f.cap_cents * 12) / 52);
 }
 
-/** Euros ya gastados del tope (canjes y adelantos) en las semanas cuyo lunes cae entre dos fechas. */
-export async function capUsedBetween(db: Db, userId: string, from: string, to: string): Promise<number> {
+/** Euros gastados del tope semanal, incluidos los adelantos imputados a esa semana. */
+async function capUsedBetween(db: Db, userId: string, from: string, to: string): Promise<number> {
   const r = await one<{ n: number }>(db, 'SELECT COALESCE(SUM(cents),0)::int AS n FROM cap_uses WHERE user_id = $1 AND cap_week BETWEEN $2 AND $3', [userId, from, to]);
+  return r!.n;
+}
+
+/** En un mes, el canje cuenta el día en que ocurrió y el adelanto en su semana de destino. */
+export async function capUsedInPeriod(db: Db, fam: Family, userId: string, from: string, to: string): Promise<number> {
+  if (fam.settlement_period === 'week') return capUsedBetween(db, userId, from, to);
+  const r = await one<{ n: number }>(db,
+    `SELECT COALESCE(SUM(cents),0)::int AS n FROM cap_uses WHERE user_id = $1
+      AND CASE WHEN kind = 'exchange' THEN (created_at AT TIME ZONE $4)::date ELSE cap_week END BETWEEN $2 AND $3`,
+    [userId, from, to, fam.timezone]);
   return r!.n;
 }
 
@@ -38,7 +48,7 @@ export async function capStatus(db: Db, fam: Family, userId: string, today: stri
   const usedWeek = await capUsedBetween(db, userId, weekStart, weekEnd);
   if (weeklyCap == null || fam.cap_cents == null) return { weekStart, weekEnd, weeklyCap, usedWeek, remaining: null };
   const p = periodBounds(fam.settlement_period, today);
-  const usedPeriod = await capUsedBetween(db, userId, p.start, p.end);
+  const usedPeriod = await capUsedInPeriod(db, fam, userId, p.start, p.end);
   const settled = (await one<{ n: number }>(db, 'SELECT COALESCE(SUM(cents),0)::int AS n FROM settlements WHERE user_id = $1 AND period_start = $2', [userId, p.start]))!.n;
   const week = weeklyCap - usedWeek - (fam.settlement_period === 'week' ? settled : 0);
   const period = fam.cap_cents - usedPeriod - settled;

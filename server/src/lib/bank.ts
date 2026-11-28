@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { getPool, many, one, tx, type Db } from './db.js';
 import type { AuthUser } from './auth.js';
 import { badRequest, conflict, forbidden, notFound } from './errors.js';
@@ -9,7 +9,8 @@ import { notify, notifyAdults } from './notify/dispatch.js';
 import { addDays, startOfWeek } from './dates.js';
 import { capStatus, weeklyCapCents } from './cap.js';
 
-import { fmtMoney } from './currency.js';
+import { fmtMoney, type Currency } from './currency.js';
+import { applyExpense, quoteExpense, type ExpenseInput } from './expenses.js';
 
 const NO_CAP = 'Pon un tope semanal en Ajustes';
 
@@ -56,14 +57,15 @@ export async function exchangePoints(child: AuthUser, p: { points: number; idemp
     if (p.points > balance) throw conflict(`Solo tienes ${Math.max(0, balance)} puntos`, 'insufficient_balance');
     const cents = pointsToCents(fam, p.points);
     if (cents <= 0) throw badRequest('Esos puntos no llegan a un céntimo');
-    const cap = await capStatus(db, fam, child.id, familyToday(fam));
+    const exchangedAt = new Date();
+    const cap = await capStatus(db, fam, child.id, familyToday(fam, exchangedAt));
     if (cap.remaining !== null && cents > cap.remaining) {
       throw conflict(`Esta semana solo puedes cambiar ${fmtEur(cap.remaining)} más`, 'cap_reached');
     }
     const ex = await one(
       db,
-      `INSERT INTO cap_uses(family_id, user_id, kind, cap_week, points, cents, idempotency_key) VALUES ($1,$2,'exchange',$3,$4,$5,$6) RETURNING *`,
-      [child.familyId, child.id, cap.weekStart, p.points, cents, key],
+      `INSERT INTO cap_uses(family_id, user_id, kind, cap_week, points, cents, idempotency_key, created_at) VALUES ($1,$2,'exchange',$3,$4,$5,$6,$7) RETURNING *`,
+      [child.familyId, child.id, cap.weekStart, p.points, cents, key, exchangedAt],
     );
     await addPoints(db, { familyId: child.familyId, userId: child.id, delta: -p.points, kind: 'exchange', refId: ex.id, note: 'Canje de puntos', createdBy: child.id, idempotencyKey: `exch-pts:${ex.id}` });
     await addMoney(db, { familyId: child.familyId, userId: child.id, deltaCents: cents, kind: 'exchange', refId: ex.id, note: `Canje de ${p.points} puntos`, createdBy: child.id, idempotencyKey: `exch-eur:${ex.id}` });
@@ -214,25 +216,96 @@ export async function cancelLoan(child: AuthUser, id: string) {
   });
 }
 
-export async function decideLoan(adult: AuthUser, id: string, o: { approve: boolean; note?: string }) {
+export type LoanPurchase = { type: 'purchase'; title: string; totalCents: number; currency: Currency };
+export type LoanDestination = { type: 'balance' } | { type: 'external'; method: 'cash' | 'bizum' | 'transfer' }
+  | { type: 'goal'; goalId: string } | (LoanPurchase & { requestId: string; token: string });
+const LOAN_METHOD = { cash: 'efectivo', bizum: 'Bizum', transfer: 'transferencia' };
+
+const DISBURSEMENT = `CASE WHEN d.loan_id IS NOT NULL THEN jsonb_build_object(
+  'destination', d.destination, 'currency', d.currency, 'method', d.method, 'goal_id', d.goal_id, 'goal_title', d.goal_title,
+  'expense_id', d.expense_id, 'expense_title', d.expense_title, 'actor_id', d.actor_id, 'actor_name', da.display_name, 'created_at', d.created_at
+) END`;
+
+async function loanDisbursement(db: Db, loanId: string) {
+  return (await one(db, `SELECT ${DISBURSEMENT} AS receipt FROM loan_disbursements d LEFT JOIN users da ON da.id = d.actor_id WHERE d.loan_id = $1`, [loanId]))?.receipt ?? null;
+}
+
+function loanExpense(userId: string, p: LoanPurchase): ExpenseInput {
+  return { userId, title: p.title, totalCents: p.totalCents, currency: p.currency, contribution: { type: 'amount', cents: 0 } };
+}
+
+async function checkLoanFunds(db: Db, fam: Family, userId: string) {
+  if (!fam.bank_loan_enabled) throw disabled('El préstamo');
+  if ((await moneyBalance(db, userId)) < 0) throw conflict('Su cuenta de dinero está en negativo: no se le puede prestar', 'negative_balance');
+}
+
+async function lockLoanChild(db: Db, familyId: string, userId: string) {
+  if (!(await one(db, `SELECT id FROM users WHERE id = $1 AND family_id = $2 AND role = 'child' AND active FOR UPDATE`, [userId, familyId]))) {
+    throw notFound('Hijo no encontrado');
+  }
+}
+
+export function previewLoanPurchase(adult: AuthUser, id: string, purchase: LoanPurchase) {
+  return tx(async (db) => {
+    const loan = await one(db, 'SELECT * FROM loans WHERE id = $1 AND family_id = $2 FOR UPDATE', [id, adult.familyId]);
+    if (!loan) throw notFound('Préstamo no encontrado');
+    if (loan.status !== 'pending') throw conflict('Este préstamo ya está resuelto', 'already_decided');
+    await lockLoanChild(db, adult.familyId, loan.user_id);
+    const fam = await getFamily(db, adult.familyId);
+    await checkLoanFunds(db, fam, loan.user_id);
+    const requestId = randomUUID();
+    const { breakdown, token } = await quoteExpense(db, adult.familyId, loanExpense(loan.user_id, purchase), requestId, { loanId: id, principalCents: loan.amount_cents }, fam);
+    return { breakdown, token, requestId };
+  });
+}
+
+async function matchDisbursement(db: Db, receipt: any, destination: LoanDestination) {
+  if (destination.type !== (receipt?.destination ?? 'balance')) return false;
+  if (destination.type === 'external') return receipt.method === destination.method;
+  if (destination.type === 'goal') return receipt.goal_id === destination.goalId;
+  if (destination.type !== 'purchase') return true;
+  return !!(await one(db, `SELECT 1 FROM child_expenses WHERE id = $1 AND title = $2 AND total_cents = $3 AND currency = $4 AND request_id = $5 AND quote_token = $6`,
+    [receipt.expense_id, destination.title, destination.totalCents, destination.currency, destination.requestId, destination.token]));
+}
+
+export async function decideLoan(adult: AuthUser, id: string, o: { approve: boolean; note?: string; destination?: LoanDestination }) {
   return tx(async (db) => {
     const l = await one(db, 'SELECT * FROM loans WHERE id = $1 AND family_id = $2 FOR UPDATE', [id, adult.familyId]);
     if (!l) throw notFound('Préstamo no encontrado');
-    const want = o.approve ? 'active' : 'rejected';
-    if (l.status === want || (o.approve && ['active', 'paid'].includes(l.status))) return { loan: l, duplicate: true };
+    const destination: LoanDestination = o.destination ?? { type: 'balance' };
+    if (o.approve && ['active', 'paid'].includes(l.status)) {
+      const receipt = await loanDisbursement(db, id);
+      if (!(await matchDisbursement(db, receipt, destination))) throw conflict('El préstamo ya se entregó con otro destino', 'already_decided');
+      return { loan: { ...l, disbursement: receipt }, duplicate: true };
+    }
+    if (!o.approve && l.status === 'rejected') return { loan: l, duplicate: true };
     if (l.status !== 'pending') throw conflict('Este préstamo ya está resuelto', 'already_decided');
+    const note = o.note?.trim() ?? '';
+    let goal: { id: string; title: string } | undefined;
+    if (o.approve && destination.type === 'goal') {
+      const target = await one<{ id: string; title: string; status: string }>(db,
+        'SELECT id, title, status FROM savings_goals WHERE id = $1 AND family_id = $2 AND user_id = $3 AND NOT archived FOR NO KEY UPDATE',
+        [destination.goalId, adult.familyId, l.user_id]);
+      if (!target) throw notFound('Meta no encontrada');
+      if (target.status !== 'active' || await one(db, `SELECT 1 FROM goal_requests WHERE goal_id = $1 AND status = 'pending'`, [target.id])) {
+        throw conflict('La meta ya no admite aportaciones', 'goal_unavailable');
+      }
+      goal = target;
+    }
+    if (o.approve) await lockLoanChild(db, adult.familyId, l.user_id);
+    else await lockUser(db, l.user_id);
     const fam = await getFamily(db, adult.familyId);
     const fmtEur = (c: number) => fmtMoney(c, fam.currency);
-    const note = o.note?.trim() ?? '';
-    await lockUser(db, l.user_id);
     if (!o.approve) {
       const upd = await one(db, `UPDATE loans SET status = 'rejected', decision_note = $2, decided_by = $3, decided_at = now() WHERE id = $1 RETURNING *`, [id, note, adult.id]);
       await audit(db, adult.familyId, adult.id, 'loan.reject', 'loan', id, { note, for: l.user_id });
       await notify(db, { userId: l.user_id, event: 'loan_decided', title: `${adult.displayName} no ha aceptado tu préstamo de ${fmtEur(l.amount_cents)}`, body: note, link: '/mesada', dedupeKey: `loan-rejected:${id}` });
       return { loan: upd, duplicate: false };
     }
-    if (!fam.bank_loan_enabled) throw disabled('El préstamo');
-    if ((await moneyBalance(db, l.user_id)) < 0) throw conflict('Su cuenta de dinero está en negativo: no se le puede prestar', 'negative_balance');
+    await checkLoanFunds(db, fam, l.user_id);
+    const input = destination.type === 'purchase' ? loanExpense(l.user_id, destination) : null;
+    const quote = destination.type === 'purchase' && input
+      ? await quoteExpense(db, adult.familyId, input, destination.requestId, { loanId: id, principalCents: l.amount_cents }, fam) : null;
     // La primera cuota se cobra el lunes siguiente al día de la aprobación.
     const firstWeek = addDays(startOfWeek(familyToday(fam)), 7);
     const upd = await one(
@@ -240,15 +313,33 @@ export async function decideLoan(adult: AuthUser, id: string, o: { approve: bool
       `UPDATE loans SET status = 'active', first_charge_week = $2, decision_note = $3, decided_by = $4, decided_at = now() WHERE id = $1 RETURNING *`,
       [id, firstWeek, note, adult.id],
     );
-    await addMoney(db, { familyId: adult.familyId, userId: l.user_id, deltaCents: l.amount_cents, kind: 'loan', refId: id, note: 'Préstamo', createdBy: adult.id, idempotencyKey: `loan:${id}` });
-    await audit(db, adult.familyId, adult.id, 'loan.approve', 'loan', id, { cents: l.amount_cents, weeks: l.weeks, for: l.user_id });
+    const movement = { familyId: adult.familyId, userId: l.user_id, refId: id, createdBy: adult.id };
+    await addMoney(db, { ...movement, deltaCents: l.amount_cents, kind: 'loan', note: 'Préstamo', idempotencyKey: `loan:${id}` });
+    let expenseId: string | null = null;
+    let delivered = 'Se abonó en tu saldo.';
+    if (destination.type === 'external') {
+      delivered = `Se entregó por ${LOAN_METHOD[destination.method]}.`;
+      await addMoney(db, { ...movement, deltaCents: -l.amount_cents, kind: 'loan_delivery', note: `Entrega del préstamo · ${LOAN_METHOD[destination.method]}`, idempotencyKey: `loan-delivery:${id}` });
+    } else if (goal) {
+      delivered = `Se aportó a tu meta «${goal.title}».`;
+      const note = `Préstamo para «${goal.title}»`;
+      await addMoney(db, { ...movement, deltaCents: -l.amount_cents, kind: 'transfer', note, idempotencyKey: `loan-goal-out:${id}` });
+      await addMoney(db, { ...movement, deltaCents: l.amount_cents, kind: 'transfer', account: 'savings', goalId: goal.id, note, idempotencyKey: `loan-goal-in:${id}` });
+    } else if (destination.type === 'purchase' && input && quote) {
+      delivered = `Se aplicó a «${destination.title}».`;
+      expenseId = (await applyExpense(db, adult, input, destination.requestId, destination.token, quote)).id;
+    }
+    await db.query(`INSERT INTO loan_disbursements(loan_id, family_id, user_id, actor_id, destination, currency, method, goal_id, goal_title, expense_id, expense_title)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [id, adult.familyId, l.user_id, adult.id, destination.type, fam.currency,
+      destination.type === 'external' ? destination.method : null, goal?.id ?? null, goal?.title ?? null, expenseId, destination.type === 'purchase' ? destination.title : null]);
+    await audit(db, adult.familyId, adult.id, 'loan.approve', 'loan', id, { cents: l.amount_cents, weeks: l.weeks, for: l.user_id, destination: destination.type });
     const first = installmentCents(l.amount_cents, l.weeks, 1);
     await notify(db, {
       userId: l.user_id, event: 'loan_decided', title: `${adult.displayName} ha aprobado tu préstamo de ${fmtEur(l.amount_cents)}`,
-      body: `Cada lunes se descuentan ${fmtEur(first)}${l.interest_points ? ` y ${l.interest_points} puntos de interés` : ''}, durante ${l.weeks} ${l.weeks === 1 ? 'semana' : 'semanas'}. Empieza el ${firstWeek}.${note ? ` ${note}` : ''}`,
+      body: `${delivered} Cada lunes se descuentan ${fmtEur(first)}${l.interest_points ? ` y ${l.interest_points} puntos de interés` : ''}, durante ${l.weeks} ${l.weeks === 1 ? 'semana' : 'semanas'}. Empieza el ${firstWeek}.${note ? ` ${note}` : ''}`,
       link: '/mesada', dedupeKey: `loan-approved:${id}`,
     });
-    return { loan: upd, duplicate: false };
+    return { loan: { ...upd, disbursement: await loanDisbursement(db, id) }, duplicate: false };
   });
 }
 
@@ -256,14 +347,16 @@ export async function decideLoan(adult: AuthUser, id: string, o: { approve: bool
 export async function listLoans(db: Db, familyId: string, o: { userId?: string; status?: string[] }) {
   const rows = await many(
     db,
-    `SELECT l.*, u.display_name, u.avatar, u.color,
+    `SELECT l.*, u.display_name, u.avatar, u.color, ${DISBURSEMENT} AS disbursement,
             COALESCE((SELECT SUM(c.cents) FROM loan_charges c WHERE c.loan_id = l.id),0)::int AS repaid_cents,
             COALESCE((SELECT SUM(c.interest_points) FROM loan_charges c WHERE c.loan_id = l.id),0)::int AS interest_paid_points
        FROM loans l JOIN users u ON u.id = l.user_id
+       LEFT JOIN loan_disbursements d ON d.loan_id = l.id LEFT JOIN users da ON da.id = d.actor_id
       WHERE l.family_id = $1 AND ($2::uuid IS NULL OR l.user_id = $2) AND ($3::text[] IS NULL OR l.status = ANY($3))
       ORDER BY l.created_at DESC LIMIT 50`,
     [familyId, o.userId ?? null, o.status ?? null],
   );
+  const pendingWeek = rows.some((l) => l.status === 'pending') ? addDays(startOfWeek(familyToday(await getFamily(db, familyId))), 7) : null;
   return rows.map((l) => {
     const remaining = l.status === 'active' ? l.weeks - l.installments_paid : 0;
     return {
@@ -272,6 +365,7 @@ export async function listLoans(db: Db, familyId: string, o: { userId?: string; 
       remaining_cents: l.status === 'active' ? l.amount_cents - l.repaid_cents : 0,
       installment_cents: installmentCents(l.amount_cents, l.weeks, Math.min(l.weeks, l.installments_paid + 1)),
       next_charge_week: l.status === 'active' && l.first_charge_week ? addDays(l.first_charge_week, 7 * l.installments_paid) : null,
+      proposed_first_charge_week: l.status === 'pending' ? pendingWeek : null,
     };
   });
 }
@@ -459,18 +553,31 @@ export async function statement(db: Db, userId: string, account: StatementAccoun
   const offset = Math.max(o.offset ?? 0, 0);
   const pointsSql = `
     SELECT l.id, 'points'::text AS account, 'account'::text AS scope, l.delta AS amount, l.kind, l.note, l.created_at, c.display_name AS created_by_name,
-           SUM(l.delta) OVER (ORDER BY l.created_at, l.seq)::int AS balance_after, NULL::text AS method, false AS is_withdrawal, l.seq
+           SUM(l.delta) OVER (ORDER BY l.created_at, l.seq)::int AS balance_after, NULL::text AS method, false AS is_withdrawal, l.seq, NULL::jsonb AS expense, NULL::jsonb AS disbursement
       FROM points_ledger l LEFT JOIN users c ON c.id = l.created_by WHERE l.user_id = $1`;
   const moneySql = `
     SELECT l.id, 'money'::text AS account, 'account'::text AS scope, l.delta_cents AS amount, l.kind, l.note, l.created_at, c.display_name AS created_by_name,
            SUM(l.delta_cents) OVER (ORDER BY l.created_at, l.seq)::int AS balance_after,
-           CASE WHEN l.kind = 'payment' THEN (SELECT p.method FROM payments p WHERE p.id = l.ref_id) END AS method,
-           CASE WHEN l.kind = 'payment' THEN EXISTS (SELECT 1 FROM payout_requests q WHERE q.payment_id = l.ref_id) ELSE false END AS is_withdrawal, l.seq
-      FROM money_ledger l LEFT JOIN users c ON c.id = l.created_by WHERE l.user_id = $1 AND l.account = 'available'
+           CASE WHEN l.kind = 'payment' THEN (SELECT p.method FROM payments p WHERE p.id = l.ref_id) WHEN l.kind = 'loan_delivery' THEN d.method END AS method,
+           CASE WHEN l.kind = 'payment' THEN EXISTS (SELECT 1 FROM payout_requests q WHERE q.payment_id = l.ref_id) ELSE false END AS is_withdrawal, l.seq,
+           CASE WHEN e.id IS NOT NULL THEN jsonb_build_object(
+             'total_cents', e.total_cents, 'parent_cents', e.parent_cents, 'parent_basis_points', e.parent_basis_points, 'child_cents', -l.delta_cents,
+             'cash_cents', e.cash_cents, 'used_points', e.used_points, 'points_cents', e.points_cents,
+             'debt_cents', e.debt_cents, 'balance_after', e.balance_after, 'currency', e.currency, 'rule', e.rule_snapshot,
+             'loan_cents', e.loan_cents,
+             'loan_applied_cents', CASE WHEN e.loan_cents IS NOT NULL THEN LEAST(e.loan_cents, e.total_cents) END,
+             'prior_cash_cents', CASE WHEN e.loan_cents IS NOT NULL THEN GREATEST(0, e.cash_cents - e.loan_cents) END
+           ) END AS expense, ${DISBURSEMENT} AS disbursement
+      FROM money_ledger l
+      LEFT JOIN users c ON c.id = l.created_by
+      LEFT JOIN child_expenses e ON l.kind = 'expense' AND e.id = l.ref_id AND e.user_id = l.user_id AND e.family_id = l.family_id
+      LEFT JOIN loan_disbursements d ON l.kind IN ('loan','loan_delivery') AND d.loan_id = l.ref_id AND d.user_id = l.user_id AND d.family_id = l.family_id
+      LEFT JOIN users da ON da.id = d.actor_id
+      WHERE l.user_id = $1 AND l.account = 'available'
     UNION ALL
     SELECT * FROM (
       SELECT l.id, 'money'::text AS account, 'goal'::text AS scope, l.delta_cents AS amount, l.kind, l.note, l.created_at, c.display_name AS created_by_name,
-             SUM(l.delta_cents) OVER (PARTITION BY l.goal_id ORDER BY l.created_at, l.seq)::int AS balance_after, NULL::text AS method, false AS is_withdrawal, l.seq
+             SUM(l.delta_cents) OVER (PARTITION BY l.goal_id ORDER BY l.created_at, l.seq)::int AS balance_after, NULL::text AS method, false AS is_withdrawal, l.seq, NULL::jsonb AS expense, NULL::jsonb AS disbursement
         FROM money_ledger l LEFT JOIN users c ON c.id = l.created_by WHERE l.user_id = $1 AND l.account = 'savings'
     ) g WHERE g.kind IN ('interest','interest_forfeit','goal_redeem','goal_match','goal_gift','goal_reversal')`;
   const inner = account === 'points' ? pointsSql : account === 'money' ? moneySql : `${pointsSql} UNION ALL ${moneySql}`;
