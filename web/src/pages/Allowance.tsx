@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
-import { Banknote, CalendarCheck2, MonitorSmartphone, PauseCircle, ReceiptText, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Banknote, CalendarCheck2, MonitorSmartphone, PauseCircle, ReceiptText, ShoppingBag, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { api, newKey, post } from '../lib/api';
 import { currencySymbol, euros, fmtDate, parseEuros } from '../lib/format';
 import { useInvalidateAll } from '../lib/hooks';
@@ -126,7 +126,7 @@ function KidPanel({ child: k, wallet: w, pending, onSheet }: { child: User; wall
           <p className="mt-1 text-xs text-[var(--fg-3)]">Convertido en total {euros(w.cents_converted_total)} · pagado {euros(w.cents_paid_total)}</p>
           <div className="mt-4 grid grid-cols-2 gap-2 min-[560px]:grid-cols-3 min-[1100px]:grid-cols-2 min-[1500px]:grid-cols-3">
             <Button variant="success" size="sm" className="h-11" disabled={w.cents_pending <= 0} onClick={() => onSheet('pay', w)}><Banknote size={17} aria-hidden /> Pagar</Button>
-            <Button variant="secondary" size="sm" className="h-11 min-w-0 !px-2 leading-tight !whitespace-normal" onClick={() => onSheet('expense', w)}>Registrar gasto</Button>
+            <Button variant="secondary" size="sm" className="h-11 min-w-0 !px-2 leading-tight !whitespace-normal" onClick={() => onSheet('expense', w)}><ShoppingBag size={17} className="shrink-0" aria-hidden /> Registrar gasto</Button>
             <Button variant="secondary" size="sm" className="h-11 min-w-0 !px-2 text-center leading-tight !whitespace-normal" onClick={() => onSheet('screen', w)}><MonitorSmartphone size={17} className="shrink-0" aria-hidden /> Descontar minutos</Button>
             <Link to={`/pantalla?hijo=${k.id}`} className={`${buttonClass('secondary', 'sm')} h-11`}>Pantalla</Link>
             <Button variant="secondary" size="sm" className="h-11" onClick={() => onSheet('screen-adjust', w)}><Sparkles size={17} aria-hidden /> Ajuste de pantalla</Button>

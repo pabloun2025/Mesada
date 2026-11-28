@@ -2469,10 +2469,24 @@ test.describe.serial('Familia completa', () => {
     const ap = await parentCtx.newPage();
     await login(ap, ADULT.user, ADULT.pass);
     await expect(ap.getByRole('link', { name: /Validar/ }).first()).toBeVisible();
+    // Las hojas tienen nombre accesible y devuelven el foco al botón que las abrió (Escape y «Cerrar»).
+    const registerTask = ap.getByRole('button', { name: 'Registrar tarea hecha' });
+    await registerTask.focus();
+    await ap.keyboard.press('Enter');
+    await expect(ap.getByRole('dialog', { name: 'Registrar tarea hecha' })).toBeVisible();
+    await ap.keyboard.press('Escape');
+    await expect(ap.getByRole('dialog')).toBeHidden();
+    await expect(registerTask).toBeFocused();
+    // Atajo en el Panel: «Registrar gasto» en la tarjeta de cada hijo.
+    const panelExpense = ap.getByRole('article').filter({ hasText: 'Celia' }).getByRole('button', { name: 'Registrar gasto' });
+    await panelExpense.click();
+    await expect(ap.getByRole('dialog', { name: 'Registrar gasto de Celia' })).toBeVisible();
+    await ap.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click();
+    await expect(panelExpense).toBeFocused();
     await ap.goto('/mesada');
     const register = ap.getByRole('article', { name: 'Cuenta de Celia' }).getByRole('button', { name: 'Registrar gasto' });
     await register.click();
-    const dialog = ap.getByRole('dialog');
+    const dialog = ap.getByRole('dialog', { name: 'Registrar gasto de Celia' });
     await dialog.getByLabel('Motivo').fill('Entrada de cine');
     await dialog.getByLabel('Precio total (€)').fill('12,01');
     await dialog.getByRole('button', { name: 'Ver desglose' }).click();
@@ -2508,6 +2522,12 @@ test.describe.serial('Familia completa', () => {
       await expect(expense).toContainText('Registrado por Ana');
       await expect(expense).toContainText('6,01 € (50 %)');
       await expect(expense).toContainText('-1,00 €');
+      // Una frase llana antes de las cifras: quién pagó qué, con qué y cuánto queda.
+      await expect(expense).toContainText('Tu familia puso 6,01 € y tú 6,00 € (2,00 € de tu dinero y 3,00 € de tus puntos). Te quedan 1,00 € por pagar.');
+      await expect(expense).toContainText('De tus puntos');
+      await expect(expense).toContainText('60 pts → 3,00 €');
+      await expense.scrollIntoViewIfNeeded();
+      await p.screenshot({ path: `${SHOTS}/127-gasto-compartido-hijo-320.png` });
       expect(await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     } finally {
       await childCtx.close();

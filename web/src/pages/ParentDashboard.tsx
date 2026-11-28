@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Banknote, CircleCheckBig, MessageCircle, Flame, Gift, Hourglass, PartyPopper, TriangleAlert } from 'lucide-react';
+import { Banknote, CircleCheckBig, ShoppingBag, MessageCircle, Flame, Gift, Hourglass, PartyPopper, TriangleAlert } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 import { euros, relative, weekdayLong } from '../lib/format';
@@ -15,11 +15,12 @@ import { TaskRow } from '../components/TaskRow';
 import { PaySheet } from '../components/MoneySheets';
 import { DeductMinutesSheet } from '../components/ScreenSheets';
 import { TaskRegistrationSheet } from '../components/TaskRegistrationSheet';
+import { ExpenseSheet } from '../components/ExpenseSheet';
 import { ParentTaskSuggestions } from '../components/TaskSuggestions';
 
 export default function ParentDashboard() {
   const { user } = useSession();
-  const [sheet, setSheet] = useState<{ kind: 'pay' | 'screen'; child: User; wallet: Wallet } | { kind: 'task' } | null>(null);
+  const [sheet, setSheet] = useState<{ kind: 'pay' | 'screen' | 'expense'; child: User; wallet: Wallet } | { kind: 'task' } | null>(null);
   const { data, isLoading } = useQuery({ queryKey: ['dashboard'], queryFn: () => api('/dashboard') });
   const today = useQuery({
     queryKey: ['instances', 'today-all'],
@@ -104,10 +105,11 @@ export default function ParentDashboard() {
                       <dd className="num text-lg font-extrabold">{minutesLabel(k.wallet.screen_minutes)}</dd>
                     </div>
                   </dl>
-                  <div className="flex gap-2 border-t border-[var(--line)] p-3">
-                    <Button variant="success" size="sm" className="flex-1 !px-2" disabled={k.wallet.cents_pending <= 0} onClick={() => setSheet({ kind: 'pay', child: k, wallet: k.wallet })}><Banknote size={16} aria-hidden /> Pagar</Button>
-                    <Button variant="secondary" size="sm" className="min-w-0 flex-[1.3] !px-2 text-center leading-tight !whitespace-normal" onClick={() => setSheet({ kind: 'screen', child: k, wallet: k.wallet })}>Descontar minutos</Button>
-                    <Link to={`/pantalla?hijo=${k.id}`} className={`${buttonClass('secondary', 'sm')} flex-1 !px-2`} aria-label={`Pantalla de ${k.display_name}`}>Pantalla</Link>
+                  <div className="grid grid-cols-2 gap-2 border-t border-[var(--line)] p-3">
+                    <Button variant="success" size="sm" className="!px-2" disabled={k.wallet.cents_pending <= 0} onClick={() => setSheet({ kind: 'pay', child: k, wallet: k.wallet })}><Banknote size={16} aria-hidden /> Pagar</Button>
+                    <Button variant="secondary" size="sm" className="min-w-0 !px-2 text-center leading-tight !whitespace-normal" onClick={() => setSheet({ kind: 'expense', child: k, wallet: k.wallet })}><ShoppingBag size={16} className="shrink-0" aria-hidden /> Registrar gasto</Button>
+                    <Button variant="secondary" size="sm" className="min-w-0 !px-2 text-center leading-tight !whitespace-normal" onClick={() => setSheet({ kind: 'screen', child: k, wallet: k.wallet })}>Descontar minutos</Button>
+                    <Link to={`/pantalla?hijo=${k.id}`} className={`${buttonClass('secondary', 'sm')} !px-2`} aria-label={`Pantalla de ${k.display_name}`}>Pantalla</Link>
                   </div>
                 </article>
               );
@@ -178,6 +180,7 @@ export default function ParentDashboard() {
       </div>
       {sheet?.kind === 'pay' ? <PaySheet child={sheet.child} wallet={sheet.wallet} onClose={() => setSheet(null)} /> : null}
       {sheet?.kind === 'screen' ? <DeductMinutesSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'expense' ? <ExpenseSheet child={sheet.child} onClose={() => setSheet(null)} /> : null}
       {sheet?.kind === 'task' ? <TaskRegistrationSheet today={data.today} children={data.kids} onClose={() => setSheet(null)} /> : null}
     </div>
   );

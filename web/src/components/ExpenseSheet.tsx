@@ -65,26 +65,35 @@ export function ExpenseDetails({ expense: e, mine = false, currency }: { expense
       ['Del préstamo', money(loanUsed)], ['Del saldo previo', money(e.prior_cash_cents ?? 0)],
       ...(loan > loanUsed ? [['Préstamo que queda en el saldo', money(loan - loanUsed)]] : []),
     ] : [
-      ['Aportación familiar', money(e.parent_cents) + parentRate],
-      [mine ? 'Tu parte' : 'Parte del hijo', money(e.child_cents)],
-      ['Del saldo en dinero', money(e.cash_cents)],
+      [mine ? 'Paga tu familia' : 'Aportación familiar', money(e.parent_cents) + parentRate],
+      [mine ? 'Pagas tú' : 'Parte del hijo', money(e.child_cents)],
+      [mine ? 'De tu dinero' : 'Del saldo en dinero', money(e.cash_cents)],
     ]),
     ...(e.rule ? [['Regla aplicada', `${e.rule.title} · ${ruleContribution(e.rule)}`]] : []),
     ...(e.rule?.override_reason ? [['Excepción a la aportación de ' + money(e.rule.proposed_cents), e.rule.override_reason]] : []),
-    ['Puntos convertidos', e.used_points ? `${num(e.used_points)} pts → ${money(e.points_cents)}` : 'Ninguno'],
-    ...(excess ? [['Sobrante abonado al saldo', money(excess)]] : []),
-    ['Pendiente de este gasto', money(e.debt_cents)],
-    ['Saldo tras el gasto', money(e.balance_after)],
+    [mine ? 'De tus puntos' : 'Puntos convertidos', e.used_points ? `${num(e.used_points)} pts → ${money(e.points_cents)}` : 'Ninguno'],
+    ...(excess ? [[mine ? 'Lo que sobró de tus puntos, a tu saldo' : 'Sobrante abonado al saldo', money(excess)]] : []),
+    [mine ? 'Te queda por pagar' : 'Pendiente de este gasto', money(e.debt_cents)],
+    [mine ? 'Tu saldo ahora' : 'Saldo tras el gasto', money(e.balance_after)],
   ];
+  // Para el hijo, una frase llana antes de las cifras: quién pagó qué y si queda algo pendiente.
+  const summary = mine && !loan ? [
+    `Tu familia puso ${money(e.parent_cents)} y tú ${money(e.child_cents)}`,
+    e.cash_cents && e.used_points ? ` (${money(e.cash_cents)} de tu dinero y ${money(e.points_cents)} de tus puntos)` : e.used_points ? ` con ${num(e.used_points)} puntos` : '',
+    e.debt_cents ? `. Te quedan ${money(e.debt_cents)} por pagar.` : '. No te queda nada por pagar.',
+  ].join('') : null;
   return (
+    <>
+    {summary ? <p className="mb-2 text-sm font-bold">{summary}</p> : null}
     <dl className="space-y-1.5 rounded-xl bg-[var(--chip)] p-3 text-sm">
       {rows.map(([label, value]) => (
         <div key={label} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">
           <dt className="text-[var(--fg-2)]">{label}</dt>
-          <dd className={`num font-bold wrap-anywhere ${label === 'Saldo tras el gasto' && e.balance_after < 0 ? 'text-berry-deep dark:text-[#ff9dbf]' : ''}`}>{value}</dd>
+          <dd className={`num font-bold wrap-anywhere ${(label === 'Saldo tras el gasto' || label === 'Tu saldo ahora') && e.balance_after < 0 ? 'text-berry-deep dark:text-[#ff9dbf]' : ''}`}>{value}</dd>
         </div>
       ))}
     </dl>
+    </>
   );
 }
 

@@ -199,15 +199,36 @@ export function Disclosure({ title, summary, defaultOpen = false, children }: { 
 
 export function Sheet({ open, onClose, title, subtitle, children, footer }: { open: boolean; onClose: () => void; title: string; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+  const subtitleId = useId();
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
+    if (open && !d.open) {
+      opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      d.showModal();
+    }
     if (!open && d.open) d.close();
+  }, [open]);
+  // Al cerrar con «Cerrar», al guardar o al desmontar la hoja, el navegador no devuelve el foco
+  // (solo lo hace con Escape): se devuelve al botón que la abrió para no perder el sitio.
+  useEffect(() => {
+    if (!open) return;
+    return () => {
+      const back = opener.current;
+      opener.current = null;
+      requestAnimationFrame(() => {
+        const active = document.activeElement;
+        if (back?.isConnected && (!active || active === document.body || !active.isConnected)) back.focus();
+      });
+    };
   }, [open]);
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
+      aria-describedby={subtitle ? subtitleId : undefined}
       onClose={onClose}
       onClick={(e) => e.target === ref.current && onClose()}
       className="m-0 mt-auto max-h-[92dvh] w-full max-w-none bg-transparent p-0 backdrop:bg-[#0c1428]/55 backdrop:backdrop-blur-[2px] sm:m-auto sm:max-w-lg"
@@ -217,8 +238,8 @@ export function Sheet({ open, onClose, title, subtitle, children, footer }: { op
           <div aria-hidden className="mx-auto mt-2.5 h-[5px] w-10 shrink-0 rounded-full bg-[var(--line)] sm:hidden" />
           <div className="flex items-center justify-between gap-3 px-5 pt-3 pb-3 sm:pt-5">
             <div className="min-w-0">
-              <h2 className="text-xl font-bold">{title}</h2>
-              {subtitle ? <p className="text-sm text-[var(--fg-2)]">{subtitle}</p> : null}
+              <h2 id={titleId} className="text-xl font-bold">{title}</h2>
+              {subtitle ? <p id={subtitleId} className="text-sm text-[var(--fg-2)]">{subtitle}</p> : null}
             </div>
             <IconButton label="Cerrar" onClick={onClose} className="bg-[var(--chip)]"><X size={20} /></IconButton>
           </div>
